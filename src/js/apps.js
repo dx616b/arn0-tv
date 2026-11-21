@@ -46,6 +46,61 @@
         }), 8000, 'Launch');
     }
 
+    // Launch with ApplicationControl (needed for Samsung Settings / Smart Hub entry points).
+    function launchAppControl(appId, control) {
+        return withTimeout(new Promise(function (resolve, reject) {
+            tizen.application.launchAppControl(control, appId, resolve, reject, null);
+        }), 8000, 'Launch');
+    }
+
+    function tvSettingsItem(entry) {
+        entry = entry || {};
+        var brand = findBrand(entry.brand || 'tvsettings');
+        return {
+            kind: 'tvsettings',
+            id: 'arn0:tvsettings',
+            action: 'tvsettings',
+            label: entry.label || 'TV Settings',
+            brand: brand,
+            iconPath: ''
+        };
+    }
+
+    /*
+     * Samsung Settings is not opened with a plain launch of com.samsung.tv.coba.setting
+     * (headless / no UI). The working path is ApplicationControl → org.tizen.menu with a
+     * region menu.json. Try ATSC then DVB, then a bare menu launch, then Quick Settings.
+     */
+    function openTvSettings() {
+        if (!window.tizen || !tizen.ApplicationControl) {
+            return Promise.reject(new Error('ApplicationControl unavailable'));
+        }
+        var data = [new tizen.ApplicationControlData('__K_EX_FORCE_BOOST', ['enable'])];
+        var uris = [
+            '/opt/apps/org.tizen.menu/res/json/ATSC/menu.json',
+            '/opt/apps/org.tizen.menu/res/json/DVB/menu.json',
+            null
+        ];
+        var i = 0;
+        function tryNext() {
+            if (i >= uris.length) {
+                return launch('com.samsung.tv.quicksetting');
+            }
+            var uri = uris[i++];
+            var control = new tizen.ApplicationControl(
+                'http://tizen.org/appcontrol/operation/default',
+                uri,
+                null,
+                null,
+                data
+            );
+            return launchAppControl('org.tizen.menu', control).catch(function () {
+                return tryNext();
+            });
+        }
+        return tryNext();
+    }
+
     function isConsumer(app) {
         if (PRELOADED.indexOf(app.id) >= 0) return true;
         if (!app.show || INTERNAL.indexOf(app.id) >= 0) return false;
@@ -69,6 +124,10 @@
         var used = {};
         var out = [];
         (cfg.apps || []).forEach(function (entry) {
+            if (entry.action === 'tvsettings') {
+                out.push(tvSettingsItem(entry));
+                return;
+            }
             var re = entry.match ? new RegExp(entry.match, 'i') : null;
             var candidates = apps.filter(function (a) {
                 if (used[a.id]) return false;
@@ -146,6 +205,9 @@
         allSorted: allSorted,
         describe: describe,
         launch: launch,
+        launchAppControl: launchAppControl,
+        tvSettingsItem: tvSettingsItem,
+        openTvSettings: openTvSettings,
         withTimeout: withTimeout
     };
 })();

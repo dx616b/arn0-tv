@@ -4,11 +4,12 @@
  *
  * Metadata only in localStorage (url, title, credit, date key) — never image bytes.
  *
- * First photo shows as soon as one source returns; an upcoming playlist (~15) fills in the
- * background. Image bytes still load only when a photo's turn arrives. Mix picks sources
- * round-robin, or at random when Shuffle is on. Immich walks the album page by page (Shuffle
- * picks a random unused asset from each page). Recent history is kept for the screen saver
- * fallback.
+ * First photo shows as soon as one source returns; an upcoming playlist fills in the
+ * background. Image bytes still load only when a photo's turn arrives. Each source is
+ * fetched in order into its queue (Bing/NASA/Wiki/Unsplash day cursor, Immich pages).
+ * Shuffle only picks at random from that already-fetched list — it never jumps fetch
+ * offsets. Mix chooses sources round-robin, or at random when Shuffle is on. History,
+ * plan, offsets, queues, and a seen-key ring persist in localStorage.
  *
  * NASA APOD: science.nasa.gov WordPress image-article + media API (the old apod.nasa.gov
  * apYYMMDD.html pages and api.nasa.gov DEMO_KEY now return shells / logo placeholders).
@@ -23,30 +24,35 @@
 (function () {
     'use strict';
 
-    var CACHE_KEY = 'arn0.liveWallpaper.v7';
+    var CACHE_KEY = 'arn0.liveWallpaper.v10';
     var IMMICH_STORE = 'arn0.immich.v1';
     var UNSPLASH_KEY_STORE = 'arn0.unsplash.v1';
     var TIMEOUT_MS = 15000;
     var BING = 'https://www.bing.com';
     var UNSPLASH = 'https://api.unsplash.com';
-    var NASA_CHUNK = 5;
-    var NASA_EXTRA_DAYS = 180;
-    var WIKIMEDIA_EXTRA_DAYS = 20;
     var UNSPLASH_PER_PAGE = 30;
     var UNSPLASH_PAGES = 50;
-    var IMMICH_MAX = 200;
-    var IMMICH_PAGE = 100;
-    // Planned upcoming list + recent history; one fetch at a time; short skip timeout.
-    var HISTORY_MAX = 40;
-    var PLAN_SIZE = 15;
+    // Planned upcoming + display history + long seen ring (dedup across days/restarts).
+    var HISTORY_MAX = 120;
+    // Plan + queue grow in the background after a small ready batch is shown.
+    var PLAN_SIZE = 10;
+    var SEEN_MAX = 400;
+    // Per-source ahead target (background). UI / picker only wait for PICK_BATCH.
+    var SOURCE_AHEAD = 20;
+    // Settings → Choose as static: show this many first, then Load more / background fill.
+    var PICK_BATCH = 5;
+    // Day/page cursors advance in order; span is only a soft upper bound for docs/wrap.
+    var SPAN_BING = 100;
+    var SPAN_NASA = 400;
+    var SPAN_WIKI = 400;
+    var SPAN_UNSPLASH = 200;
     var SOURCE_MS = 12 * 1000;
     // Immich is on the LAN but often colder on first hit (share + search); give it room.
     var IMMICH_SOURCE_MS = 45 * 1000;
     var IMMICH_XHR_MS = 40 * 1000;
-    var IMMICH_BUF_SIZE = 12;
+    var IMMICH_PAGE = 100;
     var RETRY_MS = 5 * 60 * 1000;
-    var RATE_LIMIT_MS = 60 * 60 * 1000;
-    var FETCH_LIMIT_MS = 90 * 1000;
+    var SOURCE_NAMES = ['bing', 'nasa', 'wikimedia', 'unsplash', 'immich'];
 
     var PROVIDERS = [
         { key: 'bing', label: 'Bing', needsKey: false },
@@ -58,6 +64,8 @@
     ];
 
     var items = [];
+    // Ring of { key, file } recently used — larger than history so days do not loop the same set.
+    var seen = [];
     var fetchedDay = '';
     var cachedProvider = '';
     var cachedMarket = '';
@@ -79,38 +87,22 @@
         var c = (window.LAUNCHER_CONFIG && window.LAUNCHER_CONFIG.liveWallpaper) || {};
         return {
             market: c.market || 'en-GB',
-            max: Math.max(1, Math.min(50, c.max || 50)),
             unsplashAccessKey: c.unsplashAccessKey || '',
             immichLink: c.immichLink || '',
             unsplashCollection: c.unsplashCollection || ''
         };
     }
 
-    function max() { return cfg().max; }
-
-    function poolLimit() { return PLAN_SIZE; }
-
-    // Live always uses a planned upcoming list (images still decode on their turn).
-    function isOnDemand() { return true; }
-
     function shuffleOn() {
         return !!(window.Prefs && Prefs.get().wallpaper.random);
     }
 
-    function shuffleInPlace(arr) {
-        for (var i = arr.length - 1; i > 0; i--) {
-            var j = Math.floor(Math.random() * (i + 1));
-            var t = arr[i];
-            arr[i] = arr[j];
-            arr[j] = t;
-        }
-        return arr;
-    }
-
-    // Sequential counter, or a random offset in [0, span) when Shuffle is on.
+    // Growing cursor (persisted). Always +1 in line — Shuffle picks from the queue, not here.
     function nextOffset(name, span) {
-        if (!shuffleOn()) return stream[name]++;
-        return Math.floor(Math.random() * span);
+        var off = stream[name] || 0;
+        var next = off + 1;
+        stream[name] = span > 0 ? next % span : next;
+        return off;
     }
 
     function provider() {
@@ -196,8 +188,20 @@
         return cfg().immichLink || '';
     }
 
+    function resetImmichState() {
+        if (!stream) return;
+        stream.immichPage = 1;
+        stream.immichAlbum = null;
+        stream.immichWrapped = false;
+        if (stream.queues && stream.queues.immich) {
+            stream.queues.immich.buf = [];
+            stream.queues.immich.filling = null;
+        }
+    }
+
     function setImmichLink(link) {
         immichLink = String(link || '').trim();
+        resetImmichState();
         try {
             localStorage.setItem(IMMICH_STORE, JSON.stringify({ link: immichLink }));
         } catch (e) {
@@ -207,6 +211,7 @@
 
     function clearImmichLink() {
         try { localStorage.removeItem(IMMICH_STORE); } catch (e) { /* ignore */ }
+        resetImmichState();
         immichLink = readImmichLink();
     }
 
@@ -229,21 +234,34 @@
         return !!unsplashKey;
     }
 
+    function emptyQueues() {
+        var q = {};
+        SOURCE_NAMES.forEach(function (name) {
+            q[name] = { buf: [], filling: null };
+        });
+        return q;
+    }
+
     function resetStream() {
         stream = {
             sourceIndex: 0,
             bing: 0,
+            bingWrapped: false,
             nasa: 0,
             wiki: 0,
             unsplash: 0,
-            immich: 1,
-            immichBuf: [],
+            immichPage: 1,
             immichAlbum: null,
-            immichFilling: null,
-            immichExhausted: false,
+            immichWrapped: false,
+            queues: emptyQueues(),
             plan: [],
             filling: null
         };
+    }
+
+    function sourceQueue(name) {
+        if (!stream.queues[name]) stream.queues[name] = { buf: [], filling: null };
+        return stream.queues[name];
     }
 
     var stream;
@@ -251,10 +269,33 @@
 
     function resetPool() {
         items = [];
+        seen = [];
+        pickCatalog = {};
+        pickOrderSig = '';
+        pickOrderKeys = [];
+        pickTarget = {};
+        thumbWarm = {};
         fetchedDay = '';
         cachedProvider = '';
         cachedMarket = '';
         resetStream();
+    }
+
+    function markSeen(entry) {
+        if (!entry || !entry.key) return;
+        seen = seen.filter(function (e) {
+            return e.key !== entry.key && (!entry.file || e.file !== entry.file);
+        });
+        seen.push({ key: entry.key, file: entry.file || '' });
+        if (seen.length > SEEN_MAX) seen = seen.slice(seen.length - SEEN_MAX);
+    }
+
+    function loadOffsets(raw) {
+        if (!raw || typeof raw !== 'object') return;
+        ['bing', 'nasa', 'wiki', 'unsplash', 'sourceIndex'].forEach(function (k) {
+            var n = Number(raw[k]);
+            if (n >= 0 && isFinite(n)) stream[k] = Math.floor(n);
+        });
     }
 
     function loadCache() {
@@ -266,10 +307,54 @@
             fetchedDay = raw.fetchedDay || '';
             cachedProvider = raw.provider;
             cachedMarket = raw.market || '';
-            items = raw.items.slice(0, poolLimit()).map(normalize);
+            items = raw.items.slice(-HISTORY_MAX).map(normalize);
+            seen = (Array.isArray(raw.seen) ? raw.seen : []).filter(function (e) {
+                return e && e.key;
+            }).slice(-SEEN_MAX).map(function (e) {
+                return { key: String(e.key), file: e.file ? String(e.file) : '' };
+            });
+            // Seed seen from history if this is an upgraded cache without a seen ring.
+            if (!seen.length && items.length) {
+                items.forEach(markSeen);
+            }
+            loadOffsets(raw.offsets);
+            if (raw.immichPage != null) {
+                var ip = Math.floor(Number(raw.immichPage));
+                if (ip >= 1 && isFinite(ip)) stream.immichPage = ip;
+            }
+            if (raw.immichAlbum && raw.immichAlbum.id) {
+                var s = parseImmichLink(immichLink);
+                if (s) {
+                    stream.immichAlbum = {
+                        id: raw.immichAlbum.id,
+                        name: raw.immichAlbum.name || '',
+                        origin: s.origin,
+                        query: s.query
+                    };
+                }
+            }
+            if (raw.queues && typeof raw.queues === 'object') {
+                SOURCE_NAMES.forEach(function (name) {
+                    var saved = raw.queues[name];
+                    if (!saved || !Array.isArray(saved.buf)) return;
+                    sourceQueue(name).buf = saved.buf.map(normalize).slice(0, SOURCE_AHEAD);
+                });
+            }
+            if (Array.isArray(raw.plan) && raw.plan.length) {
+                stream.plan = raw.plan.map(normalize).slice(0, PLAN_SIZE);
+                stream.plan.forEach(markSeen);
+            }
         } catch (e) {
             resetPool();
         }
+    }
+
+    function queuesForCache() {
+        var out = {};
+        SOURCE_NAMES.forEach(function (name) {
+            out[name] = { buf: sourceQueue(name).buf.slice(0, SOURCE_AHEAD) };
+        });
+        return out;
     }
 
     // `p` is the provider the items were fetched from, not the one currently selected.
@@ -281,7 +366,22 @@
                 provider: p,
                 fetchedDay: fetchedDay,
                 market: cachedMarket,
-                items: items
+                items: items,
+                seen: seen,
+                plan: stream.plan,
+                queues: queuesForCache(),
+                immichPage: stream.immichPage || 1,
+                immichAlbum: stream.immichAlbum ? {
+                    id: stream.immichAlbum.id,
+                    name: stream.immichAlbum.name || ''
+                } : null,
+                offsets: {
+                    bing: stream.bing || 0,
+                    nasa: stream.nasa || 0,
+                    wiki: stream.wiki || 0,
+                    unsplash: stream.unsplash || 0,
+                    sourceIndex: stream.sourceIndex || 0
+                }
             }));
         } catch (e) {
             DevLog.log('Live wallpaper: could not save cache');
@@ -299,8 +399,72 @@
             thumb: entry.thumb || entry.file,
             credit: entry.credit || '',
             trackUrl: entry.trackUrl || '',
+            source: entry.source || '',
             remote: true
         };
+    }
+
+    // Lasting catalog for Choose as static — queues are drained into the plan, so the
+    // picker must not rely on buf.length alone.
+    var pickCatalog = {};
+    var pickOrderSig = '';
+    var pickOrderKeys = [];
+    // Per-source how many catalog entries the picker should fetch/show (starts at PICK_BATCH).
+    var pickTarget = {};
+    // Keep Image() handles so the HTTP cache stays warm for the Settings grid.
+    var thumbWarm = {};
+
+    function pickCountFor(name) {
+        var n = 0;
+        Object.keys(pickCatalog).forEach(function (k) {
+            if (pickCatalog[k].source === name) n++;
+        });
+        return n;
+    }
+
+    function ensurePickTarget(name) {
+        if (!pickTarget[name] || pickTarget[name] < PICK_BATCH) pickTarget[name] = PICK_BATCH;
+        return pickTarget[name];
+    }
+
+    function preloadThumb(entry) {
+        if (!entry || !entry.key) return;
+        var url = entry.thumb || entry.file;
+        if (!url || thumbWarm[entry.key]) return;
+        var img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+        thumbWarm[entry.key] = img;
+    }
+
+    function preloadPickThumbs() {
+        pickList().forEach(preloadThumb);
+    }
+
+    function rememberPick(entry, source) {
+        if (!entry || !entry.key) return;
+        var n = normalize(entry);
+        if (source) n.source = source;
+        else if (entry.source) n.source = entry.source;
+        var prev = pickCatalog[entry.key];
+        if (prev) {
+            if (!n.thumb && prev.thumb) n.thumb = prev.thumb;
+            if (!n.source && prev.source) n.source = prev.source;
+            if (!n.fileFallback && prev.fileFallback) n.fileFallback = prev.fileFallback;
+            if ((!n.fileFallbacks || !n.fileFallbacks.length) && prev.fileFallbacks) {
+                n.fileFallbacks = prev.fileFallbacks;
+            }
+        }
+        pickCatalog[entry.key] = n;
+        preloadThumb(n);
+    }
+
+    function seedPickCatalog() {
+        SOURCE_NAMES.forEach(function (name) {
+            sourceQueue(name).buf.forEach(function (w) { rememberPick(w, name); });
+        });
+        stream.plan.forEach(function (w) { rememberPick(w, w.source); });
+        items.forEach(function (w) { rememberPick(w, w.source); });
     }
 
     function keys(list) {
@@ -308,14 +472,7 @@
     }
 
     function trim() {
-        var lim = poolLimit();
-        if (items.length > lim) items = items.slice(0, lim);
-    }
-
-    function mergeToday(entry) {
-        items = items.filter(function (w) { return w.key !== entry.key; });
-        items.unshift(entry);
-        trim();
+        if (items.length > HISTORY_MAX) items = items.slice(items.length - HISTORY_MAX);
     }
 
     function httpError(status) {
@@ -355,20 +512,48 @@
     // Browser preview: same-origin proxy in scripts/serve.mjs (Chrome CORS blocks the APIs).
     function preview() { return !!window.__TIZEN_MOCK__; }
 
+    // Target width for remote photos: at least 1080p, up to UHD when the panel reports it.
+    function panelDisplayWidth() {
+        var w = 0;
+        try {
+            w = Math.max(
+                window.screen && screen.width || 0,
+                window.innerWidth || 0,
+                document.documentElement && document.documentElement.clientWidth || 0
+            );
+        } catch (e) {
+            w = 0;
+        }
+        if (!w || w < 1920) w = 1920;
+        if (w > 3840) w = 3840;
+        return w;
+    }
+
     /* ---------- Bing ---------- */
 
     function parseBingImage(img) {
         if (!img) return null;
-        var base = img.urlbase || (img.url ? img.url.replace(/\?.*/, '') : '');
+        // urlbase is "/th?id=OHR.…"; do not strip at "?" from img.url (that yields "/th").
+        var base = img.urlbase || '';
+        if (!base && img.url) {
+            var m = String(img.url).match(/^(\/th\?id=[^&_]+)/);
+            base = m ? m[1] : '';
+        }
         if (!base) return null;
-        var file = BING + base + '_1920x1080.jpg';
+        var hd = BING + base + '_1920x1080.jpg';
+        var uhd = BING + base + '_UHD.jpg';
         var thumb = BING + base + '_320x180.jpg';
+        // Prefer 1080p: UHD is ~3–4MB and often fails to decode on TV / slow preview.
+        // Only try UHD first on wide panels; always keep 1080p as fallback.
+        var preferUhd = panelDisplayWidth() >= 2560;
         var title = img.title || (img.copyright || '').split('(')[0].trim() || 'Bing daily';
         var credit = img.copyright || 'Bing';
         return normalize({
             key: String(img.startdate || title),
             title: title,
-            file: file,
+            file: preferUhd ? uhd : hd,
+            fileFallback: preferUhd ? hd : '',
+            fileFallbacks: preferUhd ? [hd] : [],
             thumb: thumb,
             credit: credit
         });
@@ -378,41 +563,6 @@
         var query = 'idx=' + idx + '&n=' + n + '&mkt=' + encodeURIComponent(cfg().market);
         if (preview()) return '/api/live/bing?' + query;
         return BING + '/HPImageArchive.aspx?format=js&' + query;
-    }
-
-    // Bing accepts n ≤ 8 per call; page with idx to fill up to need (default max).
-    function fetchBingPool(needCount) {
-        var need = needCount != null ? needCount : max();
-        var collected = [];
-        var seen = {};
-
-        function page(idx) {
-            var n = Math.min(8, need - collected.length);
-            if (n <= 0 || idx > 64) {
-                if (!collected.length) return Promise.reject(new Error('empty archive'));
-                return Promise.resolve(collected);
-            }
-            return xhrGet(bingArchiveUrl(idx, n)).then(function (data) {
-                var batch = (data.images || []).map(parseBingImage).filter(Boolean);
-                batch.forEach(function (entry) {
-                    if (seen[entry.key] || collected.length >= need) return;
-                    seen[entry.key] = true;
-                    collected.push(entry);
-                });
-                if (!batch.length) return page(99);
-                return page(idx + batch.length);
-            });
-        }
-
-        return page(0);
-    }
-
-    function fetchBingToday() {
-        return xhrGet(bingArchiveUrl(0, 1)).then(function (data) {
-            var entry = parseBingImage((data.images || [])[0]);
-            if (!entry) throw new Error('no today image');
-            return entry;
-        });
     }
 
     /* ---------- NASA APOD ---------- */
@@ -508,46 +658,6 @@
         return fetchNasaDayWp(ymd);
     }
 
-    // Fetches days back from today in parallel chunks until `need` entries are collected.
-    // Extra days cover missing / video / placeholder days.
-    function collectDays(fetchDay, need, extraDays) {
-        var limit = need + extraDays;
-        var collected = [];
-        var seen = {};
-
-        function chunk(from) {
-            if (collected.length >= need || from >= limit) {
-                if (!collected.length) return Promise.reject(new Error('no images found'));
-                return Promise.resolve(collected.slice(0, need));
-            }
-            var days = [];
-            for (var d = from; d < Math.min(from + NASA_CHUNK, limit); d++) {
-                days.push(daysAgoKey(d));
-            }
-            return Promise.all(days.map(function (ymd) {
-                return fetchDay(ymd).catch(function () { return null; });
-            })).then(function (entries) {
-                entries.forEach(function (entry) {
-                    if (!entry || seen[entry.file] || collected.length >= need) return;
-                    seen[entry.file] = true;
-                    collected.push(entry);
-                });
-                return chunk(from + NASA_CHUNK);
-            });
-        }
-
-        return chunk(0);
-    }
-
-    function fetchNasaPool(needCount) {
-        return collectDays(fetchNasaDay, needCount != null ? needCount : max(), NASA_EXTRA_DAYS);
-    }
-
-    // Video days resolve to null; the day is still marked as checked.
-    function fetchNasaToday() {
-        return fetchNasaDay(todayKey());
-    }
-
     /* ---------- Wikimedia Picture of the Day ---------- */
 
     // Feed image: thumbnail is ~960px, the original can be 5000px+. Ask the thumbnail
@@ -566,10 +676,11 @@
             .replace(/\.[a-z0-9]+$/i, '')
             .replace(/_/g, ' ');
         var artist = (img.artist && img.artist.text) || '';
+        var target = panelDisplayWidth();
         return normalize({
             key: 'wikimedia:' + ymd,
             title: title || 'Picture of the day',
-            file: wikimediaSized(img.thumbnail.source, 1920),
+            file: wikimediaSized(img.thumbnail.source, target),
             thumb: wikimediaSized(img.thumbnail.source, 480),
             credit: 'Wikimedia Commons' + (artist ? ' · ' + artist : '')
         });
@@ -577,18 +688,15 @@
 
     function fetchWikimediaDay(ymd) {
         var p = ymd.split('-');
-        var url = 'https://en.wikipedia.org/api/rest_v1/feed/featured/' + p[0] + '/' + p[1] + '/' + p[2];
+        var path = p[0] + '/' + p[1] + '/' + p[2];
+        var url = preview()
+            ? '/api/live/wikimedia?date=' + encodeURIComponent(ymd)
+            : 'https://en.wikipedia.org/api/rest_v1/feed/featured/' + path;
         return xhrGet(url).then(function (data) {
+            // Preview proxy returns a normalized entry; the TV gets the featured feed JSON.
+            if (preview() && data && data.file) return normalize(data);
             return parseWikimediaPotd(data, ymd);
         });
-    }
-
-    function fetchWikimediaPool(needCount) {
-        return collectDays(fetchWikimediaDay, needCount != null ? needCount : max(), WIKIMEDIA_EXTRA_DAYS);
-    }
-
-    function fetchWikimediaToday() {
-        return fetchWikimediaDay(todayKey());
     }
 
     /* ---------- Unsplash ---------- */
@@ -638,18 +746,12 @@
         });
     }
 
-    function range(n) {
-        var out = [];
-        for (var i = 0; i < n; i++) out.push(i);
-        return out;
-    }
-
     function parseUnsplashImage(img) {
         if (!img || !img.urls || !img.urls.raw) return null;
-        // Size the raw URL for a 1080p panel; the API's regular/full URLs are fixed-size.
+        // Size the raw URL to the panel (1080p–UHD); regular/full API URLs are fixed-size.
         var raw = img.urls.raw;
         var file = raw + (raw.indexOf('?') === -1 ? '?' : '&') +
-            'w=1920&fit=max&q=85&auto=format';
+            'w=' + panelDisplayWidth() + '&fit=max&q=85&auto=format';
         var title = img.alt_description || img.description || 'Unsplash';
         if (title.length > 48) title = title.slice(0, 45) + '…';
         var credit = (img.user && img.user.name) ? (img.user.name + ' on Unsplash') : 'Unsplash';
@@ -666,27 +768,6 @@
     function parseUnsplashList(data) {
         var list = Array.isArray(data) ? data : (data ? [data] : []);
         return list.map(parseUnsplashImage).filter(Boolean);
-    }
-
-    function fetchUnsplashPool(needCount) {
-        var n = needCount != null ? needCount : max();
-        return fetchUnsplashDays(range(n)).then(function (list) {
-            var seen = {};
-            list = list.filter(function (e) {
-                if (seen[e.key]) return false;
-                seen[e.key] = true;
-                return true;
-            });
-            if (!list.length) throw new Error('empty Unsplash');
-            return list;
-        });
-    }
-
-    function fetchUnsplashToday() {
-        return fetchUnsplashDays([0]).then(function (list) {
-            if (!list[0]) throw new Error('no Unsplash image');
-            return list[0];
-        });
     }
 
     // Unsplash API guidelines: report each photo the app actually shows.
@@ -787,6 +868,8 @@
         var original = base + '/original?' + query;
         var fullsize = base + '/thumbnail?size=fullsize' + q;
         var preview = base + '/thumbnail?size=preview' + q;
+        // Smallest Immich derivative for the Settings grid (preview is too heavy per tile).
+        var thumb = base + '/thumbnail?size=thumbnail' + q;
         return normalize({
             key: a.id,
             title: title,
@@ -796,7 +879,7 @@
             file: original,
             fileFallback: fullsize,
             fileFallbacks: [fullsize, preview],
-            thumb: preview,
+            thumb: thumb,
             credit: album ? 'Immich · ' + album : 'Immich'
         });
     }
@@ -815,54 +898,6 @@
         merged.exifInfo = Object.assign({}, immichExif(searchHit), immichExif(full));
         if (!merged.localDateTime && searchHit.localDateTime) merged.localDateTime = searchHit.localDateTime;
         return merged;
-    }
-
-    // Shared link does not list album contents; assets come from search, paginated.
-    function fetchImmichAlbum(limit) {
-        var cap = limit != null ? limit : IMMICH_MAX;
-        return fetchImmichLinkData().then(function (link) {
-            var s = parseImmichLink(immichLink);
-            var album = (link.album && link.album.albumName) || '';
-            if (!link.album || !link.album.id) throw new Error('Immich link is not an album');
-            var collected = [];
-            var seen = {};
-            var pageSize = Math.min(IMMICH_PAGE, Math.max(cap, 1));
-
-            function page(pageNum) {
-                return xhrPostJson(immichApi('/search/metadata?' + s.query), {
-                    albumIds: [link.album.id],
-                    type: 'IMAGE',
-                    size: pageSize,
-                    page: pageNum,
-                    withExif: true
-                }).then(function (res) {
-                    var batch = ((res.assets && res.assets.items) || []).filter(function (a) {
-                        return a.type === 'IMAGE';
-                    });
-                    batch.forEach(function (a) {
-                        if (seen[a.id] || collected.length >= cap) return;
-                        seen[a.id] = true;
-                        collected.push(immichEntry(a, s.origin, s.query, album));
-                    });
-                    if (!batch.length || batch.length < pageSize || collected.length >= cap) {
-                        if (!collected.length) throw new Error('empty Immich album');
-                        return collected;
-                    }
-                    return page(pageNum + 1);
-                });
-            }
-
-            return page(1);
-        });
-    }
-
-    function fetchImmichPool(limit) {
-        return fetchImmichAlbum(limit);
-    }
-
-    // Immich and Mix re-sync the whole pool on a calendar day change (see ensureDaily).
-    function fetchImmichToday() {
-        return fetchImmichAlbum().then(function (list) { return list[0] || null; });
     }
 
     /* ---------- On-demand (one photo at a time, all providers) ---------- */
@@ -935,98 +970,6 @@
         });
     }
 
-    // Buffer a page of new Immich assets (skip ids already planned/shown).
-    function fillImmichBuf() {
-        if (stream.immichFilling) return stream.immichFilling;
-        if (stream.immichExhausted) return Promise.reject(new Error('Immich album exhausted'));
-
-        stream.immichFilling = ensureImmichAlbum().then(function (album) {
-            var guard = 0;
-
-            function page() {
-                if (guard++ > 40) {
-                    stream.immichExhausted = true;
-                    throw new Error('Immich album exhausted');
-                }
-                var pageNum = stream.immich;
-                return xhrPostJson(immichApi('/search/metadata?' + album.query), {
-                    albumIds: [album.id],
-                    type: 'IMAGE',
-                    size: IMMICH_BUF_SIZE,
-                    page: pageNum,
-                    withExif: true
-                }, IMMICH_XHR_MS).then(function (res) {
-                    var batch = ((res.assets && res.assets.items) || []).filter(function (a) {
-                        return a.type === 'IMAGE';
-                    });
-                    if (!batch.length) {
-                        if (pageNum <= 1) throw new Error('empty Immich album');
-                        stream.immichExhausted = true;
-                        throw new Error('Immich album exhausted');
-                    }
-                    stream.immich = pageNum + 1;
-                    var seen = knownKeys();
-                    var fresh = batch.filter(function (a) { return !seen[a.id]; });
-                    if (!fresh.length) return page();
-                    if (shuffleOn()) shuffleInPlace(fresh);
-                    fresh.forEach(function (a) { stream.immichBuf.push(a); });
-                    if (shuffleOn()) shuffleInPlace(stream.immichBuf);
-                });
-            }
-
-            return page();
-        }).then(function () {
-            stream.immichFilling = null;
-        }, function (err) {
-            stream.immichFilling = null;
-            throw err;
-        });
-
-        return stream.immichFilling;
-    }
-
-    // Warm the Immich buffer in parallel; Mix Immich slots then shift locally.
-    function warmImmich() {
-        if (!immichConfigured()) return Promise.resolve();
-        if (stream.immichBuf.length || stream.immichExhausted) return Promise.resolve();
-        return fillImmichBuf().then(function () {
-            DevLog.log('Live wallpaper: Immich buffer ' + stream.immichBuf.length);
-        }, function (e) {
-            DevLog.log('Live wallpaper: Immich warm failed: ' + (e && e.message ? e.message : e));
-        });
-    }
-
-    // Fast path for planning / first paint: search EXIF only. Display probes original→fullsize→preview.
-    // Place enrich runs when the photo is actually shown (see polishImmich).
-    function fetchImmichOne() {
-        function takeRaw() {
-            if (!stream.immichBuf.length || !stream.immichAlbum) return null;
-            var seen = knownKeys();
-            stream.immichBuf = stream.immichBuf.filter(function (a) { return !seen[a.id]; });
-            if (!stream.immichBuf.length) return null;
-            // Shuffle On: random unused asset. Off: album page order.
-            if (shuffleOn()) {
-                var i = Math.floor(Math.random() * stream.immichBuf.length);
-                return stream.immichBuf.splice(i, 1)[0];
-            }
-            return stream.immichBuf.shift();
-        }
-        function toEntry(a) {
-            var album = stream.immichAlbum;
-            return Promise.resolve(immichEntry(a, album.origin, album.query, album.name));
-        }
-        function next() {
-            var raw = takeRaw();
-            if (raw) return toEntry(raw);
-            return fillImmichBuf().then(function () {
-                var again = takeRaw();
-                if (!again) throw new Error('Immich album exhausted');
-                return toEntry(again);
-            });
-        }
-        return next();
-    }
-
     // Enrich place/title when showing; never block plan fill on /assets round-trips.
     function polishImmich(entry) {
         if (!entry || !entry.key || !stream.immichAlbum) return Promise.resolve(entry);
@@ -1046,45 +989,321 @@
         }, function () { return entry; });
     }
 
-    function fetchOne(k) {
-        if (k === 'bing') {
-            var idx = nextOffset('bing', 50);
-            return xhrGet(bingArchiveUrl(idx, 1)).then(function (data) {
-                var entry = parseBingImage((data.images || [])[0]);
-                if (!entry) throw new Error('empty Bing');
-                return entry;
+    function knownKeys() {
+        var map = {};
+        seen.forEach(function (e) { map[e.key] = true; });
+        items.forEach(function (w) { map[w.key] = true; });
+        stream.plan.forEach(function (w) { map[w.key] = true; });
+        return map;
+    }
+
+    function isDuplicate(entry) {
+        if (!entry) return true;
+        var map = knownKeys();
+        if (map[entry.key]) return true;
+        if (!entry.file) return false;
+        if (seen.some(function (e) { return e.file === entry.file; })) return true;
+        if (items.some(function (w) { return w.file === entry.file; })) return true;
+        return stream.plan.some(function (w) { return w.file === entry.file; });
+    }
+
+    function queueHas(q, entry) {
+        return q.buf.some(function (w) {
+            return w.key === entry.key || (entry.file && w.file === entry.file);
+        });
+    }
+
+    // Drop at most `limit` already-seen entries — only after replacements were added.
+    function dropStale(q, limit) {
+        if (limit <= 0) return;
+        var dropped = 0;
+        q.buf = q.buf.filter(function (w) {
+            if (dropped >= limit) return true;
+            if (!isDuplicate(w)) return true;
+            dropped++;
+            return false;
+        });
+    }
+
+    function freshInQueue(q) {
+        return q.buf.filter(function (w) { return !isDuplicate(w); }).length;
+    }
+
+    // One server pull → zero or more fresh entries (Immich/Bing return a page; others one).
+    function pullFresh(name) {
+        if (name === 'bing') {
+            // Archive is small (~8). Fetch a page; do not spin forever past the end.
+            var idx = stream.bing || 0;
+            var n = 8;
+            return xhrGet(bingArchiveUrl(idx, n)).then(function (data) {
+                var imgs = data.images || [];
+                if (!imgs.length) {
+                    if (idx === 0) throw new Error('empty Bing');
+                    if (!stream.bingWrapped) {
+                        stream.bingWrapped = true;
+                        stream.bing = 0;
+                        return { entries: [], wrapped: true };
+                    }
+                    return { entries: [], done: true };
+                }
+                stream.bing = idx + imgs.length;
+                stream.bingWrapped = false;
+                return {
+                    entries: imgs.map(parseBingImage).filter(Boolean),
+                    done: imgs.length < n
+                };
             });
         }
-        if (k === 'nasa') {
-            var day = nextOffset('nasa', 60);
+        if (name === 'nasa') {
+            var day = nextOffset('nasa', SPAN_NASA);
             return fetchNasaDay(daysAgoKey(day)).then(function (entry) {
                 if (!entry) throw new Error('empty NASA');
-                return entry;
+                return { entries: [entry] };
             });
         }
-        if (k === 'wikimedia') {
-            var wday = nextOffset('wiki', 60);
+        if (name === 'wikimedia') {
+            var wday = nextOffset('wiki', SPAN_WIKI);
             return fetchWikimediaDay(daysAgoKey(wday)).then(function (entry) {
                 if (!entry) throw new Error('empty Wikimedia');
-                return entry;
+                return { entries: [entry] };
             });
         }
-        if (k === 'unsplash') {
-            var off = nextOffset('unsplash', 40);
+        if (name === 'unsplash') {
+            var off = nextOffset('unsplash', SPAN_UNSPLASH);
             return fetchUnsplashDays([off]).then(function (list) {
                 if (!list[0]) throw new Error('empty Unsplash');
-                return list[0];
+                return { entries: [list[0]] };
             });
         }
-        if (k === 'immich') return fetchImmichOne();
+        if (name === 'immich') {
+            return ensureImmichAlbum().then(function (album) {
+                var pageNum = stream.immichPage || 1;
+                return xhrPostJson(immichApi('/search/metadata?' + album.query), {
+                    albumIds: [album.id],
+                    type: 'IMAGE',
+                    size: IMMICH_PAGE,
+                    page: pageNum,
+                    withExif: false
+                }, IMMICH_XHR_MS).then(function (res) {
+                    var batch = ((res.assets && res.assets.items) || []).filter(function (a) {
+                        return a && a.type === 'IMAGE' && a.id;
+                    });
+                    if (!batch.length) {
+                        if (pageNum <= 1) throw new Error('empty Immich album');
+                        if (!stream.immichWrapped) {
+                            stream.immichWrapped = true;
+                            stream.immichPage = 1;
+                            return { entries: [], wrapped: true };
+                        }
+                        return { entries: [], done: true };
+                    }
+                    stream.immichPage = pageNum + 1;
+                    stream.immichWrapped = false;
+                    return {
+                        entries: batch.map(function (a) {
+                            return immichEntry(a, album.origin, album.query, album.name);
+                        })
+                    };
+                });
+            });
+        }
         return Promise.reject(new Error('unknown source'));
     }
 
-    function knownKeys() {
-        var seen = {};
-        items.forEach(function (w) { seen[w.key] = true; });
-        stream.plan.forEach(function (w) { seen[w.key] = true; });
-        return seen;
+    // Keep the queue topped up. `limit` caps how far to fill (picker uses PICK_BATCH);
+    // Live rotation omits it and fills to SOURCE_AHEAD.
+    function fillSourceQueue(name, limit) {
+        var q = sourceQueue(name);
+        var cap = typeof limit === 'number' && limit > 0 ? limit : SOURCE_AHEAD;
+        if (q.filling) {
+            // Picker must not wait for a full Live SOURCE_AHEAD fill — resolve once we
+            // already have enough catalogued, otherwise continue after the current fill.
+            if (limit && pickCountFor(name) >= cap) return Promise.resolve();
+            return q.filling.then(function () {
+                if (limit && pickCountFor(name) >= cap) return;
+                if (!limit && freshInQueue(q) >= SOURCE_AHEAD) return;
+                return fillSourceQueue(name, limit);
+            });
+        }
+
+        q.filling = Promise.resolve().then(function () {
+            var guard = 0;
+
+            function reached() {
+                return limit ? pickCountFor(name) >= cap : freshInQueue(q) >= SOURCE_AHEAD;
+            }
+
+            function step() {
+                if (reached()) return;
+                if (guard++ > 80) return;
+                return pullFresh(name).then(function (res) {
+                    var added = 0;
+                    var cataloged = 0;
+                    (res.entries || []).forEach(function (entry) {
+                        if (!entry || isDuplicate(entry) || queueHas(q, entry)) return;
+                        entry.source = name;
+                        // Always remember for the picker; Immich pages are large — Load more
+                        // can reveal catalogued thumbs without another round trip.
+                        var before = pickCountFor(name);
+                        rememberPick(entry, name);
+                        if (pickCountFor(name) > before) cataloged++;
+                        if (limit && before >= cap) return;
+                        if (!limit && freshInQueue(q) >= SOURCE_AHEAD) return;
+                        q.buf.push(entry);
+                        added++;
+                    });
+                    if (added) {
+                        dropStale(q, added);
+                        // Keep fetch order in the queue; Shuffle picks at take time.
+                        DevLog.log('Live wallpaper: ' + name + ' queue ' + q.buf.length +
+                            '/' + cap + ' (+' + added + ')');
+                        notify();
+                    } else if (cataloged) {
+                        notify();
+                    }
+                    if (reached()) return;
+                    if (res.done) {
+                        if (!q.buf.length && !pickCountFor(name)) throw new Error(name + ' exhausted');
+                        return;
+                    }
+                    // No progress this pull (all duplicates) but queue still has entries: stop
+                    // rather than spinning; keep existing items.
+                    if (!added && !cataloged && (q.buf.length || pickCountFor(name)) && !res.wrapped) {
+                        return;
+                    }
+                    if (!added && cataloged && limit && pickCountFor(name) >= cap) return;
+                    return new Promise(function (resolve) { setTimeout(resolve, 40); }).then(step);
+                });
+            }
+
+            return step();
+        }).then(function () {
+            q.filling = null;
+            saveCache(provider());
+        }, function (err) {
+            q.filling = null;
+            // Keep whatever is already queued when the provider fails.
+            if (q.buf.length || pickCountFor(name)) return;
+            throw err;
+        });
+
+        return q.filling;
+    }
+
+    // Resolve as soon as the picker has `want` catalog entries (do not wait for Live ahead).
+    function waitForPickCount(name, want, timeoutMs) {
+        return new Promise(function (resolve) {
+            var ticks = 0;
+            var max = Math.ceil((timeoutMs || 20000) / 50);
+            function check() {
+                if (pickCountFor(name) >= want || ticks++ >= max) {
+                    resolve(pickCountFor(name));
+                    return;
+                }
+                setTimeout(check, 50);
+            }
+            check();
+        });
+    }
+
+    function reseedQueueFromCatalog(name) {
+        var q = sourceQueue(name);
+        Object.keys(pickCatalog).forEach(function (k) {
+            var w = pickCatalog[k];
+            if (!w || w.source !== name || !w.file || queueHas(q, w)) return;
+            q.buf.push(w);
+        });
+    }
+
+    // Prefer unseen; if none and allowReuse, return a queued entry rather than empty.
+    // Shuffle = random pick from the in-order fetched list (never a random server offset).
+    function takeFromQueue(name, allowReuse) {
+        var q = sourceQueue(name);
+        if (!q.buf.length) reseedQueueFromCatalog(name);
+        if (!q.buf.length) return null;
+        var fresh = [];
+        var i;
+        for (i = 0; i < q.buf.length; i++) {
+            if (!isDuplicate(q.buf[i])) fresh.push(i);
+        }
+        if (fresh.length) {
+            i = shuffleOn()
+                ? fresh[Math.floor(Math.random() * fresh.length)]
+                : fresh[0];
+            return q.buf.splice(i, 1)[0];
+        }
+        if (!allowReuse) return null;
+        if (shuffleOn()) {
+            i = Math.floor(Math.random() * q.buf.length);
+            return q.buf.splice(i, 1)[0];
+        }
+        return q.buf.shift();
+    }
+
+    // Wait until the in-order queue has at least `min` fresh entries (or fill gave up).
+    // Do not block the first photo on a full SOURCE_AHEAD buffer — NASA/Wiki add one
+    // entry per request, so waiting for 40 would always blow the Mix timeout.
+    function waitForFresh(name, min, allowReuse) {
+        var q = sourceQueue(name);
+        if (freshInQueue(q) >= min) return Promise.resolve();
+        fillSourceQueue(name);
+        return new Promise(function (resolve, reject) {
+            var ticks = 0;
+            function tick() {
+                if (freshInQueue(q) >= min) {
+                    resolve();
+                    return;
+                }
+                if (!q.filling) {
+                    if (freshInQueue(q) >= min) {
+                        resolve();
+                        return;
+                    }
+                    reseedQueueFromCatalog(name);
+                    if (freshInQueue(q) >= min || (allowReuse && q.buf.length)) {
+                        resolve();
+                        return;
+                    }
+                    reject(new Error('empty ' + name));
+                    return;
+                }
+                if (ticks++ > 400) {
+                    reject(new Error('timeout'));
+                    return;
+                }
+                setTimeout(tick, 50);
+            }
+            tick();
+        });
+    }
+
+    // Take one from the list as soon as anything is ready; top up the queue in the background.
+    // allowReuse=false for plan fill (stop when the unique pool is exhausted).
+    function fetchOne(name, allowReuse) {
+        return waitForFresh(name, 1, !!allowReuse).then(function () {
+            var entry = takeFromQueue(name, !!allowReuse);
+            if (!entry) throw new Error('empty ' + name);
+            fillSourceQueue(name);
+            return entry;
+        });
+    }
+
+    function warmSources() {
+        var keys = streamKeys();
+        if (!keys.length) return Promise.resolve();
+        return Promise.all(keys.map(function (name) {
+            return fillSourceQueue(name).catch(function (e) {
+                DevLog.log('Live wallpaper: ' + name + ' warm failed: ' +
+                    (e && e.message ? e.message : e));
+            });
+        }));
+    }
+
+    // Top up queues + plan without blocking UI (after the first few are ready).
+    function backgroundFill() {
+        if (needsSetup()) return;
+        warmSources();
+        if (stream.plan.length < PLAN_SIZE) fillPlan(120);
     }
 
     // One primary source per plan slot. Shuffle picks a random start; failures walk the
@@ -1097,12 +1316,14 @@
     }
 
     // Short timeout per try; Immich gets longer. Mix walks sources fairly on failure.
-    function advanceOne(g) {
+    // allowReuse: plan fill uses false so a small pool (Bing ~8) stops cleanly; takeNext may reuse.
+    function advanceOne(g, allowReuse) {
         var keys = streamKeys();
         if (!keys.length) return Promise.reject(new Error('no sources'));
         var start = nextSlotStart(keys);
         var tries = 0;
-        var maxTries = keys.length === 1 ? 12 : keys.length * 2;
+        var maxTries = keys.length === 1 ? 2 : keys.length * 2;
+        var reuse = !!allowReuse;
 
         function attempt() {
             if (g !== generation) return Promise.reject(new Error('stale'));
@@ -1111,13 +1332,16 @@
             tries++;
             var ms = k === 'immich' ? IMMICH_SOURCE_MS : SOURCE_MS;
             DevLog.log('Live wallpaper: plan ' + k);
-            return withTimeout(fetchOne(k), ms).then(function (entry) {
+            return withTimeout(fetchOne(k, reuse), ms).then(function (entry) {
                 if (!entry) return attempt();
-                var seen = knownKeys();
-                if (seen[entry.key] || items.some(function (w) { return w.file === entry.file; }) ||
-                    stream.plan.some(function (w) { return w.file === entry.file; })) {
-                    return attempt();
+                if (isDuplicate(entry)) {
+                    entry.source = k;
+                    sourceQueue(k).buf.push(entry);
+                    rememberPick(entry, k);
+                    if (keys.length > 1 && tries < maxTries) return attempt();
+                    if (!reuse) return Promise.reject(new Error('no fresh photos'));
                 }
+                markSeen(entry);
                 return entry;
             }, function (e) {
                 DevLog.log('Live wallpaper: skip ' + k + ': ' + (e && e.message ? e.message : e));
@@ -1132,6 +1356,8 @@
         items = items.filter(function (w) { return w.key !== entry.key; });
         items.push(entry);
         if (items.length > HISTORY_MAX) items = items.slice(items.length - HISTORY_MAX);
+        markSeen(entry);
+        rememberPick(entry, entry.source);
         setLiveKey(entry.key);
         if (entry.trackUrl) trackUnsplash([entry]);
         fetchedDay = todayKey();
@@ -1159,14 +1385,18 @@
         function step() {
             if (g !== generation) return Promise.resolve();
             if (stream.plan.length >= PLAN_SIZE) return Promise.resolve();
-            return advanceOne(g).then(function (entry) {
+            // Plan fill never reuses — stop when the unique pool is exhausted (Bing ~8).
+            return advanceOne(g, false).then(function (entry) {
                 if (g !== generation || !entry) return;
                 stream.plan.push(entry);
+                saveCache(provider());
+                if (window.Wallpaper && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
                 DevLog.log('Live wallpaper: planned ' + stream.plan.length + '/' + PLAN_SIZE +
                     ' (' + (entry.credit || entry.key) + ')');
                 return planPause().then(step);
             }, function (e) {
-                DevLog.log('Live wallpaper: plan fill stopped: ' + (e && e.message ? e.message : e));
+                DevLog.log('Live wallpaper: plan fill stopped: ' + (e && e.message ? e.message : e) +
+                    (stream.plan.length ? ' (' + stream.plan.length + ' ready)' : ''));
             });
         }
 
@@ -1174,18 +1404,18 @@
             setTimeout(resolve, wait);
         }).then(function () {
             if (g !== generation) return;
-            warmImmich();
+            // Queue top-up is background — do not block plan slots on a full ahead fill.
+            warmSources();
             return step();
         }).then(function () {
-            if (g === generation) stream.filling = null;
+            if (g === generation) {
+                stream.filling = null;
+                if (window.Wallpaper && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
+            }
         }, function () {
             if (g === generation) stream.filling = null;
         });
         return stream.filling;
-    }
-
-    function prefetchNext() {
-        fillPlan(0);
     }
 
     // Paint now with search metadata; polish place/title in the background and notify
@@ -1204,7 +1434,7 @@
             fillPlan(0);
             return showEntry(ready);
         }
-        return advanceOne(g).then(function (entry) {
+        return advanceOne(g, true).then(function (entry) {
             if (g !== generation || !entry) return null;
             fillPlan(0);
             return showEntry(entry);
@@ -1224,8 +1454,8 @@
     function ensureOnDemand(g, beforeKeys) {
         function kickBackground() {
             fetchedDay = todayKey();
-            // Let the first wallpaper paint before saturating the network with the plan.
-            fillPlan(800);
+            // First wallpaper paints; queues + plan keep filling in the background.
+            setTimeout(backgroundFill, 800);
             return beforeKeys !== keys(items);
         }
 
@@ -1236,27 +1466,16 @@
         if (stream.plan.length) {
             return showEntry(stream.plan.shift()).then(kickBackground);
         }
-        return advanceOne(g).then(function (entry) {
+        return advanceOne(g, true).then(function (entry) {
             if (g !== generation || !entry) {
-                fillPlan(800);
+                setTimeout(backgroundFill, 800);
                 return false;
             }
             return showEntry(entry).then(kickBackground);
         }, function () {
-            fillPlan(800);
+            setTimeout(backgroundFill, 800);
             return false;
         });
-    }
-
-    function fetchMixPool() {
-        return ensureOnDemand(generation, keys(items)).then(function () {
-            if (!items.length) throw new Error('empty Mix');
-            return items.slice();
-        });
-    }
-
-    function fetchMixToday() {
-        return takeNext();
     }
 
     function upcoming() {
@@ -1267,25 +1486,10 @@
         return stream.plan.length;
     }
 
-    /* ---------- Sources and daily refresh ---------- */
-
-    var SOURCES = {
-        bing: { pool: fetchBingPool, today: fetchBingToday },
-        nasa: { pool: fetchNasaPool, today: fetchNasaToday },
-        wikimedia: { pool: fetchWikimediaPool, today: fetchWikimediaToday },
-        unsplash: { pool: fetchUnsplashPool, today: fetchUnsplashToday },
-        immich: { pool: fetchImmichPool, today: fetchImmichToday },
-        mix: { pool: fetchMixPool, today: fetchMixToday }
-    };
-
-    function errorMessage(e, label) {
-        if (e && e.status === 401) return label + ' rejected the Access Key';
-        if (e && (e.status === 403 || e.status === 429)) return label + ' rate limit reached, retrying later';
-        return label + ' unavailable';
-    }
+    /* ---------- Daily refresh ---------- */
 
     /*
-     * Ensures a current photo quickly; the upcoming plan (~15) fills in the background.
+     * Ensures a current photo quickly; the upcoming plan fills in the background.
      */
     function ensureDaily() {
         if (fetching) return Promise.resolve(false);
@@ -1301,7 +1505,7 @@
         var before = keys(items);
 
         if (items.length) {
-            if (stream.plan.length < PLAN_SIZE) fillPlan();
+            backgroundFill();
             return Promise.resolve(false);
         }
 
@@ -1324,6 +1528,87 @@
         return items.find(function (w) { return w.key === key; }) || items[0] || null;
     }
 
+    // Choose as static (single providers only — Mix has no picker).
+    // Catalog lasts while queues drain; show up to pickTarget (default PICK_BATCH).
+    function pickList() {
+        var p = provider();
+        if (p === 'mix') return [];
+        seedPickCatalog();
+        var cap = ensurePickTarget(p);
+        var out = [];
+        Object.keys(pickCatalog).forEach(function (k) {
+            var w = pickCatalog[k];
+            if (!w || !w.file) return;
+            if (w.source && w.source !== p) return;
+            out.push(w);
+        });
+        out = out.slice(0, cap);
+        if (!shuffleOn() || out.length < 2) {
+            pickOrderSig = '';
+            pickOrderKeys = [];
+            return out;
+        }
+        var sig = p + '|rnd|' + cap + '|' +
+            out.map(function (w) { return w.key; }).sort().join(',');
+        if (sig !== pickOrderSig || pickOrderKeys.length !== out.length) {
+            pickOrderSig = sig;
+            pickOrderKeys = out.map(function (w) { return w.key; });
+            var i;
+            for (i = pickOrderKeys.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var tmp = pickOrderKeys[i];
+                pickOrderKeys[i] = pickOrderKeys[j];
+                pickOrderKeys[j] = tmp;
+            }
+        }
+        var byKey = {};
+        out.forEach(function (w) { byKey[w.key] = w; });
+        return pickOrderKeys.map(function (k) { return byKey[k]; }).filter(Boolean);
+    }
+
+    // Fetch the first PICK_BATCH for the current (non-Mix) provider, then keep filling
+    // queues/plan/catalog in the background (SOURCE_AHEAD) without holding the busy spinner.
+    function warmForPicker() {
+        var p = provider();
+        if (p === 'mix' || needsSetup()) return Promise.resolve();
+        var want = ensurePickTarget(p);
+        preloadPickThumbs();
+        function ready() {
+            preloadPickThumbs();
+            notify();
+            backgroundFill();
+        }
+        if (pickCountFor(p) >= want) {
+            ready();
+            return Promise.resolve();
+        }
+        fillSourceQueue(p, want).catch(function (e) {
+            DevLog.log('Live wallpaper: ' + p + ' pick warm failed: ' +
+                (e && e.message ? e.message : e));
+        });
+        return waitForPickCount(p, want, 25000).then(ready);
+    }
+
+    // Another PICK_BATCH for the current provider (catalog first, then fetch).
+    function loadMorePicks() {
+        var p = provider();
+        if (p === 'mix' || needsSetup()) return Promise.resolve(0);
+        var before = pickList().length;
+        ensurePickTarget(p);
+        pickTarget[p] += PICK_BATCH;
+        var want = pickTarget[p];
+        pickOrderSig = '';
+        function done() {
+            preloadPickThumbs();
+            notify();
+            backgroundFill();
+            return pickList().length - before;
+        }
+        if (pickCountFor(p) >= want) return Promise.resolve(done());
+        fillSourceQueue(p, want).catch(function () {});
+        return waitForPickCount(p, want, 25000).then(done);
+    }
+
     function status() {
         if (needsSetup()) return provider() === 'immich' ? 'Set an Immich share link' : 'Set an Unsplash Access Key';
         return lastError;
@@ -1336,18 +1621,35 @@
         retryDelay = RETRY_MS;
         lastError = '';
         try { localStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
+        resetImmichState();
         resetPool();
     }
 
+    // Provider change (e.g. Bing → Mix): keep queues, pick catalog, and warm thumbs.
+    // Only drop the upcoming plan and refill from what is already cached.
+    function switchProvider() {
+        generation++;
+        fetching = false;
+        lastFailure = 0;
+        lastError = '';
+        stream.plan = [];
+        stream.filling = null;
+        SOURCE_NAMES.forEach(function (name) {
+            sourceQueue(name).filling = null;
+        });
+        pickOrderSig = '';
+        pickOrderKeys = [];
+        saveCache(provider());
+        notify();
+        if (!needsSetup()) backgroundFill();
+    }
+
     // Drop upcoming slots only (keep the current photo); used when Shuffle toggles.
+    // Queues stay in fetch order; the next fillPlan/takeFromQueue honors the new Shuffle flag.
     function rebuildPlan() {
         generation++;
         stream.plan = [];
         stream.filling = null;
-        // Re-order the Immich page buffer so Shuffle On does not keep album FIFO.
-        if (stream.immichBuf && stream.immichBuf.length && shuffleOn()) {
-            shuffleInPlace(stream.immichBuf);
-        }
         fillPlan();
         notify();
     }
@@ -1356,23 +1658,26 @@
     immichLink = readImmichLink();
     loadCache();
     trim();
+    seedPickCatalog();
     if (items.length) saveCache(cachedProvider);
 
     window.LiveWallpaper = {
         PROVIDERS: PROVIDERS,
-        max: max,
-        poolLimit: poolLimit,
         list: list,
+        pickList: pickList,
+        warmForPicker: warmForPicker,
+        loadMorePicks: loadMorePicks,
+        pickBatch: PICK_BATCH,
+        preloadPickThumbs: preloadPickThumbs,
         find: find,
         ensureDaily: ensureDaily,
         clearCache: clearCache,
+        switchProvider: switchProvider,
         rebuildPlan: rebuildPlan,
         fetchedDay: function () { return fetchedDay; },
         provider: provider,
         providerLabel: function () { return providerMeta().label; },
-        isOnDemand: isOnDemand,
         takeNext: takeNext,
-        prefetchNext: prefetchNext,
         upcoming: upcoming,
         planCount: planCount,
         mixSources: mixSourceLabels,

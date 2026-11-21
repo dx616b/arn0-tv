@@ -75,14 +75,28 @@
 
         <section id="settings" class="view page hidden">
             <header class="page-head"><h1>Settings</h1></header>
-            <ul class="settings-list two-col"></ul>
+            <ul class="settings-list"></ul>
+        </section>
+
+        <section id="settings-home" class="view page hidden">
+            <header class="page-head"><h1>Home screen</h1></header>
+            <ul class="settings-list"></ul>
+        </section>
+
+        <section id="settings-atmosphere" class="view page hidden">
+            <header class="page-head"><h1>Atmosphere</h1></header>
+            <ul class="settings-list"></ul>
+        </section>
+
+        <section id="settings-samsung" class="view page hidden">
+            <header class="page-head"><h1>Samsung</h1></header>
+            <ul class="settings-list"></ul>
         </section>
 
         <section id="bg-settings" class="view page hidden">
             <header class="page-head"><h1>Background</h1></header>
             <div id="bg-body" class="settings-body scroll-y">
                 <div class="setting-block">
-                    <h2>Wallpaper</h2>
                     <div id="bg-mode" class="chips"></div>
                 </div>
                 <div id="bg-interval-block" class="setting-block">
@@ -115,6 +129,7 @@
                 <div id="bg-photos-block" class="setting-block">
                     <h2>Photo</h2>
                     <div id="bg-photos" class="thumbs"></div>
+                    <div id="bg-photos-more" class="chips hidden" style="margin-top:20px"></div>
                 </div>
             </div>
         </section>
@@ -230,6 +245,7 @@
         <div id="hints" class="hints"></div>
 
         <div id="toast"></div>
+        <div id="busy" aria-hidden="true"><div class="busy-ring"></div></div>
     </div>
 
     <!-- tizen-mock.js does nothing on the TV (window.tizen already exists) -->

@@ -58,9 +58,24 @@
                 }
                 later(ok);
             },
+            launchAppControl: function (control, id, ok, err) {
+                console.log('[mock] launchAppControl', id, control && control.uri);
+                later(ok);
+            },
             getCurrentApplication: function () {
                 return { appInfo: { id: 'Arn0Lnchr0.Launcher' }, exit: function () {}, hide: function () {} };
             }
+        },
+        ApplicationControl: function (operation, uri, mime, category, data) {
+            this.operation = operation;
+            this.uri = uri;
+            this.mime = mime;
+            this.category = category;
+            this.data = data || [];
+        },
+        ApplicationControlData: function (key, value) {
+            this.key = key;
+            this.value = value;
         },
         systeminfo: {
             getPropertyValue: function (prop, ok, err) {

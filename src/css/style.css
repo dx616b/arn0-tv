@@ -677,23 +677,6 @@ h1, h2 {
     list-style: none;
 }
 
-/*
- * The overview has eight entries; one column of them ran 110px into the hint bar. It fills the
- * first column top to bottom and then the second, so Down still moves through the entries in the
- * order they read — registerList builds the focus grid to match.
- */
-.settings-list.two-col {
-    display: grid;
-    grid-auto-flow: column;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px 40px;
-    width: 1680px;
-}
-
-.two-col .setting-row {
-    margin-bottom: 0;
-}
-
 .setting-row {
     display: flex;
     align-items: center;
@@ -856,16 +839,31 @@ h1, h2 {
 
 .thumbs {
     display: grid;
-    grid-template-columns: repeat(6, 256px);
-    column-gap: 28px;
+    /* Slightly under 256 so 6 cols + pad for focus ring fit inside .scroll-y (overflow clips). */
+    grid-template-columns: repeat(6, 248px);
+    column-gap: 22px;
     row-gap: 26px;
+    /* Real inset — negative margin cancelled the pad and left the first column clipped. */
+    padding: 14px;
+    margin: 0;
+}
+
+.thumb {
+    min-width: 0;
+    padding: 6px;
+    margin: 0;
+    overflow: visible;
 }
 
 .thumb img {
     display: block;
-    width: 256px;
-    height: 144px;
+    width: 248px;
+    height: 140px;
     border-radius: 14px;
+    object-fit: cover;
+    object-position: center;
+    image-orientation: from-image;
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .thumb-title {
@@ -889,7 +887,7 @@ h1, h2 {
 }
 
 .thumb.focused img {
-    transform: scale(1.06);
+    transform: scale(1.05);
     box-shadow: 0 0 0 5px var(--ring);
 }
 
@@ -1132,6 +1130,33 @@ footer {
 }
 
 #toast.visible { opacity: 1; }
+
+/* Quiet wait indicator for launches / slow settings work (no text). */
+#busy {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 72px;
+    height: 72px;
+    margin: -36px 0 0 -36px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 40;
+}
+#busy.visible { opacity: 1; }
+.busy-ring {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 5px solid rgba(255, 255, 255, 0.18);
+    border-top-color: #fff;
+    animation: busy-spin 0.75s linear infinite;
+}
+@keyframes busy-spin {
+    to { transform: rotate(360deg); }
+}
 
 /* HDMI shown inside the launcher: the video plane must be visible through the page. */
 html.tv-mode, html.tv-mode body { background: transparent; }

@@ -348,6 +348,13 @@
 
     function setHomeItems(items) {
         Prefs.get().home = items.map(function (i) {
+            if (i.kind === 'tvsettings' || i.action === 'tvsettings') {
+                return {
+                    action: 'tvsettings',
+                    label: i.label || 'TV Settings',
+                    brand: 'tvsettings'
+                };
+            }
             var entry = { id: i.id, label: i.label };
             if (i.brand) entry.brand = i.brand.key;
             if (i.iconPad) entry.iconPad = i.iconPad;
@@ -433,7 +440,7 @@
 
     function runLogged(what, promise) {
         log(what + '…');
-        return promise.then(function (v) {
+        return UI.busy(promise).then(function (v) {
             log(what + ': ok');
             return v;
         }, function (err) {
@@ -448,9 +455,14 @@
         });
     }
 
+    function openTvSettings() {
+        runLogged('TV Settings', Apps.openTvSettings()).catch(function (err) {
+            UI.toast('Could not open TV Settings: ' + DevLog.errorText(err));
+        });
+    }
+
     function openInput(item, method) {
         method = method || item.method || cfg.inputMethod;
-        UI.toast('Switching to ' + item.label + '…');
         runLogged('Input HDMI ' + item.hdmi + ' via ' + method, Inputs.open(item.hdmi, method)).then(function (result) {
             log('Current source now: ' + Inputs.describeSource(Inputs.current()));
             if (result === 'inapp') enterTvMode();
@@ -490,6 +502,7 @@
     function nextWallpaper() {
         Wallpaper.next(function (w) {
             if (w) UI.toast(w.title + (w.credit ? ' · ' + w.credit : ''));
+            else UI.toast('Could not change wallpaper');
         });
     }
 
@@ -623,6 +636,7 @@
             },
             activate: function (item) {
                 if (item.kind === 'app') launchApp(item);
+                else if (item.kind === 'tvsettings') openTvSettings();
                 else if (item.kind === 'all') UI.show('all');
                 else if (item.kind === 'input') openInput(item);
                 else if (item.kind === 'settings') UI.show('settings');

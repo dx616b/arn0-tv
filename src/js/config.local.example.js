@@ -19,13 +19,17 @@ window.LAUNCHER_LOCAL = {
     //     maxBitRate: 320
     // },
 
-    // Live wallpapers (metadata cache only; max = rolling daily pool size, default 50).
+    // Live wallpapers (metadata cache only; photos fetched on demand into a planned queue).
     // Provider in Settings → Background (bing | nasa | wikimedia | unsplash | immich | mix).
-    // liveWallpaper: { market: 'en-GB', max: 50, unsplashAccessKey: 'YOUR_ACCESS_KEY' },
+    // liveWallpaper: { market: 'en-GB', unsplashAccessKey: 'YOUR_ACCESS_KEY' },
     // Immich album (share link from Immich → Sharing → Shared links):
-    // liveWallpaper: { market: 'en-GB', max: 50, immichLink: 'https://host/share/KEY' },
+    // liveWallpaper: { market: 'en-GB', immichLink: 'https://host/share/KEY' },
     // Unsplash collection (optional; empty = popular photos):
-    // liveWallpaper: { market: 'en-GB', max: 50, unsplashCollection: 'COLLECTION_ID' },
+    // liveWallpaper: { market: 'en-GB', unsplashCollection: 'COLLECTION_ID' },
+
+    // Optional first-run Background prefs (overridden once you save Settings on the TV):
+    // wallpaper: { mode: 'live', liveProvider: 'immich', interval: '30s', random: true },
+    // music: { enabled: true, volume: 'med', source: 'random' },
 
     // Receives Lab logs; see scripts/devlog-server.mjs.
     // devLogUrl: null,

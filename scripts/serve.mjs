@@ -1,5 +1,6 @@
 // Serves src/ for desktop preview. Arrow keys + Enter navigate, Esc/Backspace = Back.
-// Also proxies Bing / NASA APOD / Unsplash so Live wallpapers can fetch despite browser CORS.
+// Also proxies Bing / NASA APOD / Wikimedia / Unsplash / Immich so Live wallpapers
+// can fetch despite browser CORS.
 import { createServer } from 'node:http';
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -114,11 +115,66 @@ createServer(async (req, res) => {
                 'Cache-Control': 'no-store'
             });
             res.end(JSON.stringify({
-                key: date,
+                key: 'nasa:' + date,
                 title,
                 file,
                 thumb,
                 credit: 'NASA APOD',
+                remote: true
+            }));
+        } catch (e) {
+            res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: String(e && e.message ? e.message : e) }));
+        }
+        return;
+    }
+
+    if (path === '/api/live/wikimedia') {
+        const date = u.searchParams.get('date') || '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            res.writeHead(400).end();
+            return;
+        }
+        const [y, m, d] = date.split('-');
+        const feed = 'https://en.wikipedia.org/api/rest_v1/feed/featured/' + y + '/' + m + '/' + d;
+        try {
+            const upstream = await fetch(feed, {
+                headers: {
+                    Accept: 'application/json',
+                    'Api-User-Agent': 'Arn0TV/0.6 (live wallpaper preview)'
+                },
+                signal: AbortSignal.timeout(15000)
+            });
+            const data = await upstream.json();
+            const img = data && data.image;
+            const thumb = img && img.thumbnail && img.thumbnail.source;
+            if (!upstream.ok || !thumb) {
+                res.writeHead(upstream.ok ? 404 : upstream.status, {
+                    'Content-Type': 'application/json; charset=utf-8'
+                });
+                res.end(JSON.stringify({ error: 'not found' }));
+                return;
+            }
+            const clean = String(thumb).split('?')[0];
+            const sized = clean.match(/^(.*\/thumb\/.+\/)\d+px-([^/]+)$/);
+            // Match live-wallpaper panelDisplayWidth cap (UHD) for browser preview.
+            const file = sized ? sized[1] + '3840px-' + sized[2] : clean;
+            const small = sized ? sized[1] + '480px-' + sized[2] : clean;
+            const title = String(img.title || '')
+                .replace(/^File:/, '')
+                .replace(/\.[a-z0-9]+$/i, '')
+                .replace(/_/g, ' ') || 'Picture of the day';
+            const artist = (img.artist && img.artist.text) || '';
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'no-store'
+            });
+            res.end(JSON.stringify({
+                key: 'wikimedia:' + date,
+                title,
+                file,
+                thumb: small,
+                credit: 'Wikimedia Commons' + (artist ? ' · ' + artist : ''),
                 remote: true
             }));
         } catch (e) {
@@ -172,9 +228,12 @@ createServer(async (req, res) => {
             res.end(JSON.stringify({ error: 'Unsplash Access Key required' }));
             return;
         }
-        // Only Unsplash photo endpoints may be reached through the proxy.
+        // Unsplash list + download-tracking paths (and collection lists when set).
         const target = new URL(u.searchParams.get('path') || '', UNSPLASH_API);
-        if (target.origin !== UNSPLASH_API || !target.pathname.startsWith('/photos/')) {
+        const pathOk = target.pathname === '/photos' ||
+            target.pathname.startsWith('/photos/') ||
+            /^\/collections\/[^/]+\/photos$/.test(target.pathname);
+        if (target.origin !== UNSPLASH_API || !pathOk) {
             res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ error: 'path not allowed' }));
             return;

@@ -206,7 +206,9 @@
         p.playing = true;
         Prefs.save();
         if (!queue.length) {
-            refill().then(function () {
+            // User hit Play/Next with an empty queue — wait visibly for the first fetch.
+            var wait = auto ? refill() : UI.busy(refill());
+            wait.then(function () {
                 if (queue.length) next(auto);
                 else notify();
             });

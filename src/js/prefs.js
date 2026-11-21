@@ -11,18 +11,25 @@
     function defaults() {
         var cfg = window.LAUNCHER_CONFIG || {};
         var theme = cfg.theme || {};
+        // Optional first-run seeds from config.local.js (wallpaper / music blocks).
+        var wallSeed = cfg.wallpaper && typeof cfg.wallpaper === 'object' ? cfg.wallpaper : {};
+        var musicSeed = cfg.music && typeof cfg.music === 'object' ? cfg.music : {};
         return {
             sound: {
                 enabled: cfg.sound ? cfg.sound.enabled !== false : true,
                 preset: cfg.sound && cfg.sound.preset || 'soft'
             },
             wallpaper: {
-                mode: theme.wallpaper ? 'photo' : 'off',   // 'off' | 'photo' | 'rotate' | 'live'
-                photo: theme.wallpaper || 'forest',
-                liveProvider: 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'unsplash' | 'immich' | 'mix'
+                // Fresh install: Live Bing + shuffle (no API key). Seeds from config.local override.
+                mode: wallSeed.mode || 'live',   // 'off' | 'photo' | 'rotate' | 'live'
+                photo: wallSeed.photo || theme.wallpaper || 'forest',
+                liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'unsplash' | 'immich' | 'mix'
                 liveKey: '',            // current entry in the live pool (date key)
-                interval: '15m',        // see Wallpaper.INTERVALS (rotate + live cycle)
-                random: false,          // Shuffle: Mix = random provider; live/rotate = random photo
+                // Saved favorites (metadata in prefs; image bytes in IndexedDB — see Wallpaper).
+                pins: [],               // up to 5 × { key, file, thumb, … }
+                pinned: null,           // legacy single pin; migrated into pins[] on load
+                interval: wallSeed.interval || '15m',        // see Wallpaper.INTERVALS (rotate + live cycle)
+                random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: pick from fetched list
                 lastChange: 0
             },
             screensaver: {
@@ -33,23 +40,23 @@
             },
             // Seeded from config.js weather; Settings → Weather edits these.
             weather: {
-                place: 'off',           // 'off' | 'custom'
+                place: 'auto',          // 'off' | 'auto' (IP detect) | 'custom'
                 latitude: null,
                 longitude: null,
-                label: null,            // display name when place === 'custom'
+                label: null,            // display name when place === 'custom' / after auto detect
                 unit: 'celsius'         // 'celsius' | 'fahrenheit'
             },
             // Subsonic ambient player (server/user/password live in Subsonic creds store).
             music: {
-                enabled: false,
+                enabled: musicSeed.enabled != null ? !!musicSeed.enabled : false,
                 playing: false,
-                volume: 'med',          // Music.VOLUMES key: low | med | high
-                source: 'random',       // 'random' | 'playlist'
-                playlistId: null,
-                playlistName: null
+                volume: musicSeed.volume || 'med',          // Music.VOLUMES key: low | med | high
+                source: musicSeed.source || 'random',       // 'random' | 'playlist'
+                playlistId: musicSeed.playlistId || null,
+                playlistName: musicSeed.playlistName || null
             },
             appearance: {
-                clock: '24h',           // '24h' | '12h'
+                clock: '24h',           // '24h' | '12h' (default 24-hour)
                 showDate: true,
                 locale: cfg.locale || 'en-GB',
                 font: 'manrope',        // see Appearance.FONTS
@@ -93,6 +100,18 @@
             if (prefs.wallpaper.mode === 'photo') prefs.wallpaper.mode = 'off';
             prefs.wallpaper.photo = 'forest';
         }
+        // One legacy `pinned` object → pins[] (bytes are re-fetched on next pin if missing).
+        if (!Array.isArray(prefs.wallpaper.pins)) prefs.wallpaper.pins = [];
+        if (prefs.wallpaper.pinned && prefs.wallpaper.pinned.key) {
+            var legacy = prefs.wallpaper.pinned;
+            if (!prefs.wallpaper.pins.some(function (x) { return x.key === legacy.key; })) {
+                prefs.wallpaper.pins.unshift(legacy);
+            }
+            prefs.wallpaper.pinned = null;
+        }
+        if (prefs.wallpaper.pins.length > 5) {
+            prefs.wallpaper.pins = prefs.wallpaper.pins.slice(0, 5);
+        }
         return prefs;
     }
 
@@ -120,6 +139,7 @@
             if (LiveWallpaper.clearUnsplashKey) LiveWallpaper.clearUnsplashKey();
             if (LiveWallpaper.clearImmichLink) LiveWallpaper.clearImmichLink();
         }
+        if (window.Wallpaper && Wallpaper.clearPins) Wallpaper.clearPins();
         if (window.Subsonic) Subsonic.clearCreds();
         prefs = defaults();
     }
