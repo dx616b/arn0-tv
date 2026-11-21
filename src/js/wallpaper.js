@@ -11,6 +11,10 @@
         { key: '1d', label: 'Daily', ms: 24 * 60 * 60 * 1000 }
     ];
 
+    // Decode the next few photos (sharp + blur thumb) before they are shown.
+    var PRELOAD_N = 3;
+    var preloadHold = [];
+
     var token = 0;
     var lastHomeUrl = '';
 
@@ -23,9 +27,246 @@
         return isLive() ? LiveWallpaper.list() : bundled();
     }
 
+    var PIN_MAX = 5;
+    var PIN_DB = 'arn0.pins.v1';
+    var PIN_STORE = 'blobs';
+    var blobUrls = {}; // key → object URL (session)
+
+    function pinsMeta() {
+        var list = Prefs.get().wallpaper.pins;
+        return Array.isArray(list) ? list : [];
+    }
+
+    function openPinDb() {
+        return new Promise(function (resolve, reject) {
+            if (!window.indexedDB) {
+                reject(new Error('no IndexedDB'));
+                return;
+            }
+            var req = indexedDB.open(PIN_DB, 1);
+            req.onupgradeneeded = function () {
+                var db = req.result;
+                if (!db.objectStoreNames.contains(PIN_STORE)) db.createObjectStore(PIN_STORE);
+            };
+            req.onsuccess = function () { resolve(req.result); };
+            req.onerror = function () { reject(req.error || new Error('idb open')); };
+        });
+    }
+
+    function idbReq(fn) {
+        return openPinDb().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(PIN_STORE, 'readwrite');
+                var store = tx.objectStore(PIN_STORE);
+                var req = fn(store);
+                req.onsuccess = function () { resolve(req.result); };
+                req.onerror = function () { reject(req.error || new Error('idb')); };
+            });
+        });
+    }
+
+    function putPinBlob(key, blob) {
+        return idbReq(function (store) { return store.put(blob, key); });
+    }
+
+    function getPinBlob(key) {
+        return openPinDb().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(PIN_STORE, 'readonly');
+                var req = tx.objectStore(PIN_STORE).get(key);
+                req.onsuccess = function () { resolve(req.result || null); };
+                req.onerror = function () { reject(req.error || new Error('idb get')); };
+            });
+        });
+    }
+
+    function deletePinBlob(key) {
+        return idbReq(function (store) { return store.delete(key); }).catch(function () {});
+    }
+
+    function clearPinBlobs() {
+        return openPinDb().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(PIN_STORE, 'readwrite');
+                var req = tx.objectStore(PIN_STORE).clear();
+                req.onsuccess = function () { resolve(); };
+                req.onerror = function () { reject(req.error || new Error('idb clear')); };
+            });
+        }).catch(function () {});
+    }
+
+    function revokeBlobUrl(key) {
+        if (blobUrls[key]) {
+            try { URL.revokeObjectURL(blobUrls[key]); } catch (e) { /* ignore */ }
+            delete blobUrls[key];
+        }
+    }
+
+    function setBlobUrl(key, blob) {
+        revokeBlobUrl(key);
+        if (!blob) return '';
+        blobUrls[key] = URL.createObjectURL(blob);
+        return blobUrls[key];
+    }
+
+    function entryFromPin(meta) {
+        if (!meta || !meta.key) return null;
+        var local = blobUrls[meta.key] || '';
+        return {
+            key: meta.key,
+            title: meta.title || 'Pinned',
+            sub: meta.sub || '',
+            file: local || meta.file,
+            fileFallback: meta.file || '',
+            fileFallbacks: [].concat(meta.fileFallback || [], meta.fileFallbacks || []),
+            thumb: local || meta.thumb || meta.file,
+            credit: meta.credit || '',
+            remote: !local,
+            stored: !!local
+        };
+    }
+
+    function pinnedEntry() {
+        var photo = Prefs.get().wallpaper.photo;
+        var meta = pinsMeta().find(function (p) { return p.key === photo; });
+        return entryFromPin(meta) || entryFromPin(pinsMeta()[0]);
+    }
+
+    function pinsList() {
+        return pinsMeta().map(entryFromPin).filter(Boolean);
+    }
+
     function find(key) {
         if (isLive()) return LiveWallpaper.find(key);
+        var pin = pinsMeta().find(function (p) { return p.key === key; });
+        if (pin) return entryFromPin(pin);
         return bundled().find(function (w) { return w.key === key; }) || bundled()[0] || null;
+    }
+
+    function fetchBlob(url) {
+        return new Promise(function (resolve, reject) {
+            if (!url) {
+                reject(new Error('no url'));
+                return;
+            }
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.responseType = 'blob';
+            xhr.timeout = 60000;
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300 && xhr.response) resolve(xhr.response);
+                else reject(new Error('HTTP ' + xhr.status));
+            };
+            xhr.onerror = function () { reject(new Error('network')); };
+            xhr.ontimeout = function () { reject(new Error('timeout')); };
+            xhr.send();
+        });
+    }
+
+    function pinUrls(entry) {
+        var urls = [];
+        function add(u) {
+            if (u && urls.indexOf(u) < 0) urls.push(u);
+        }
+        add(entry.file);
+        add(entry.fileFallback);
+        (entry.fileFallbacks || []).forEach(add);
+        add(entry.thumb);
+        return urls;
+    }
+
+    function downloadPinBlob(entry) {
+        var urls = pinUrls(entry);
+        var i = 0;
+        function next() {
+            if (i >= urls.length) return Promise.reject(new Error('download failed'));
+            var url = urls[i++];
+            return fetchBlob(url).catch(next);
+        }
+        return next();
+    }
+
+    function rememberPinMeta(meta) {
+        var p = Prefs.get().wallpaper;
+        var pins = pinsMeta().filter(function (x) { return x.key !== meta.key; });
+        pins.unshift(meta);
+        while (pins.length > PIN_MAX) {
+            var drop = pins.pop();
+            if (drop && drop.key) {
+                revokeBlobUrl(drop.key);
+                deletePinBlob(drop.key);
+            }
+        }
+        p.pins = pins;
+        p.pinned = null;
+        Prefs.save();
+    }
+
+    // Shelf + show as static Photo on Home (Settings can keep the Live picker open).
+    function activatePin(meta) {
+        rememberPinMeta(meta);
+        var p = Prefs.get().wallpaper;
+        p.photo = meta.key;
+        p.mode = 'photo';
+        Prefs.save();
+        apply();
+    }
+
+    // Save up to PIN_MAX favorites with image bytes (IndexedDB), then apply as Photo.
+    // Returns a Promise<boolean> — true when bytes were stored locally.
+    function pinLive(entry) {
+        if (!entry || !entry.key || !entry.file) return Promise.resolve(false);
+        var meta = {
+            key: entry.key,
+            title: entry.title || 'Pinned',
+            sub: entry.sub || '',
+            file: entry.file,
+            fileFallback: entry.fileFallback || '',
+            fileFallbacks: entry.fileFallbacks || [],
+            thumb: entry.thumb || entry.file,
+            credit: entry.credit || '',
+            remote: true
+        };
+        if (blobUrls[entry.key] || pinsMeta().some(function (x) { return x.key === entry.key; })) {
+            if (blobUrls[entry.key]) {
+                activatePin(meta);
+                return Promise.resolve(true);
+            }
+        }
+        return downloadPinBlob(entry).then(function (blob) {
+            return putPinBlob(entry.key, blob).then(function () {
+                setBlobUrl(entry.key, blob);
+                activatePin(meta);
+                return true;
+            });
+        }, function (e) {
+            DevLog.log('Pin save failed: ' + (e && e.message ? e.message : e));
+            // Still remember + apply via URL while online.
+            activatePin(meta);
+            return false;
+        });
+    }
+
+    function clearPins() {
+        pinsMeta().forEach(function (p) { revokeBlobUrl(p.key); });
+        var w = Prefs.get().wallpaper;
+        w.pins = [];
+        w.pinned = null;
+        Prefs.save();
+        return clearPinBlobs();
+    }
+
+    // Legacy name used when switching to a bundled photo (does not wipe the pin shelf).
+    function clearPinned() { /* no-op: pins are kept until Clear saved pins */ }
+
+    function hydratePins() {
+        return Promise.all(pinsMeta().map(function (meta) {
+            return getPinBlob(meta.key).then(function (blob) {
+                if (blob) setBlobUrl(meta.key, blob);
+            }, function () {});
+        })).then(function () {
+            if (!isLive() && Prefs.get().wallpaper.mode === 'photo') apply();
+        });
     }
 
     function interval(key) {
@@ -54,16 +295,67 @@
         return list;
     }
 
-    // Home is static (cover, no pan/blur), so use a sharp full-size URL. Tiny preview thumbs
-    // looked soft behind the tiles. Screensaver still owns contain+blur and motion.
+    function preloadUrl(url) {
+        if (!url) return;
+        var img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+        if (typeof img.decode === 'function') {
+            img.decode().catch(function () { /* ignore */ });
+        }
+        preloadHold.push(img);
+        if (preloadHold.length > PRELOAD_N * 6) {
+            preloadHold = preloadHold.slice(-PRELOAD_N * 6);
+        }
+    }
+
+    // Best quality first (Home sharp cover); thumb last for screensaver blur preload.
+    function preloadEntry(w) {
+        if (!w) return;
+        var urls = [];
+        function add(u) {
+            if (u && urls.indexOf(u) < 0) urls.push(u);
+        }
+        add(w.file);
+        add(w.fileFallback);
+        (w.fileFallbacks || []).forEach(add);
+        add(w.thumb);
+        urls.forEach(preloadUrl);
+    }
+
+    function preloadEntries(list, n) {
+        var limit = n == null ? PRELOAD_N : n;
+        (list || []).slice(0, limit).forEach(preloadEntry);
+    }
+
+    // Live: next entries in the plan. Rotate: next N after the current key.
+    function preloadAhead() {
+        if (isLive() && window.LiveWallpaper && LiveWallpaper.upcoming) {
+            preloadEntries(LiveWallpaper.upcoming(), PRELOAD_N);
+            return;
+        }
+        var l = list();
+        if (!l.length) return;
+        var key = currentKey();
+        var i = l.findIndex(function (w) { return w.key === key; });
+        if (i < 0) i = 0;
+        var ahead = [];
+        var k;
+        for (k = 1; k <= PRELOAD_N; k++) {
+            ahead.push(l[(i + k) % l.length]);
+        }
+        preloadEntries(ahead, PRELOAD_N);
+    }
+
+    // Home is static cover (no letterbox blur). Screensaver still owns contain+blur.
     function homeUrls(w) {
         var urls = [];
         function add(u) {
             if (u && urls.indexOf(u) < 0) urls.push(u);
         }
-        // Prefer fullsize / main file; keep preview/thumb as last resorts only.
-        add(w.fileFallback);
+        // Best quality first (Immich original, Bing UHD, …); fall back if a URL fails to load.
         add(w.file);
+        add(w.fileFallback);
         (w.fileFallbacks || []).forEach(add);
         add(w.thumb);
         return urls.length ? urls : photoUrls(w);
@@ -81,6 +373,7 @@
                 photo.classList.remove('on', 'contain');
             }
             if (blur) {
+                blur.onerror = null;
                 blur.removeAttribute('src');
                 blur.classList.remove('on');
             }
@@ -104,6 +397,7 @@
                 lastHomeUrl = url;
                 bg().style.backgroundImage = 'none';
                 if (blur) {
+                    blur.onerror = null;
                     blur.removeAttribute('src');
                     blur.classList.remove('on');
                 }
@@ -155,15 +449,22 @@
             if (typeof done === 'function') done(w || null);
             return w || null;
         };
-        // Live on-demand: pull the next photo (prefetch if ready).
-        if (isLive() && window.LiveWallpaper && LiveWallpaper.isOnDemand()) {
+        // Live: pull the next planned photo.
+        if (isLive() && window.LiveWallpaper) {
+            // Manual next (Settings / Green) passes done; timer rotation does not — no spinner then.
+            if (typeof done === 'function') UI.busyShow();
             LiveWallpaper.takeNext().then(function (w) {
+                if (typeof done === 'function') UI.busyHide();
                 if (!w) return finish(null);
                 p.lastChange = Date.now();
                 Prefs.save();
                 if (!(window.Screensaver && Screensaver.isOpen())) apply();
+                preloadAhead();
                 finish(w);
-            }, function () { finish(null); });
+            }, function () {
+                if (typeof done === 'function') UI.busyHide();
+                finish(null);
+            });
             return null;
         }
         var l = list();
@@ -176,6 +477,7 @@
         if (p.mode === 'off') p.mode = 'photo';
         Prefs.save();
         apply();
+        preloadAhead();
         return finish(w);
     }
 
@@ -188,7 +490,10 @@
 
     function ensureLive(thenApply) {
         if (!isLive() || !window.LiveWallpaper) return;
+        // First paint / Settings apply: show the ring while the first photo is fetched.
+        if (thenApply) UI.busyShow();
         LiveWallpaper.ensureDaily().then(function (changed) {
+            if (thenApply) UI.busyHide();
             var p = Prefs.get().wallpaper;
             var l = LiveWallpaper.list();
             if (l.length && !LiveWallpaper.find(p.liveKey)) {
@@ -197,6 +502,8 @@
             }
             if (changed || thenApply) apply();
             if (!l.length && thenApply) UI.toast('Live wallpaper unavailable');
+        }, function () {
+            if (thenApply) UI.busyHide();
         });
     }
 
@@ -213,6 +520,7 @@
 
     function start() {
         apply();
+        hydratePins();
         // Mix publishes each source as it lands; apply the liveKey it just selected.
         if (window.LiveWallpaper) {
             LiveWallpaper.onChange(function () {
@@ -234,6 +542,7 @@
         }
         if (isLive()) ensureLive(true);
         homeShown();
+        preloadAhead();
         // The screen saver has its own photo cycle and covers Home completely, so rotating
         // underneath it would only decode images nobody can see — and move the photo Home
         // comes back to.
@@ -249,6 +558,11 @@
         list: list,
         bundled: bundled,
         find: find,
+        pinnedEntry: pinnedEntry,
+        pinsList: pinsList,
+        pinLive: pinLive,
+        clearPins: clearPins,
+        clearPinned: clearPinned,
         interval: interval,
         pickNext: pickNext,
         apply: apply,
@@ -256,6 +570,7 @@
         homeShown: homeShown,
         start: start,
         isLive: isLive,
+        preloadAhead: preloadAhead,
         ensureLive: function () { ensureLive(true); }
     };
 })();

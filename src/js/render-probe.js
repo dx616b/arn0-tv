@@ -287,6 +287,7 @@
     // ---------- everything, in order
 
     function probeAll() {
+        UI.busyShow();
         log('--- render probe start ---');
         probeEnvironment();
         probeBaseline(function (base) {
@@ -303,6 +304,7 @@
                         log('  large gradients: ' + cost(grad));
                         log('  both together:   ' + cost(both));
                         log('--- render probe end ---');
+                        UI.busyHide();
                         UI.toast('Render probe done — see the log');
                     });
                 });

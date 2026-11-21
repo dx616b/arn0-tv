@@ -2,7 +2,7 @@
  * Weather for the screen saver, from Open-Meteo. No API key, free for non-commercial use.
  *
  * Place and unit live in Prefs (Settings → Weather). config.js only supplies defaults.
- * Place is Off, or a custom lat/lon/label from IP detect or Open-Meteo city search.
+ * Place is Off, Automatic (IP detect on start), or a custom lat/lon/label from search.
  *
  * There is no polling. A TV launcher spends most of its life in the background with JavaScript
  * paused, so a timer would be both useless and rude; instead the reading is refreshed when
@@ -86,7 +86,7 @@
 
     function coords() {
         var p = prefsWeather();
-        if (p.place !== 'custom') return null;
+        if (p.place !== 'custom' && p.place !== 'auto') return null;
         if (typeof p.latitude === 'number' && typeof p.longitude === 'number') {
             return { latitude: p.latitude, longitude: p.longitude, unit: p.unit };
         }
@@ -107,12 +107,45 @@
             target.longitude = c.longitude;
             target.label = typeof c.label === 'string' ? c.label : null;
         } else {
-            target.place = 'off';
+            // No fixed coords in config → Automatic (IP lookup on start).
+            target.place = 'auto';
             target.latitude = null;
             target.longitude = null;
             target.label = null;
         }
         return target;
+    }
+
+    function applyDetected(loc) {
+        var p = prefsWeather();
+        p.place = 'auto';
+        p.latitude = loc.latitude;
+        p.longitude = loc.longitude;
+        p.label = loc.label || null;
+        Prefs.save();
+        clearReading();
+        lastFailure = 0;
+        refresh(true);
+        listeners.forEach(function (fn) { fn(); });
+    }
+
+    // IP lookup when place is Automatic and we do not yet have coordinates.
+    function ensureAuto() {
+        var p = prefsWeather();
+        if (p.place !== 'auto') return;
+        if (configured()) {
+            refresh();
+            return;
+        }
+        DevLog.log('Weather: detecting location…');
+        detectLocation(function (err, loc) {
+            if (err || !loc) {
+                DevLog.log('Weather auto-detect failed: ' + (err || 'unknown'));
+                return;
+            }
+            DevLog.log('Weather: auto → ' + (loc.label || (loc.latitude + ',' + loc.longitude)));
+            applyDetected(loc);
+        });
     }
 
     function getJson(url, done) {
@@ -256,8 +289,8 @@
 
     function placeLabel() {
         var p = prefsWeather();
-        if (p.place !== 'custom') return '';
-        return p.label || 'Custom';
+        if (p.place !== 'custom' && p.place !== 'auto') return '';
+        return p.label || (p.place === 'auto' ? '' : 'Custom');
     }
 
     function dayLabel(iso, locale) {
@@ -371,11 +404,20 @@
     function applySettings() {
         clearReading();
         lastFailure = 0;
+        if (prefsWeather().place === 'auto') {
+            ensureAuto();
+            return;
+        }
         if (configured()) refresh(true);
     }
 
     function start() {
         load();
+        var p = prefsWeather();
+        if (p.place === 'auto') {
+            ensureAuto();
+            return;
+        }
         if (!configured()) {
             DevLog.log('Weather off: pick a place in Settings → Weather');
             return;
@@ -385,8 +427,11 @@
 
     function summary() {
         var p = prefsWeather();
+        if (p.place === 'off') return 'Off';
+        if (p.place === 'auto' && !configured()) return 'Automatic…';
         if (!configured()) return 'Off';
-        return placeLabel() + ' · ' + (p.unit === 'fahrenheit' ? '°F' : '°C');
+        var where = p.place === 'auto' ? ('Auto · ' + (placeLabel() || 'located')) : placeLabel();
+        return where + ' · ' + (p.unit === 'fahrenheit' ? '°F' : '°C');
     }
 
     window.Weather = {
@@ -395,6 +440,8 @@
         detectLocation: detectLocation,
         searchPlaces: searchPlaces,
         placeLabel: placeLabel,
+        applyDetected: applyDetected,
+        ensureAuto: ensureAuto,
         start: start,
         refresh: refresh,
         applySettings: applySettings,
@@ -413,12 +460,33 @@
                         return;
                     }
                     DevLog.log('Weather: requesting ' + url());
+                    var before = reading && reading.at;
+                    UI.busyShow();
+                    var done = false;
+                    var finish = function (ok) {
+                        if (done) return;
+                        done = true;
+                        UI.busyHide();
+                        if (ok) {
+                            DevLog.log('Weather: ' + JSON.stringify(reading));
+                            UI.toast('Weather updated');
+                        } else {
+                            UI.toast('Weather fetch failed');
+                        }
+                    };
                     var once = function () {
-                        DevLog.log('Weather: ' + JSON.stringify(reading));
-                        UI.toast('Weather updated');
+                        var i = listeners.indexOf(once);
+                        if (i >= 0) listeners.splice(i, 1);
+                        finish(true);
                     };
                     listeners.push(once);
                     refresh(true);
+                    // Failures do not notify listeners — time out the spinner.
+                    setTimeout(function () {
+                        var i = listeners.indexOf(once);
+                        if (i >= 0) listeners.splice(i, 1);
+                        finish(reading && reading.at !== before);
+                    }, 10000);
                 }
             }];
         }

@@ -5,11 +5,12 @@
  *   { id: 'org.tizen.netflix-app' }   exact app id (most reliable; see "All apps", the id of
  *                                     the focused app is shown at the bottom)
  *   { match: 'netflix' }              case-insensitive regex on id or name
+ *   { action: 'tvsettings' }          built-in tile: opens Samsung TV Settings
  *   label                             optional display name
  *   brand                             optional key from js/brands.js (otherwise guessed from the name)
  *   iconPad                           optional [vertical, horizontal] % inset override
  *                                     (native icons are auto-cropped; rarely needed)
- * Entries that match nothing are skipped.
+ * Entries that match nothing are skipped (except built-in actions).
  *
  * inputs: HDMI ports shown in the second row. Set `hdmi` to the port each device is plugged into.
  */
@@ -18,6 +19,8 @@ window.LAUNCHER_CONFIG = {
         // Live TV / antenna-cable channels. Pin by id so the consumer filter cannot hide it.
         // On your TV, confirm the id in All apps (Yellow) if the tile is missing.
         { id: 'com.samsung.tv.coba.livetv', label: 'TV', brand: 'livetv' },
+        // Built-in: opens Samsung TV Settings via ApplicationControl (not a store app id).
+        { action: 'tvsettings', label: 'TV Settings', brand: 'tvsettings' },
         { id: 'org.tizen.browser', label: 'Internet', brand: 'internet' },
         { id: 'xvvl3S1TT1.TizenTubeStandalone', label: 'YouTube', brand: 'youtube' },
         { id: 'rJeHak5zRg.Spotify', label: 'Spotify' },
@@ -45,9 +48,9 @@ window.LAUNCHER_CONFIG = {
     locale: 'en-GB',
 
     theme: {
-        // Starting wallpaper (key from js/wallpapers.js), or null for none (plain gradient).
-        // Changed from Settings → Background; the TV remembers the choice.
-        wallpaper: null
+        // Bundled photo used when Background is Photo/Rotate (key from js/wallpapers.js).
+        // Fresh installs default to Live Bing via prefs; set wallpaper here only if you want Photo mode.
+        wallpaper: 'forest'
     },
 
     /*
@@ -57,16 +60,14 @@ window.LAUNCHER_CONFIG = {
      */
     liveWallpaper: {
         market: 'en-GB',        // Bing regional edition (en-GB, de-DE, fr-FR, it-IT, …)
-        max: 50,
         unsplashAccessKey: null, // optional seed; prefer Settings → Background on the TV
         immichLink: null,        // optional Immich shared album link; prefer Settings → Background
         unsplashCollection: null // optional Unsplash collection id; null = popular photos, one per day
     },
 
     /*
-     * Weather defaults for the screen saver corner (Open-Meteo). Settings → Weather is the
-     * usual way to set place (detect / search) and unit on the TV; values here only seed prefs on first run
-     * (or when you set coordinates in config.local.js before the first save).
+     * Weather defaults (Open-Meteo). Fresh install uses Automatic (IP locate) unless you set
+     * latitude/longitude here or in config.local.js. Unit seeds prefs on first run.
      */
     weather: {
         latitude: null,

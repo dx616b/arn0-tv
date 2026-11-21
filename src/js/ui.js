@@ -1,5 +1,5 @@
 /*
- * UI core: screens ("views"), remote focus, keys, toast, pop-up menu.
+ * UI core: screens ("views"), remote focus, keys, toast, busy spinner, pop-up menu.
  *
  * A view is registered with UI.register(name, def):
  *   el          its root element
@@ -254,6 +254,44 @@
         toastTimer = setTimeout(function () { $('toast').classList.remove('visible'); }, 3500);
     }
 
+    // Spinner with a short delay so fast launches do not flash. Nested calls share one ring.
+    var busyDepth = 0;
+    var busyDelay = null;
+    var BUSY_DELAY_MS = 180;
+
+    function busyShow() {
+        busyDepth++;
+        if (busyDepth !== 1) return;
+        busyDelay = setTimeout(function () {
+            busyDelay = null;
+            var el = $('busy');
+            if (el) el.classList.add('visible');
+        }, BUSY_DELAY_MS);
+    }
+
+    function busyHide() {
+        if (busyDepth > 0) busyDepth--;
+        if (busyDepth > 0) return;
+        if (busyDelay) {
+            clearTimeout(busyDelay);
+            busyDelay = null;
+        }
+        var el = $('busy');
+        if (el) el.classList.remove('visible');
+    }
+
+    // Show the spinner while `promise` runs; always clears afterward.
+    function busy(promise) {
+        busyShow();
+        return Promise.resolve(promise).then(function (value) {
+            busyHide();
+            return value;
+        }, function (err) {
+            busyHide();
+            throw err;
+        });
+    }
+
     // Small pop-up list. Long lists show MENU_PAGE rows and slide the window on ▲/▼.
     var MENU_PAGE = 10;
     var menuOpts = [];
@@ -353,6 +391,9 @@
         // For state changes that redraw hints without switching view.
         refreshHints: function () { renderHints(views[current]); },
         toast: toast,
+        busy: busy,
+        busyShow: busyShow,
+        busyHide: busyHide,
         menu: menu,
         init: init,
         current: function () { return current; },

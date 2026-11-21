@@ -84,6 +84,7 @@
 
     // Read-only calls only; nothing here changes the state of the TV.
     function probeApis() {
+        UI.busyShow();
         log('--- platform probe start ---');
 
         if (typeof window.tizen === 'undefined') {
@@ -129,6 +130,7 @@
         }
 
         log('--- platform probe end ---');
+        UI.busyHide();
         UI.toast('Platform probe done — see the log');
     }
 
@@ -153,11 +155,12 @@
         }
 
         log('Screen off: calling turnScreenOff(), restoring in ' + (RECOVER_MS / 1000) + ' s');
-        UI.toast('Turning the screen off for ' + (RECOVER_MS / 1000) + ' seconds…');
+        UI.busyShow();
 
         // Queued before the call, so the screen comes back even if the call blocks or the page
         // stops running scripts while the panel is off.
         setTimeout(function () {
+            UI.busyHide();
             try {
                 if (typeof power.turnScreenOn === 'function') {
                     power.turnScreenOn();

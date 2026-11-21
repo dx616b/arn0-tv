@@ -1,4 +1,4 @@
-/* Settings: overview, Background, Apps on Home, Consoles, Appearance, Samsung, Advanced. */
+/* Settings: hub (Home / Atmosphere / Samsung / Advanced) then detail pages. */
 (function () {
     'use strict';
 
@@ -11,9 +11,8 @@
     var IME_DONE = 65376;
     var IME_CANCEL = 65385;
 
-    // Samsung's own home screen (Smart Hub); TV settings are one press away from there.
-    // Opening com.samsung.tv.coba.setting directly does not work on the Q70B: a plain launch
-    // fails (UnknownError) and app controls are accepted but show nothing.
+    // Samsung's own home screen (Smart Hub). TV Settings uses Apps.openTvSettings()
+    // (ApplicationControl → org.tizen.menu); plain launch of coba.setting shows nothing.
     var SAMSUNG_HOME = 'com.samsung.tv.csfs';
 
     var LOGOS = [
@@ -37,7 +36,7 @@
             var li = el('li', 'setting-row');
             if (e.mini) li.appendChild(e.mini);
             li.appendChild(el('span', 'setting-label', e.label));
-            li.appendChild(el('span', 'setting-value', e.value || ''));
+            if (e.value) li.appendChild(el('span', 'setting-value', e.value));
             li._item = e;
             list.appendChild(li);
         });
@@ -88,41 +87,85 @@
         if (opening) return;
         opening = true;
         DevLog.log('Open Samsung Home');
-        Apps.launch(SAMSUNG_HOME).catch(function (err) {
+        UI.busy(Apps.launch(SAMSUNG_HOME)).catch(function (err) {
             DevLog.log('Samsung Home failed: ' + DevLog.errorText(err));
             UI.toast('Could not open Samsung Home: ' + DevLog.errorText(err));
         }).then(function () { opening = false; });
     }
 
-    // ---------- Overview
-
-    function wallpaperSummary() {
-        var p = Prefs.get().wallpaper;
-        if (p.mode === 'off') return 'Off';
-        if (p.mode === 'live') {
-            var src = window.LiveWallpaper ? LiveWallpaper.providerLabel() : 'Bing';
-            var cur = Wallpaper.find(p.liveKey);
-            return 'Live · ' + src;
-        }
-        if (p.mode === 'rotate') return 'Rotate · ' + Wallpaper.interval(p.interval).label.toLowerCase();
-        var w = Wallpaper.find(p.photo);
-        return w ? w.title : 'Photo';
+    function openTvSettings() {
+        if (opening) return;
+        opening = true;
+        DevLog.log('Open TV Settings');
+        UI.busy(Apps.openTvSettings()).catch(function (err) {
+            DevLog.log('TV Settings failed: ' + DevLog.errorText(err));
+            UI.toast('Could not open TV Settings: ' + DevLog.errorText(err));
+        }).then(function () { opening = false; });
     }
 
+    // ---------- Overview
+
+    // Top-level hub: four groups instead of a flat list of every page.
     function overviewEntries() {
-        var a = Prefs.get().appearance;
-        var shown = Home.inputs().filter(function (i) { return !i.hidden; }).length;
         return [
-            { label: 'Background', value: wallpaperSummary(), run: function () { UI.show('bg'); } },
-            { label: 'Apps on Home', value: Home.homeItems().length + ' apps', run: function () { UI.show('homeapps'); } },
-            { label: 'Consoles', value: shown + ' on Home', run: function () { UI.show('consoles'); } },
-            { label: 'Appearance', value: Appearance.font(a.font).label + ' · ' + (a.clock === '12h' ? '12-hour' : '24-hour'), run: function () { UI.show('appearance'); } },
-            { label: 'Navigation sound', value: soundSummary(), run: function () { UI.show('sound-settings'); } },
-            { label: 'Screen saver', value: screensaverSummary(), run: function () { UI.show('screensaver-settings'); } },
-            { label: 'Weather', value: Weather.summary(), run: function () { UI.show('weather-settings'); } },
-            { label: 'Music', value: Music.summary(), run: function () { UI.show('music-settings'); } },
-            { label: 'Samsung Home', value: 'Smart Hub and TV settings', run: openSamsungHome },
-            { label: 'Advanced', value: 'Refresh, reset, Lab', run: function () { UI.show('advanced'); } }
+            { label: 'Home screen', run: function () { UI.show('settings-home'); } },
+            { label: 'Atmosphere', run: function () { UI.show('settings-atmosphere'); } },
+            { label: 'Samsung', run: function () { UI.show('settings-samsung'); } },
+            { label: 'Advanced', run: function () { UI.show('advanced'); } }
+        ];
+    }
+
+    function homeGroupEntries() {
+        return [
+            { label: 'Apps on Home', run: function () { UI.show('homeapps'); } },
+            { label: 'Consoles', run: function () { UI.show('consoles'); } }
+        ];
+    }
+
+    function clearSavedPins() {
+        var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
+        if (!pins.length) {
+            UI.toast('No saved pins');
+            return;
+        }
+        UI.menu('Clear saved pins?', [
+            {
+                label: 'Clear', run: function () {
+                    UI.busy(Wallpaper.clearPins()).then(function () {
+                        var p = Prefs.get().wallpaper;
+                        var bundled = Wallpaper.bundled();
+                        if (bundled.length) {
+                            p.photo = bundled[0].key;
+                            Prefs.save();
+                            Wallpaper.apply();
+                        }
+                        bgPhotosGridMode = '';
+                        bgPhotosKeys = {};
+                        UI.toast('Saved pins cleared');
+                        if ($('bg-settings') && !$('bg-settings').classList.contains('hidden')) {
+                            renderBackground();
+                            UI.refresh();
+                        }
+                    });
+                }
+            },
+            { label: 'Cancel' }
+        ]);
+    }
+
+    function atmosphereGroupEntries() {
+        return [
+            { label: 'Background', run: function () { UI.show('bg'); } },
+            { label: 'Screen saver', run: function () { UI.show('screensaver-settings'); } },
+            { label: 'Music', run: function () { UI.show('music-settings'); } },
+            { label: 'Clear saved pins', run: clearSavedPins }
+        ];
+    }
+
+    function samsungGroupEntries() {
+        return [
+            { label: 'TV Settings', run: openTvSettings },
+            { label: 'Samsung Home', run: openSamsungHome }
         ];
     }
 
@@ -155,30 +198,57 @@
         var rows = [];
         UI.children(container).forEach(function (block) {
             if (block.classList.contains('hidden')) return;
-            var chips = block.querySelector('.chips, .thumbs');
-            if (!chips) return;
-            if (chips.classList.contains('thumbs')) rows = rows.concat(UI.chunk(UI.children(chips), THUMB_COLS));
-            else {
+            var parts = block.querySelectorAll('.chips, .thumbs');
+            if (!parts.length) return;
+            Array.prototype.forEach.call(parts, function (chips) {
+                if (chips.classList.contains('hidden')) return;
+                if (chips.classList.contains('thumbs')) {
+                    rows = rows.concat(UI.chunk(UI.children(chips), THUMB_COLS));
+                    return;
+                }
                 // Skip spacer nodes (e.g. Controls | Volume gap) so focus stays on real chips.
-                rows.push(UI.children(chips).filter(function (n) {
+                var row = UI.children(chips).filter(function (n) {
                     return !n.classList.contains('chip-gap');
-                }));
-            }
+                });
+                if (row.length) rows.push(row);
+            });
         });
         return rows;
     }
 
     // ---------- Background
 
+    // Live thumb grid: keep existing <img> nodes while the catalog grows (full rebuild is slow).
+    var bgPhotosGridMode = '';
+    var bgPhotosKeys = {};
+    var bgLiveRefreshTimer = null;
+    // After Save from Live, Home switches to Photo but the Live picker stays open for more saves.
+    var bgKeepLivePicker = false;
+
+    function warmBgPicker() {
+        if (!window.LiveWallpaper || !LiveWallpaper.warmForPicker) return;
+        if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) return;
+        UI.busy(LiveWallpaper.warmForPicker()).then(function () {
+            renderBackground();
+            UI.refresh();
+        }, function () {
+            renderBackground();
+            UI.refresh();
+        });
+    }
+
     function renderBackground() {
         var p = Prefs.get().wallpaper;
         var live = p.mode === 'live';
+        var browseLive = live || bgKeepLivePicker;
         var cycle = p.mode === 'rotate' || live;
 
         var modes = $('bg-mode');
         modes.innerHTML = '';
         [['off', 'Off'], ['photo', 'Photo'], ['rotate', 'Rotate'], ['live', 'Live']].forEach(function (m) {
-            modes.appendChild(chip(m[1], p.mode === m[0], { kind: 'mode', key: m[0] }));
+            // While saving more from Live, keep Live highlighted even though Home is Photo.
+            var on = bgKeepLivePicker ? m[0] === 'live' : p.mode === m[0];
+            modes.appendChild(chip(m[1], on, { kind: 'mode', key: m[0] }));
         });
 
         var intervals = $('bg-interval');
@@ -191,7 +261,7 @@
         var prov = p.liveProvider || 'bing';
         var liveProvBlock = $('bg-live-provider-block');
         if (liveProvBlock) {
-            liveProvBlock.classList.toggle('hidden', !live);
+            liveProvBlock.classList.toggle('hidden', !browseLive);
             var providers = $('bg-live-provider');
             providers.innerHTML = '';
             (window.LiveWallpaper ? LiveWallpaper.PROVIDERS : [{ key: 'bing', label: 'Bing' }])
@@ -200,7 +270,7 @@
                 });
         }
 
-        var showUnsplash = live && (prov === 'unsplash' || prov === 'mix');
+        var showUnsplash = browseLive && (prov === 'unsplash' || prov === 'mix');
         var unsplashBlock = $('bg-live-unsplash-block');
         if (unsplashBlock) {
             unsplashBlock.classList.toggle('hidden', !showUnsplash);
@@ -218,7 +288,7 @@
             ));
         }
 
-        var showImmich = live && (prov === 'immich' || prov === 'mix');
+        var showImmich = browseLive && (prov === 'immich' || prov === 'mix');
         var immichBlock = $('bg-live-immich-block');
         if (immichBlock) {
             immichBlock.classList.toggle('hidden', !showImmich);
@@ -243,15 +313,13 @@
 
         var liveStatus = $('bg-live-status-block');
         if (liveStatus) {
-            liveStatus.classList.toggle('hidden', !live || !!(window.LiveWallpaper && LiveWallpaper.needsSetup()));
+            liveStatus.classList.toggle('hidden', !browseLive || !!(window.LiveWallpaper && LiveWallpaper.needsSetup()));
             var pool = live ? Wallpaper.list() : [];
             var cur = live ? Wallpaper.find(p.liveKey) : null;
             var src = window.LiveWallpaper ? LiveWallpaper.providerLabel() : 'Bing';
             var fetching = (window.LiveWallpaper && LiveWallpaper.status()) || 'Fetching ' + src + '…';
-            $('bg-live-status').textContent = cur ? '' : fetching;
-            var planned = window.LiveWallpaper && LiveWallpaper.planCount ? LiveWallpaper.planCount() : 0;
-            var cap = (planned ? planned + ' planned · ' : '') +
-                (pool.length ? pool.length + ' recent · ' : '') + src;
+            $('bg-live-status').textContent = (cur || bgKeepLivePicker) ? '' : fetching;
+            var cap = (pool.length ? pool.length + ' recent · ' : '') + src;
             if (prov === 'mix' && window.LiveWallpaper && LiveWallpaper.mixSources) {
                 var parts = LiveWallpaper.mixSources();
                 if (parts.length) cap += ' · ' + parts.join('+') + (p.random ? ' (shuffled)' : '');
@@ -260,17 +328,112 @@
         }
 
         var photos = $('bg-photos');
-        photos.innerHTML = '';
-        Wallpaper.bundled().forEach(function (w) {
-            var t = el('div', 'thumb' + (p.photo === w.key ? ' on' : ''));
+        var photosBlock = $('bg-photos-block');
+        var photosTitle = photosBlock && photosBlock.querySelector('h2');
+        // Mix rotates across sources — no static picker grid.
+        var showLiveThumbs = browseLive && prov !== 'mix' &&
+            !(window.LiveWallpaper && LiveWallpaper.needsSetup());
+        var showPhotoThumbs = p.mode === 'photo' && !bgKeepLivePicker;
+        var gridMode = showLiveThumbs ? 'live' : (showPhotoThumbs ? 'photo' : '');
+
+        function addThumb(w, kind, selected) {
+            var t = el('div', 'thumb' + (selected ? ' on' : ''));
             var img = new Image();
-            img.src = w.thumb;
+            img.decoding = 'async';
+            img.loading = 'eager';
+            img.src = w.thumb || w.file;
+            img.onerror = function () {
+                if (w.file && img.getAttribute('src') !== w.file) img.src = w.file;
+            };
             t.appendChild(img);
-            t.appendChild(el('div', 'thumb-title', w.title));
-            t._item = { kind: 'photo', key: w.key };
+            t.appendChild(el('div', 'thumb-title', w.title || ''));
+            t._item = { kind: kind, key: w.key, entry: w };
             photos.appendChild(t);
-        });
-        $('bg-photos-block').classList.toggle('hidden', p.mode !== 'photo');
+        }
+
+        var emptyNote = photosBlock && photosBlock.querySelector('.bg-photos-empty');
+        if (emptyNote) emptyNote.parentNode.removeChild(emptyNote);
+
+        // Rebuilding the grid aborts in-flight thumb loads — append-only while Live warms.
+        if (gridMode !== bgPhotosGridMode) {
+            photos.innerHTML = '';
+            bgPhotosGridMode = gridMode;
+            bgPhotosKeys = {};
+        }
+
+        if (showLiveThumbs) {
+            if (photosTitle) photosTitle.textContent = 'Save (up to 5)';
+            var pool = (window.LiveWallpaper && LiveWallpaper.pickList)
+                ? LiveWallpaper.pickList()
+                : ((window.LiveWallpaper && LiveWallpaper.list()) || []);
+            if (!pool.length && !Object.keys(bgPhotosKeys).length) {
+                photosBlock.insertBefore(
+                    el('p', 'setting-note muted bg-photos-empty',
+                        'Photos appear after the first fetch'),
+                    photos
+                );
+            } else {
+                pool.forEach(function (w) {
+                    if (bgPhotosKeys[w.key]) return;
+                    bgPhotosKeys[w.key] = true;
+                    addThumb(w, 'pinLive', false);
+                });
+                if (window.LiveWallpaper && LiveWallpaper.preloadPickThumbs) {
+                    LiveWallpaper.preloadPickThumbs();
+                }
+            }
+            var moreBlock = $('bg-photos-more');
+            if (moreBlock) {
+                moreBlock.classList.toggle('hidden', !pool.length);
+                moreBlock.innerHTML = '';
+                if (pool.length) {
+                    moreBlock.appendChild(chip('Load more', false, { kind: 'pickMore' }));
+                }
+            }
+        } else if (showPhotoThumbs) {
+            if (photosTitle) photosTitle.textContent = 'Photo';
+            var moreHide = $('bg-photos-more');
+            if (moreHide) moreHide.classList.add('hidden');
+            var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
+            if (!Object.keys(bgPhotosKeys).length) {
+                pins.forEach(function (pin) {
+                    bgPhotosKeys[pin.key] = true;
+                    addThumb(pin, 'photo', p.photo === pin.key);
+                });
+                Wallpaper.bundled().forEach(function (w) {
+                    if (bgPhotosKeys[w.key]) return;
+                    bgPhotosKeys[w.key] = true;
+                    addThumb(w, 'photo', p.photo === w.key);
+                });
+            } else {
+                UI.children(photos).forEach(function (t) {
+                    if (!t._item) return;
+                    var on = p.photo === t._item.key;
+                    t.classList.toggle('on', on);
+                });
+            }
+        } else {
+            var moreOff = $('bg-photos-more');
+            if (moreOff) moreOff.classList.add('hidden');
+        }
+        photosBlock.classList.toggle('hidden', !showLiveThumbs && !showPhotoThumbs);
+    }
+
+    function focusBgThumb(key) {
+        var photos = $('bg-photos');
+        if (!photos) {
+            UI.refresh();
+            return;
+        }
+        var nodes = UI.children(photos);
+        var i;
+        for (i = 0; i < nodes.length; i++) {
+            if (nodes[i]._item && nodes[i]._item.key === key) {
+                UI.focusOn(nodes[i]);
+                return;
+            }
+        }
+        UI.refresh();
     }
 
     function activateBackground(item) {
@@ -318,6 +481,7 @@
             return;
         }
         if (item.kind === 'mode') {
+            bgKeepLivePicker = false;
             p.mode = item.key;
             if (item.key === 'rotate' || item.key === 'live') p.lastChange = Date.now();
         } else if (item.kind === 'interval') {
@@ -325,7 +489,7 @@
             p.lastChange = Date.now();
         } else if (item.kind === 'random') {
             p.random = !!item.value;
-            // Rebuild upcoming Mix slots so Shuffle changes provider order; keep the current photo.
+            // Rebuild upcoming plan so Shuffle picks from the list (queues stay in fetch order).
             if (p.mode === 'live' && window.LiveWallpaper && LiveWallpaper.rebuildPlan) {
                 LiveWallpaper.rebuildPlan();
             }
@@ -334,31 +498,111 @@
             p.liveProvider = item.key;
             p.liveKey = '';
             p.lastChange = Date.now();
-            if (window.LiveWallpaper) LiveWallpaper.clearCache();
+            bgPhotosGridMode = '';
+            bgPhotosKeys = {};
+            // Keep per-source queues + picker thumbs; only rebuild the upcoming plan.
+            if (window.LiveWallpaper) {
+                if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
+                else LiveWallpaper.clearCache();
+            }
             if (window.LiveWallpaper && LiveWallpaper.needsSetup()) UI.toast(LiveWallpaper.status());
+            Prefs.save();
+            if (p.mode === 'live') {
+                Wallpaper.apply();
+                Wallpaper.ensureLive();
+            }
+            renderBackground();
+            UI.refresh();
+            if ((p.mode === 'live' || bgKeepLivePicker) && p.liveProvider !== 'mix' &&
+                    !(window.LiveWallpaper && LiveWallpaper.needsSetup())) {
+                warmBgPicker();
+            }
+            return;
+        } else if (item.kind === 'pickMore') {
+            if (!window.LiveWallpaper || !LiveWallpaper.loadMorePicks) return;
+            UI.busy(LiveWallpaper.loadMorePicks()).then(function (n) {
+                renderBackground();
+                UI.refresh();
+                if (!n) UI.toast('No more photos');
+            }, function () {
+                UI.toast('Could not load more');
+            });
+            return;
+        } else if (item.kind === 'pinLive') {
+            var entry = item.entry ||
+                (window.LiveWallpaper && LiveWallpaper.find(item.key));
+            if (!entry) {
+                UI.toast('Could not save');
+                return;
+            }
+            UI.busy(Wallpaper.pinLive(entry)).then(function (ok) {
+                bgKeepLivePicker = true;
+                UI.toast(ok ? 'Saved locally' : 'Saved (online only)');
+                renderBackground();
+                focusBgThumb(item.key);
+            }, function () {
+                UI.toast('Could not save');
+            });
+            return;
         } else if (item.kind === 'photo') {
+            bgKeepLivePicker = false;
             p.photo = item.key;
+            Prefs.save();
+            Wallpaper.apply();
+            renderBackground();
+            focusBgThumb(item.key);
+            return;
         }
         Prefs.save();
         Wallpaper.apply();
         if (p.mode === 'live') Wallpaper.ensureLive();
         renderBackground();
         UI.refresh();
+        if (item.kind === 'mode' && item.key === 'live' &&
+                Prefs.get().wallpaper.liveProvider !== 'mix' &&
+                !(window.LiveWallpaper && LiveWallpaper.needsSetup())) {
+            warmBgPicker();
+        }
     }
 
-    // ---------- Appearance
+    // ---------- Appearance (Clock vs Look)
+
+    // Same view, two entry points: Atmosphere → Clock; Advanced → Appearance (font / names).
+    var appearanceSection = 'clock';
 
     function appearanceBlocks() {
-        return [
+        var clock = [
             { title: 'Clock', key: 'clock', options: [['24h', '24-hour'], ['12h', '12-hour']] },
             { title: 'Date', key: 'showDate', options: [[true, 'Show'], [false, 'Hide']] },
-            { title: 'Date language', key: 'locale', options: Appearance.LOCALES.map(function (l) { return [l.key, l.label]; }) },
+            { title: 'Date language', key: 'locale', options: Appearance.LOCALES.map(function (l) { return [l.key, l.label]; }) }
+        ];
+        var look = [
             { title: 'Font', key: 'font', options: Appearance.FONTS.map(function (f) { return [f.key, f.label, f.family]; }) },
             { title: 'App names', key: 'names', options: [['always', 'Always'], ['focused', 'When selected'], ['never', 'Never']] }
         ];
+        if (appearanceSection === 'look') return look;
+        return clock;
+    }
+
+    function setAppearanceTitle() {
+        var h = $('appearance') && $('appearance').querySelector('.page-head h1');
+        if (h) h.textContent = appearanceSection === 'look' ? 'Appearance' : 'Clock';
+    }
+
+    function openClock() {
+        appearanceSection = 'clock';
+        setAppearanceTitle();
+        UI.show('appearance');
+    }
+
+    function openLook() {
+        appearanceSection = 'look';
+        setAppearanceTitle();
+        UI.show('appearance');
     }
 
     function renderAppearance() {
+        setAppearanceTitle();
         var p = Prefs.get().appearance;
         var body = $('appearance-body');
         body.innerHTML = '';
@@ -386,11 +630,6 @@
     }
 
     // ---------- Navigation sound
-
-    function soundSummary() {
-        var p = Prefs.get().sound;
-        return p.enabled ? 'On · ' + Sound.presetLabel() : 'Off';
-    }
 
     function renderSound() {
         var p = Prefs.get().sound;
@@ -518,8 +757,7 @@
             UI.toast('Set server, user and password first');
             return;
         }
-        UI.toast('Loading playlists…');
-        Subsonic.getPlaylists().then(function (list) {
+        UI.busy(Subsonic.getPlaylists()).then(function (list) {
             if (!list.length) {
                 UI.toast('No playlists on this server');
                 return;
@@ -586,8 +824,7 @@
                 UI.toast('Set server, user and password first');
                 return;
             }
-            UI.toast('Testing…');
-            Subsonic.ping().then(function () {
+            UI.busy(Subsonic.ping()).then(function () {
                 UI.toast('Connected');
                 renderMusic();
                 UI.refresh();
@@ -641,17 +878,22 @@
         var p = Prefs.get().weather;
         var body = $('weather-body');
         body.innerHTML = '';
-        var on = Weather.configured();
+        var auto = p.place === 'auto';
+        var custom = p.place === 'custom' && Weather.configured();
         var label = Weather.placeLabel();
 
         var placeBlock = el('div', 'setting-block');
         placeBlock.appendChild(el('h2', '', 'Place'));
         var placeChips = el('div', 'chips wrap');
-        placeChips.appendChild(chip('Off', !on, { kind: 'place', value: 'off' }));
-        if (on) {
+        placeChips.appendChild(chip('Off', p.place === 'off', { kind: 'place', value: 'off' }));
+        placeChips.appendChild(chip(
+            auto && label ? ('Auto · ' + label) : 'Automatic',
+            auto,
+            { kind: 'place', value: 'auto' }
+        ));
+        if (custom) {
             placeChips.appendChild(chip(label || 'Custom', true, { kind: 'place', value: 'current' }));
         }
-        placeChips.appendChild(chip('Use my location', false, { kind: 'detect' }));
         placeChips.appendChild(chip('Search city…', false, { kind: 'search' }));
         placeBlock.appendChild(placeChips);
         body.appendChild(placeBlock);
@@ -665,35 +907,20 @@
         body.appendChild(unitBlock);
 
         var note = el('p', 'setting-note muted',
-            'Shown on Home and the screen saver. Open-Meteo; Use my location is approximate IP.');
+            'Shown on Home and the screen saver. Automatic uses approximate IP location (Open-Meteo).');
         body.appendChild(note);
     }
 
     function activateWeather(item) {
         var p = Prefs.get().weather;
-        if (item.kind === 'detect') {
-            if (weatherBusy) return;
-            weatherBusy = true;
-            UI.toast('Finding location…');
-            Weather.detectLocation(function (err, loc) {
-                weatherBusy = false;
-                if (err || !loc) {
-                    UI.toast('Could not find location');
-                    DevLog.log('Weather detect failed: ' + (err || 'unknown'));
-                    return;
-                }
-                applyWeatherPlace(Weather.resolvePlace(loc.latitude, loc.longitude, loc.label));
-                UI.toast('Weather: ' + Weather.summary());
-            });
-            return;
-        }
         if (item.kind === 'search') {
             rename('', function (query) {
                 if (weatherBusy) return;
                 weatherBusy = true;
-                UI.toast('Searching…');
+                UI.busyShow();
                 Weather.searchPlaces(query, function (err, results) {
                     weatherBusy = false;
+                    UI.busyHide();
                     if (err) {
                         UI.toast('Search failed');
                         DevLog.log('Weather search failed: ' + err);
@@ -720,6 +947,33 @@
         }
         if (item.kind === 'place') {
             if (item.value === 'current') return;
+            if (item.value === 'auto') {
+                if (weatherBusy) return;
+                p.place = 'auto';
+                p.latitude = null;
+                p.longitude = null;
+                p.label = null;
+                Prefs.save();
+                Weather.applySettings();
+                weatherBusy = true;
+                UI.busyShow();
+                Weather.detectLocation(function (err, loc) {
+                    weatherBusy = false;
+                    UI.busyHide();
+                    if (err || !loc) {
+                        UI.toast('Could not find location');
+                        DevLog.log('Weather detect failed: ' + (err || 'unknown'));
+                        renderWeather();
+                        UI.refresh();
+                        return;
+                    }
+                    Weather.applyDetected(loc);
+                    renderWeather();
+                    UI.refresh();
+                    UI.toast('Weather: ' + Weather.summary());
+                });
+                return;
+            }
             if (item.value !== 'off') return;
             p.place = 'off';
             p.latitude = null;
@@ -737,11 +991,6 @@
     }
 
     // ---------- Screen saver
-
-    function screensaverSummary() {
-        var p = Prefs.get().screensaver;
-        return p.enabled ? 'After ' + Screensaver.delay().label : 'Off';
-    }
 
     /*
      * "Change photo" only means something while the Background is on Rotate or Live: with a
@@ -809,6 +1058,10 @@
         var onHome = {};
         ed.items.forEach(function (i) { onHome[i.id] = true; });
         ed.others = Apps.allSorted(Home.apps(), false).filter(function (a) { return !onHome[a.id]; });
+        // Built-in tile: re-addable when removed from Home.
+        if (!onHome['arn0:tvsettings']) {
+            ed.others.unshift(Apps.tvSettingsItem());
+        }
     }
 
     function edRow(item, moving) {
@@ -1097,23 +1350,28 @@
 
     function advancedEntries() {
         var entries = [
+            { label: 'Clock', run: openClock },
+            { label: 'Weather', run: function () { UI.show('weather-settings'); } },
+            { label: 'Appearance', run: openLook },
+            { label: 'Navigation sound', run: function () { UI.show('sound-settings'); } },
             {
-                label: 'Refresh app list', value: 'After installing or removing apps', run: function () {
-                    UI.toast('Refreshing the app list…');
-                    Home.reloadApps().then(function () { UI.toast('App list refreshed'); });
+                label: 'Refresh app list', run: function () {
+                    UI.busy(Home.reloadApps()).then(function () {
+                        UI.toast('App list refreshed');
+                    });
                 }
             }
         ];
         if (window.LAUNCHER_CONFIG.devLogUrl) {
             entries.push({
-                label: 'Export settings', value: 'Sends them to the Mac log', run: function () {
+                label: 'Export settings', run: function () {
                     DevLog.log('Settings export', Prefs.get());
                     UI.toast('Settings sent to the Mac log');
                 }
             });
         }
         entries.push({
-            label: 'Reset all settings', value: 'Back to the defaults', run: function () {
+            label: 'Reset all settings', run: function () {
                 UI.menu('Reset all settings?', [
                     {
                         label: 'Reset', run: function () {
@@ -1125,7 +1383,7 @@
                 ]);
             }
         });
-        entries.push({ label: 'Lab', value: 'Developer tests', run: function () { UI.show('lab'); } });
+        entries.push({ label: 'Lab', run: function () { UI.show('lab'); } });
         return entries;
     }
 
@@ -1133,20 +1391,34 @@
 
     function init() {
         registerList('settings', overviewEntries,
-            [['OK', 'Change'], ['◀ ▶', 'Switch column'], ['Back', 'Home']], true);
+            [['OK', 'Open'], ['Back', 'Home']]);
+        registerList('settings-home', homeGroupEntries, [['OK', 'Open'], ['Back', 'Settings']]);
+        registerList('settings-atmosphere', atmosphereGroupEntries, [['OK', 'Open'], ['Back', 'Settings']]);
+        registerList('settings-samsung', samsungGroupEntries, [['OK', 'Open'], ['Back', 'Settings']]);
         registerList('advanced', advancedEntries, [['OK', 'Run'], ['Back', 'Settings']]);
         renderConsoles = registerList('consoles', consoleEntries,
             [['OK', 'Options'], ['Back', 'Settings']]);
 
         if (window.LiveWallpaper) {
             LiveWallpaper.onChange(function () {
-                if (UI.current() === 'bg') renderBackground();
+                if (UI.current() !== 'bg') return;
+                // Debounce: warm notifies often; rebuild chips, append-only thumbs.
+                if (bgLiveRefreshTimer) clearTimeout(bgLiveRefreshTimer);
+                bgLiveRefreshTimer = setTimeout(function () {
+                    bgLiveRefreshTimer = null;
+                    renderBackground();
+                    UI.refresh();
+                }, 200);
             });
         }
         UI.register('bg', {
             el: $('bg-settings'),
             rows: function () { return chipRows($('bg-body')); },
-            onShow: renderBackground,
+            onShow: function () {
+                renderBackground();
+                var wp = Prefs.get().wallpaper;
+                if (wp.mode === 'live' && wp.liveProvider !== 'mix') warmBgPicker();
+            },
             activate: activateBackground,
             hints: [['OK', 'Select'], ['Back', 'Settings']]
         });

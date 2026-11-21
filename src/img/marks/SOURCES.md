@@ -18,3 +18,4 @@ Trademarks belong to their owners; used here only to identify apps and devices.
 - disneyplus.svg: https://raw.githubusercontent.com/elax46/custom-brand-icons/a53cabf49bf439023a8f33585af30d783bffe51b/icon-svg/disney-plus.svg (Custom Brand Icons, MIT)
 - xbox.svg: https://raw.githubusercontent.com/elax46/custom-brand-icons/a53cabf49bf439023a8f33585af30d783bffe51b/icon-svg/xbox.svg (Custom Brand Icons, MIT)
 - internet.svg: original globe mark for the TV browser tile (CC0)
+- tvsettings.svg: original gear mark for the TV Settings tile (CC0)

@@ -97,11 +97,7 @@
 
     function rotating() {
         var mode = Prefs.get().wallpaper.mode;
-        if (mode === 'live') {
-            // Live keeps an upcoming plan; do not require history length > 1.
-            return !!(window.LiveWallpaper && LiveWallpaper.isOnDemand && LiveWallpaper.isOnDemand()) ||
-                Wallpaper.list().length > 1;
-        }
+        if (mode === 'live') return !!window.LiveWallpaper;
         return mode === 'rotate' && Wallpaper.list().length > 1;
     }
 
@@ -546,6 +542,8 @@
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
+        // Decode the next few sharp + blur-thumb URLs while this photo is up.
+        if (Wallpaper.preloadAhead) Wallpaper.preloadAhead();
     }
 
     // Immich (and similar) polish place/title after paint; refresh only the caption in place.
@@ -559,8 +557,7 @@
     function advancePhoto() {
         if (!rotating() || advancing) return false;
         nextPhotoAt = Date.now() + photoEvery().ms;
-        if (Prefs.get().wallpaper.mode === 'live' &&
-            window.LiveWallpaper && LiveWallpaper.isOnDemand && LiveWallpaper.isOnDemand()) {
+        if (Prefs.get().wallpaper.mode === 'live' && window.LiveWallpaper) {
             advancing = true;
             LiveWallpaper.takeNext().then(function (w) {
                 advancing = false;
