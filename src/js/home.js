@@ -655,7 +655,10 @@
 
         UI.register('all', {
             el: $('all'),
-            rows: function () { return UI.chunk(UI.children($('all-grid')), GRID_COLS); },
+            rows: function () {
+                var cols = window.Appearance && Appearance.gridCols ? Appearance.gridCols() : GRID_COLS;
+                return UI.chunk(UI.children($('all-grid')), cols);
+            },
             onShow: renderAll,
             activate: launchApp,
             hints: [['OK', 'Open'], ['Back', 'Home']]

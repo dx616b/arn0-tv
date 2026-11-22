@@ -17,7 +17,8 @@
         return {
             sound: {
                 enabled: cfg.sound ? cfg.sound.enabled !== false : true,
-                preset: cfg.sound && cfg.sound.preset || 'soft'
+                preset: cfg.sound && cfg.sound.preset || 'soft',
+                volume: 'normal'        // 'quiet' | 'normal' | 'loud' (Style Soft is timbre, not level)
             },
             wallpaper: {
                 // Fresh install: Live Bing + shuffle (no API key). Seeds from config.local override.
@@ -25,18 +26,36 @@
                 photo: wallSeed.photo || theme.wallpaper || 'forest',
                 liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'unsplash' | 'immich' | 'mix'
                 liveKey: '',            // current entry in the live pool (date key)
+                // Multi-select Live sources (missing key = on). One on → that provider; 2+ → mix.
+                mixEnabled: {
+                    bing: true,
+                    nasa: true,
+                    wikimedia: true,
+                    unsplash: true,
+                    immich: true
+                },
+                liveMultiSelect: false, // set true after one-shot chip map migration
                 // Saved favorites (metadata in prefs; image bytes in IndexedDB — see Wallpaper).
-                pins: [],               // up to 5 × { key, file, thumb, … }
+                pins: [],               // up to Wallpaper.PIN_MAX × { key, file, thumb, bytes, … }
                 pinned: null,           // legacy single pin; migrated into pins[] on load
+                // One Live photo in use as Photo without saving to the pin shelf (URL only).
+                tempPhoto: null,        // { key, title, file, thumb, … } | null
+                // Shipped stills the user hid from Photo / Rotate (files stay in the app).
+                hiddenBundled: [],
                 interval: wallSeed.interval || '15m',        // see Wallpaper.INTERVALS (rotate + live cycle)
-                random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: pick from fetched list
+                random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
+                // How many remote entries to buffer per source / in the upcoming plan.
+                livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)
                 lastChange: 0
             },
             screensaver: {
                 enabled: true,
                 delay: '5m',            // see Screensaver.DELAYS
                 photoEvery: '75s',      // see Screensaver.PHOTO_EVERY
-                dark: '1h'              // see Screensaver.DARK_AFTER
+                dark: '1h',             // see Screensaver.DARK_AFTER
+                pan: true,              // Ken Burns drift / portrait zoom
+                panSpeed: 'normal',     // 'slow' | 'normal' | 'fast' (amount is auto from image vs stage)
+                blur: true              // letterbox blur fill (portrait contain)
             },
             // Seeded from config.js weather; Settings → Weather edits these.
             weather: {
@@ -60,7 +79,10 @@
                 showDate: true,
                 locale: cfg.locale || 'en-GB',
                 font: 'manrope',        // see Appearance.FONTS
-                names: 'always'         // app names under tiles: 'always' | 'focused' | 'never'
+                names: 'always',        // app names under tiles: 'always' | 'focused' | 'never'
+                // Curated presets: scale+ring, scale only, or ring only.
+                focus: 'both',          // 'both' | 'scale' | 'ring'
+                tiles: 'comfortable'    // 'comfortable' | 'compact'
             },
             home: null,                 // [{ id, label, brand }] once edited; null = config.js apps
             inputs: null                // [{ hdmi, label, brand, method, hidden }] once edited; null = config.js
@@ -82,10 +104,35 @@
             if (saved) {
                 merge(prefs.sound, saved.sound);
                 merge(prefs.wallpaper, saved.wallpaper);
+                // mixEnabled is a map; fill any keys missing from older saves.
+                (function () {
+                    var def = { bing: true, nasa: true, wikimedia: true, unsplash: true, immich: true };
+                    var cur = prefs.wallpaper.mixEnabled;
+                    if (!cur || typeof cur !== 'object') {
+                        prefs.wallpaper.mixEnabled = def;
+                        return;
+                    }
+                    Object.keys(def).forEach(function (k) {
+                        def[k] = cur[k] !== false;
+                    });
+                    prefs.wallpaper.mixEnabled = def;
+                })();
                 merge(prefs.screensaver, saved.screensaver);
                 merge(prefs.weather, saved.weather);
                 merge(prefs.music, saved.music);
                 merge(prefs.appearance, saved.appearance);
+                // Batch 1+2 briefly split Motion × Focus; fold into one curated focus preset.
+                if (saved.appearance) {
+                    var m = saved.appearance.motion;
+                    var f = prefs.appearance.focus;
+                    if (m === 'off' || m === 'reduced' || f === 'off') {
+                        if (f === 'both' || f === 'scale' || f === 'off' || !f) prefs.appearance.focus = 'ring';
+                    }
+                    if (prefs.appearance.focus !== 'both' && prefs.appearance.focus !== 'scale' &&
+                            prefs.appearance.focus !== 'ring') {
+                        prefs.appearance.focus = 'both';
+                    }
+                }
                 if (Array.isArray(saved.home) && saved.home.length) prefs.home = saved.home;
                 if (Array.isArray(saved.inputs)) prefs.inputs = saved.inputs;
             } else {
@@ -109,8 +156,16 @@
             }
             prefs.wallpaper.pinned = null;
         }
-        if (prefs.wallpaper.pins.length > 5) {
-            prefs.wallpaper.pins = prefs.wallpaper.pins.slice(0, 5);
+        // Cap matches Wallpaper.PIN_MAX (20). Do not trim harder here — that would
+        // silently drop favorites after a limit raise.
+        if (prefs.wallpaper.pins.length > 20) {
+            prefs.wallpaper.pins = prefs.wallpaper.pins.slice(0, 20);
+        }
+        if (!Array.isArray(prefs.wallpaper.hiddenBundled)) {
+            prefs.wallpaper.hiddenBundled = [];
+        }
+        if (prefs.wallpaper.tempPhoto && !prefs.wallpaper.tempPhoto.key) {
+            prefs.wallpaper.tempPhoto = null;
         }
         return prefs;
     }

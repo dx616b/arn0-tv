@@ -23,9 +23,12 @@ jobs:
       - name: Syntax-check JavaScript
         run: |
           set -eu
-          find src/js scripts -type f \( -name '*.js' -o -name '*.mjs' \) \
+          find src/js scripts test -type f \( -name '*.js' -o -name '*.mjs' \) \
             ! -name 'config.local.js' \
             -print0 | sort -z | xargs -0 -n1 node --check
+
+      - name: Unit tests
+        run: npm test
 
       - name: Validate config.xml
         run: |

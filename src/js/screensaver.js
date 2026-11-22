@@ -1,6 +1,13 @@
 /*
  * Screen saver: photos with a slow zoom, a clock and a caption, after a stretch with no input
- * on Home. Right skips to the next photo; any other key closes it (and that press does nothing else).
+ * on Home.
+ *
+ * Remote (legend on-screen):
+ *   Up/Down  Live source among all configured providers (+ Mix when 2+)
+ *   Right    next photo (Rotate / Live)
+ *   Left     next music track
+ *   OK       play / pause music
+ *   Back     exit
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -9,10 +16,8 @@
  * so through `transform` and `opacity`, which the compositor animates with no JavaScript per
  * frame. The poll below ticks once a second and only decides what is due.
  *
- * Burn-in is the reason anything moves at all: on this kind of panel a clock parked in one
- * corner for an hour is a real risk, so the zoom never settles, the corner text shifts on each
- * photo change, the clock moves to another corner every couple of minutes, and the whole thing
- * fades to black once the configured hour is up.
+ * Burn-in is why the photo drifts (and eventually fades to black). Clock + weather stay fixed
+ * bottom-right — opposite the caption — so the chrome does not jump around.
  */
 (function () {
     'use strict';
@@ -43,24 +48,26 @@
     /*
      * The photo drifts rather than zooms. A zoom changes the layer's raster scale, and this
      * engine re-rasterises a scaled 1920x1080 layer in visible steps instead of compositing it
-     * smoothly. A translate leaves the raster alone. The layer is laid out larger than the
-     * screen (cover) so the panel stays filled while it pans.
+     * smoothly. A translate leaves the raster alone. Drift distance is derived from each photo's
+     * size vs the 1920×1080 stage; only speed is user-tunable.
      */
-    var PAN_X = 160;                // overhang each side, matching .ss-photo in the stylesheet
-    var PAN_Y = 90;
-    var PAN_X_CONTAIN = 28;         // live landscape contain: mild drift (blur stays fixed)
-    var PAN_Y_CONTAIN = 16;
-    // Portrait contain: focus-zoom (screensaver only; Home stays light).
-    // Zoom may be cut mid-leg when the photo changes — factor > 1 keeps it slow.
-    var ZOOM_PORTRAIT = 1.50;
+    var VIEW_W = 1920;
+    var VIEW_H = 1080;
+    var PAN_SPEEDS = [
+        { key: 'slow', label: 'Slow', factor: 1.7 },
+        { key: 'normal', label: 'Normal', factor: 1 },
+        { key: 'fast', label: 'Fast', factor: 0.5 }
+    ];
+    // Portrait zoom may be cut mid-leg when the photo changes — factor > 1 keeps it slow.
     var ZOOM_LEG_FACTOR = 1.25;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
-    var CLOCK_MOVE_MS = 150 * 1000; // "every 2-3 minutes"
-    var CLOCK_POSITIONS = 4;        // .ss-clock.pos-0 .. pos-3
-    var CLOCK_FADE_MS = 1500;       // fade out, move corner, fade in (matches .ss-clock transition)
     var SCROLL_EVERY_MS = 60 * 1000; // repeat the scroll of long caption / music lines (3 × 14 s pass + pause)
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
+    var FALLBACK_DRIFT = {
+        coverX: 160, coverY: 90, zoom: 1.35,
+        containX: 0, containY: 40, padX: 160, padY: 90
+    };
 
     var open = false;
     var returnTo = 'home';
@@ -71,18 +78,23 @@
     var photoIndex = 0;
     var openedAt = 0;
     var nextPhotoAt = 0;
-    var nextClockMoveAt = 0;
     var nextScrollAt = 0;
     var captionText = '';
     var nextPanAt = 0;
     var panSign = 1;            // flipped on each leg, so the drift alternates direction
     var lastClockText = '';
-    var clockPos = 0;
     var dark = false;
     var advancing = false;      // one in-flight live takeNext (timer or remote)
     var shownKey = '';          // live polish may update caption after the photo is up
+    var providerFlashTimer = 0;
+    var captionSub = '';
+    var lastMusicSig = '';
 
     function prefs() { return Prefs.get().screensaver; }
+
+    function panOn() { return prefs().pan !== false; }
+
+    function blurOn() { return prefs().blur !== false; }
 
     function option(list, key, fallback) {
         return list.find(function (o) { return o.key === key; }) ||
@@ -92,6 +104,92 @@
     function delay() { return option(DELAYS, prefs().delay, '5m'); }
     function photoEvery() { return option(PHOTO_EVERY, prefs().photoEvery, '75s'); }
     function darkAfter() { return option(DARK_AFTER, prefs().dark, '1h'); }
+    function panSpeed() { return option(PAN_SPEEDS, prefs().panSpeed, 'normal'); }
+
+    function driftOf(layer) {
+        return (layer && layer._drift) || FALLBACK_DRIFT;
+    }
+
+    /*
+     * Pan/zoom budget from photo pixels vs the fixed TV stage. Landscape cover: move within the
+     * overflow after cover-fit (near-16:9 gets a little overscan so there is still room). Portrait
+     * contain: full stage height, side pillars; zoom toward full-bleed, nudge in leftover spill.
+     */
+    function computeDrift(ow, oh, portrait) {
+        if (!ow || !oh) return FALLBACK_DRIFT;
+        if (portrait) {
+            var fit = Math.min(VIEW_W / ow, VIEW_H / oh);
+            var fw = ow * fit;
+            var fh = oh * fit;
+            // 1 = contain (full height); fill = scale that would flush width too.
+            var fill = Math.max(VIEW_W / fw, VIEW_H / fh);
+            var zoom = Math.min(2.15, Math.max(1.15, 1 + (fill - 1) * 0.8));
+            var zW = fw * zoom;
+            var zH = fh * zoom;
+            var spillX = Math.max(0, (zW - VIEW_W) / 2);
+            var spillY = Math.max(0, (zH - VIEW_H) / 2);
+            return {
+                coverX: 0,
+                coverY: 0,
+                zoom: zoom,
+                containX: Math.round(Math.min(64, spillX * 0.45)),
+                containY: 0, // never nudge vertically — keeps top/bottom sealed
+                padX: 0,
+                padY: 0
+            };
+        }
+        var cover = Math.max(VIEW_W / ow, VIEW_H / oh);
+        var overflowX = Math.max(0, (ow * cover - VIEW_W) / 2);
+        var overflowY = Math.max(0, (oh * cover - VIEW_H) / 2);
+        // Fixed Ken Burns travel (matches .ss-photo CSS). Near-16:9 has almost no cover
+        // overflow, so invent the same overscan rather than a tiny adaptive nudge.
+        var MIN_X = 160;
+        var MIN_Y = 90;
+        if (overflowX < MIN_X || overflowY < MIN_Y) {
+            overflowX = Math.max(overflowX, MIN_X);
+            overflowY = Math.max(overflowY, MIN_Y);
+        }
+        var panX = Math.round(Math.min(220, Math.max(MIN_X, overflowX * 0.7)));
+        var panY = Math.round(Math.min(140, Math.max(MIN_Y, overflowY * 0.7)));
+        var padX = Math.max(panX, Math.ceil(overflowX));
+        var padY = Math.max(panY, Math.ceil(overflowY));
+        return { coverX: panX, coverY: panY, zoom: 1, padX: padX, padY: padY };
+    }
+
+    function applyLayerPad(layer, drift, contain) {
+        if (contain) {
+            layer.style.top = '';
+            layer.style.left = '';
+            layer.style.width = '';
+            layer.style.height = '';
+            return;
+        }
+        var padX = drift.padX || 160;
+        var padY = drift.padY || 90;
+        layer.style.top = (-padY) + 'px';
+        layer.style.left = (-padX) + 'px';
+        layer.style.width = (VIEW_W + 2 * padX) + 'px';
+        layer.style.height = (VIEW_H + 2 * padY) + 'px';
+    }
+
+    // Pillar widths for portrait blur strips (oriented aspect → side gaps only).
+    function applyPortraitPillars(layer, ow, oh) {
+        var left = layer.querySelector('.ss-pillar-left');
+        var right = layer.querySelector('.ss-pillar-right');
+        if (!left || !right || !ow || !oh) return;
+        var dispW = Math.round(VIEW_H * (ow / oh));
+        if (dispW > VIEW_W) dispW = VIEW_W;
+        var side = Math.max(0, Math.floor((VIEW_W - dispW) / 2));
+        left.style.width = side + 'px';
+        right.style.width = side + 'px';
+    }
+
+    function clearPortraitPillars(layer) {
+        var left = layer.querySelector('.ss-pillar-left');
+        var right = layer.querySelector('.ss-pillar-right');
+        if (left) left.style.width = '';
+        if (right) right.style.width = '';
+    }
 
     // ---------- Photos
 
@@ -101,15 +199,28 @@
         return mode === 'rotate' && Wallpaper.list().length > 1;
     }
 
+    // Active catalog only (live pool or bundled rotate) — never sneak in shipped stills during Live/Mix.
+    function playlist() {
+        return Wallpaper.list();
+    }
+
+    // Right / timer only cycle in Rotate or Live. A held single Photo must stay put
+    // (Wallpaper.list() is the full bundled set in that mode — do not walk it).
+    function canAdvance() {
+        var mode = Prefs.get().wallpaper.mode;
+        if (mode === 'live') return !!window.LiveWallpaper;
+        if (mode === 'rotate') return playlist().length > 1;
+        return false;
+    }
+
     /*
      * The photo follows the Background setting: Off shows no photo, Photo holds the chosen one,
-     * Rotate / Live cycle the lot. The index is the screen saver's own — advancing it must not
-     * rewrite the Home wallpaper or restart its rotation clock, so Prefs.wallpaper is read, never written.
+     * Rotate / Live cycle the lot. Prefs.wallpaper is read, never written.
      */
     function photoAt(i) {
         var p = Prefs.get().wallpaper;
         if (p.mode === 'off') return null;
-        var list = Wallpaper.list();
+        var list = playlist();
         if (!list.length) return null;
         if (p.mode === 'rotate' || p.mode === 'live') {
             return list[((i % list.length) + list.length) % list.length];
@@ -121,30 +232,34 @@
     function startIndex() {
         var p = Prefs.get().wallpaper;
         var key = p.mode === 'live' ? p.liveKey : p.photo;
-        var i = Wallpaper.list().findIndex(function (w) { return w.key === key; });
+        var list = playlist();
+        var i = list.findIndex(function (w) { return w.key === key; });
         return i < 0 ? 0 : i;
     }
 
-    // How long one leg of the drift lasts: a rotating photo drifts for exactly as long as it is up.
+    // How long one leg lasts: photo interval (or held-photo default), scaled by Drift speed.
     function legMs() {
-        return rotating() ? photoEvery().ms : HELD_LEG_MS;
+        var base = rotating() ? photoEvery().ms : HELD_LEG_MS;
+        return Math.max(8 * 1000, Math.round(base * panSpeed().factor));
     }
 
     function zoomLegMs() {
         return Math.max(8 * 1000, Math.round(legMs() * ZOOM_LEG_FACTOR));
     }
 
-    function corner(sign) {
-        return 'translate(' + (sign * PAN_X) + 'px, ' + (sign * PAN_Y) + 'px)';
+    function corner(layer, sign) {
+        var d = driftOf(layer);
+        return 'translate(' + (sign * d.coverX) + 'px, ' + (sign * d.coverY) + 'px)';
     }
 
-    function containCorner(sign) {
-        return 'translate(' + (sign * PAN_X_CONTAIN) + 'px, ' + (sign * PAN_Y_CONTAIN) + 'px)';
-    }
-
-    // sign > 0 = zoomed out; sign < 0 = focus-in.
-    function portraitScale(sign) {
-        return 'scale(' + (sign > 0 ? 1 : ZOOM_PORTRAIT) + ')';
+    // sign > 0 = zoomed out (full height); sign < 0 = focus-in.
+    // Never nudge vertically — that opened top/bottom gaps where blur leaked through.
+    function portraitTransform(layer, sign) {
+        var d = driftOf(layer);
+        var z = sign > 0 ? 1 : d.zoom;
+        var tx = 0;
+        if (z > 1) tx = (sign > 0 ? 1 : -1) * (d.containX || 0);
+        return 'translate(' + tx + 'px, 0) scale(' + z + ')';
     }
 
     function sharpEl(layer) {
@@ -159,14 +274,24 @@
      */
     function resetPan(layer, sign) {
         var sharp = sharpEl(layer);
+        if (!panOn()) {
+            layer.style.transition = 'none';
+            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            if (sharp) {
+                sharp.style.transition = 'none';
+                sharp.style.transform = 'translate(0, 0)';
+                void sharp.offsetWidth;
+            } else {
+                void layer.offsetWidth;
+            }
+            return;
+        }
         if (layer.classList.contains('contain')) {
             layer.style.transition = 'none';
             layer.style.transform = 'none';
             if (sharp) {
                 sharp.style.transition = 'none';
-                sharp.style.transform = layer.classList.contains('portrait')
-                    ? portraitScale(sign)
-                    : containCorner(sign);
+                sharp.style.transform = portraitTransform(layer, sign);
                 void sharp.offsetWidth;
             }
             return;
@@ -176,7 +301,7 @@
             sharp.style.transform = 'translate(0, 0)';
         }
         layer.style.transition = 'none';
-        layer.style.transform = corner(sign);
+        layer.style.transform = corner(layer, sign);
         // Reading a layout property flushes that, so the transition startPan restores runs from
         // this corner instead of being collapsed into the move away from it.
         void layer.offsetWidth;
@@ -184,28 +309,36 @@
 
     /*
      * The drift is one CSS transition per leg: set once, run by the compositor, no JavaScript
-     * per frame. Duration follows Screen saver → photo every (or the held-photo leg).
+     * per frame. Duration follows Screen saver → photo every (or the held-photo leg), scaled by
+     * Drift speed. Drift Off parks the photo centred (no pan / portrait zoom).
      */
     function startPan() {
-        panSign = -panSign;
-        nextPanAt = Date.now() + legMs();
         var layer = layers[front];
         var sharp = sharpEl(layer);
+        if (!panOn()) {
+            nextPanAt = 0;
+            layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
+            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            if (sharp) {
+                sharp.style.transition = 'none';
+                sharp.style.transform = 'translate(0, 0)';
+            }
+            return;
+        }
+        panSign = -panSign;
+        nextPanAt = Date.now() + legMs();
         var move = 'transform ' + legMs() + 'ms linear';
         if (layer.classList.contains('contain')) {
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
             if (sharp) {
-                var portrait = layer.classList.contains('portrait');
-                sharp.style.transition = portrait
-                    ? ('transform ' + zoomLegMs() + 'ms linear')
-                    : move;
-                sharp.style.transform = portrait ? portraitScale(panSign) : containCorner(panSign);
+                sharp.style.transition = 'transform ' + zoomLegMs() + 'ms linear';
+                sharp.style.transform = portraitTransform(layer, panSign);
             }
             return;
         }
         layer.style.transition = 'opacity ' + FADE_MS + 'ms linear, ' + move;
-        layer.style.transform = corner(panSign);
+        layer.style.transform = corner(layer, panSign);
     }
 
     /*
@@ -278,29 +411,37 @@
             var back = layers[1 - front];
             var old = layers[front];
             var imgEl = back.querySelector('.ss-photo-img');
-            var blurEl = back.querySelector('.ss-photo-blur');
-            // Portrait = taller than wide after EXIF orientation. Contain+blur+zoom only then;
-            // landscape fills the panel with cover + the usual pan.
+            var blurImgs = back.querySelectorAll('.ss-photo-blur');
+            // Portrait = taller than wide after EXIF orientation. Full stage height + side
+            // pillars (blur fill when On) + focus zoom. Landscape: cover + pan.
             var portrait = !!(ow && oh && oh > ow);
             var contain = portrait;
+            var wantBlur = contain && blurOn();
+            back._drift = computeDrift(ow, oh, portrait);
+            applyLayerPad(back, back._drift, contain);
             back.classList.toggle('contain', contain);
             back.classList.toggle('portrait', portrait);
             back.classList.toggle('landscape', !portrait);
+            back.classList.toggle('no-blur', contain && !wantBlur);
+            if (portrait) applyPortraitPillars(back, ow, oh);
+            else clearPortraitPillars(back);
             if (imgEl) imgEl.src = url;
             else back.style.backgroundImage = 'url("' + url + '")';
-            if (blurEl) {
-                // Blur the small thumb — full-size originals + filter:blur are costly on this TV.
-                // If the thumb 404s (some Wikimedia/Unsplash sizes), fall back to the sharp URL.
-                if (contain) {
-                    blurEl.onerror = function () {
+            var bi;
+            for (bi = 0; bi < blurImgs.length; bi++) {
+                (function (blurEl) {
+                    // Thumb for blur — full-size + filter:blur is costly on this TV.
+                    if (wantBlur) {
+                        blurEl.onerror = function () {
+                            blurEl.onerror = null;
+                            if (blurEl.getAttribute('src') !== url) blurEl.src = url;
+                        };
+                        blurEl.src = w.thumb || url;
+                    } else {
                         blurEl.onerror = null;
-                        if (blurEl.getAttribute('src') !== url) blurEl.src = url;
-                    };
-                    blurEl.src = w.thumb || url;
-                } else {
-                    blurEl.onerror = null;
-                    blurEl.removeAttribute('src');
-                }
+                        blurEl.removeAttribute('src');
+                    }
+                })(blurImgs[bi]);
             }
             // Placed at the corner startPan is about to drift away from, animation suppressed.
             resetPan(back, panSign);
@@ -413,46 +554,32 @@
         $('ss-date').textContent = Prefs.get().appearance.showDate ? shortDate(d) : '';
     }
 
+    function fillLine(el, text, animate) {
+        if (!el) return;
+        if (window.Music && Music.fillMarquee) Music.fillMarquee(el, text, !!animate);
+        else el.textContent = text || '';
+    }
+
     function caption(w) {
         // Title + date/credit from live metadata (title/sub/credit on each wallpaper entry).
         captionText = w ? (w.title || w.credit || '') : '';
-        var sub = '';
+        captionSub = '';
         if (w) {
-            if (w.sub && w.credit && w.credit !== w.title) sub = w.sub + ' · ' + w.credit;
-            else sub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
+            if (w.sub && w.credit && w.credit !== w.title) captionSub = w.sub + ' · ' + w.credit;
+            else captionSub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
         }
-        if (window.Music) Music.fillMarquee($('ss-title'), captionText, true);
-        else $('ss-title').textContent = captionText;
-        $('ss-sub').textContent = sub;
-        $('ss-caption').classList.toggle('hidden', !w || (!captionText && !sub));
+        // Fixed-width slot + horizontal scroll when the line is longer (does not cover legend).
+        fillLine($('ss-title'), captionText, true);
+        fillLine($('ss-sub'), captionSub, true);
+        $('ss-caption').classList.toggle('hidden', !w || (!captionText && !captionSub));
     }
 
-    // Long lines scroll for a few loops and freeze; repeating the scroll now and then keeps
-    // them readable without a permanent animation.
+    // Replay marquee passes for long caption / music lines.
     function refreshScroll() {
-        if (window.Music) Music.fillMarquee($('ss-title'), captionText, true);
+        fillLine($('ss-title'), captionText, true);
+        fillLine($('ss-sub'), captionSub, true);
+        lastMusicSig = '';
         renderMusic();
-    }
-
-    // Swaps the position class without touching the others, which now include `with-weather`.
-    function setClockPos(n) {
-        var el = $('ss-clock');
-        for (var i = 0; i < CLOCK_POSITIONS; i++) el.classList.remove('pos-' + i);
-        el.classList.add('pos-' + n);
-    }
-
-    function moveClock() {
-        clockPos = (clockPos + 1) % CLOCK_POSITIONS;
-        nextClockMoveAt = Date.now() + CLOCK_MOVE_MS;
-        // Fade out, change corner while invisible, fade back in: a corner change cannot be
-        // tweened because each corner sets different edge properties.
-        var el = $('ss-clock');
-        el.style.opacity = '0';
-        setTimeout(function () {
-            if (!open) return;
-            setClockPos(clockPos);
-            el.style.opacity = '1';
-        }, CLOCK_FADE_MS);
     }
 
     // Hidden outright when there is no usable reading: see the note on staleness in weather.js.
@@ -466,20 +593,113 @@
         $('ss-wx-detail').textContent = w.detail;
     }
 
+    function musicReady() {
+        return !!(window.Music && window.Subsonic && Subsonic.configured());
+    }
+
     function renderMusic() {
         var el = $('ss-music');
         if (!el) return;
-        var show = window.Music && window.Subsonic && Subsonic.configured();
+        var show = musicReady();
         el.classList.toggle('hidden', !show);
-        if (!show) return;
-        var song = Music.current();
-        if (song) {
-            Music.fillMarquee($('ss-music-title'), song.title, true);
-            Music.fillMarquee($('ss-music-artist'), song.artist || song.album || '', true);
+        if (show) {
+            var song = Music.current();
+            var sig = song
+                ? ('play:' + (song.title || '') + '\0' + (song.artist || song.album || ''))
+                : 'idle';
+            // Only rebuild marquees when the line text changes (play/pause must not restart scroll).
+            if (sig !== lastMusicSig) {
+                lastMusicSig = sig;
+                if (song) {
+                    fillLine($('ss-music-title'), song.title, true);
+                    fillLine($('ss-music-artist'), song.artist || song.album || '', true);
+                } else {
+                    fillLine($('ss-music-title'), 'Not playing', false);
+                    fillLine($('ss-music-artist'), '', false);
+                }
+            }
         } else {
-            Music.fillMarquee($('ss-music-title'), 'Not playing', false);
-            Music.fillMarquee($('ss-music-artist'), '', false);
+            lastMusicSig = '';
         }
+        renderLegend();
+    }
+
+    function legendItem(key, label) {
+        return '<span class="ss-legend-item"><span class="ss-legend-key">' + key +
+            '</span>' + label + '</span>';
+    }
+
+    // Small center legend; only the actions that apply right now.
+    function renderLegend() {
+        var el = $('ss-legend');
+        if (!el) return;
+        var parts = [];
+        if (liveProviderChoices().length > 1) parts.push(legendItem('↑↓', 'Source'));
+        if (canAdvance()) parts.push(legendItem('→', 'Photo'));
+        if (musicReady()) {
+            parts.push(legendItem('←', 'Track'));
+            parts.push(legendItem('OK', Music.isPlaying() ? 'Pause' : 'Play'));
+        }
+        parts.push(legendItem('Back', 'Exit'));
+        el.innerHTML = parts.join('');
+        el.classList.toggle('hidden', !parts.length);
+    }
+
+    /*
+     * Live ↑↓ choices:
+     * - Configured providers + Mix when Settings has 2+ enabled usable chips.
+     * - Mix uses the Settings roster as-is; solo only changes liveProvider.
+     * - Photo / Rotate / Off: no source list.
+     */
+    function liveProviderChoices() {
+        if (Prefs.get().wallpaper.mode !== 'live' || !window.LiveWallpaper) return [];
+        if (LiveWallpaper.switchableProviders) return LiveWallpaper.switchableProviders();
+        return [];
+    }
+
+    function providerLabel(key) {
+        if (window.LiveWallpaper && LiveWallpaper.providerLabelFor) {
+            return LiveWallpaper.providerLabelFor(key);
+        }
+        return key;
+    }
+
+    // Center-screen name only (no toast plate) when ↑↓ changes Live source.
+    function flashProvider(name) {
+        var el = $('ss-provider');
+        if (!el) return;
+        el.textContent = name || '';
+        el.classList.add('on');
+        clearTimeout(providerFlashTimer);
+        providerFlashTimer = setTimeout(function () {
+            el.classList.remove('on');
+        }, 1600);
+    }
+
+    function cycleLiveProvider(delta) {
+        var choices = liveProviderChoices();
+        if (choices.length < 2 || advancing) return false;
+        if (!LiveWallpaper.selectLiveProvider) return false;
+        var cur = Prefs.get().wallpaper.liveProvider || choices[0];
+        var i = choices.indexOf(cur);
+        if (i < 0) i = 0;
+        var next = choices[(i + delta + choices.length * 8) % choices.length];
+        if (next === cur) return false;
+        if (!LiveWallpaper.selectLiveProvider(next)) return false;
+        flashProvider(providerLabel(next));
+        renderLegend();
+        advancing = true;
+        LiveWallpaper.takeNext().then(function (w) {
+            advancing = false;
+            if (!open) return;
+            if (w) applyPhoto(w);
+            else if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) {
+                UI.toast(LiveWallpaper.status());
+            }
+        }, function () {
+            advancing = false;
+        });
+        return true;
     }
 
     // ---------- Open, tick, close
@@ -490,7 +710,6 @@
         open = true;
         dark = false;
         front = 0;
-        clockPos = 0;
         photoIndex = startIndex();
         panSign = 1;
         lastClockText = '';
@@ -499,13 +718,11 @@
         resetPan(layers[0], panSign);
         resetPan(layers[1], panSign);
         $('ss-dark').style.opacity = '0';
-        setClockPos(0);
         $('ss-clock').style.opacity = '1';
 
         var now = Date.now();
         openedAt = now;
         nextPhotoAt = now + photoEvery().ms;
-        nextClockMoveAt = now + CLOCK_MOVE_MS;
         nextScrollAt = now + SCROLL_EVERY_MS;
         nextPanAt = 0;
 
@@ -514,6 +731,7 @@
         // Shows the cached reading at once, and asks for a new one only if the hour is up.
         renderWeather();
         renderMusic();
+        renderLegend();
         if (window.Weather) Weather.refresh();
         var w = photoAt(photoIndex);
         shownKey = (w && w.key) || '';
@@ -536,7 +754,7 @@
 
     function applyPhoto(w) {
         if (!open || !w) return;
-        var list = Wallpaper.list();
+        var list = playlist();
         var ni = list.findIndex(function (x) { return x.key === w.key; });
         photoIndex = ni < 0 ? photoIndex : ni;
         shownKey = w.key || '';
@@ -554,21 +772,23 @@
     }
 
     // Timer and remote Right both land here so the interval resets after a manual skip.
-    function advancePhoto() {
-        if (!rotating() || advancing) return false;
+    function advancePhoto(fromRemote) {
+        if (advancing) return false;
+        if (!(fromRemote ? canAdvance() : rotating())) return false;
         nextPhotoAt = Date.now() + photoEvery().ms;
+        // Live/Mix: always takeNext (timer and Right) so we never cycle shipped bundled stills.
         if (Prefs.get().wallpaper.mode === 'live' && window.LiveWallpaper) {
             advancing = true;
             LiveWallpaper.takeNext().then(function (w) {
                 advancing = false;
                 if (!open) return;
-                // Plan miss / slow fill: fall back to recent history so the frame still changes.
                 if (!w) {
-                    var hist = Wallpaper.list();
+                    // playlist() is already scoped to the current Live focus (solo vs Mix).
+                    var hist = playlist();
                     if (!hist.length) return;
                     var cur = photoAt(photoIndex);
                     w = hist.length > 1
-                        ? Wallpaper.pickNext(hist, cur && cur.key, !!Prefs.get().wallpaper.random)
+                        ? Wallpaper.pickNext(hist, cur && cur.key, false)
                         : hist[0];
                     if (!w || (cur && w.key === cur.key && hist.length < 2)) return;
                 }
@@ -576,7 +796,9 @@
             }, function () { advancing = false; });
             return true;
         }
-        var list = Wallpaper.list();
+        if (Prefs.get().wallpaper.mode !== 'rotate') return false;
+        var list = playlist();
+        if (list.length < 2) return false;
         var cur = photoAt(photoIndex);
         var next = Wallpaper.pickNext(list, cur && cur.key, !!Prefs.get().wallpaper.random);
         var ni = next ? list.findIndex(function (x) { return x.key === next.key; }) : -1;
@@ -592,7 +814,6 @@
         if (!dark && until && now - openedAt >= until) goDark();
         // Behind an opaque black layer there is nothing worth moving.
         if (dark) return;
-        if (now >= nextClockMoveAt) moveClock();
         if (now >= nextScrollAt) {
             nextScrollAt = now + SCROLL_EVERY_MS;
             refreshScroll();
@@ -612,15 +833,30 @@
         shownKey = '';
         lastInput = Date.now();
         photoToken++;
+        clearTimeout(providerFlashTimer);
+        captionSub = '';
+        lastMusicSig = '';
+        var flash = $('ss-provider');
+        if (flash) {
+            flash.classList.remove('on');
+            flash.textContent = '';
+        }
         // Dropping the images releases full-screen textures on a 2 GB device.
         layers.forEach(function (l) {
             l.style.opacity = '0';
             l.style.backgroundImage = '';
-            l.classList.remove('contain', 'portrait', 'landscape');
+            l.classList.remove('contain', 'portrait', 'landscape', 'no-blur');
+            l._drift = null;
+            applyLayerPad(l, FALLBACK_DRIFT, true);
+            clearPortraitPillars(l);
             var imgEl = l.querySelector('.ss-photo-img');
-            var blurEl = l.querySelector('.ss-photo-blur');
             if (imgEl) imgEl.removeAttribute('src');
-            if (blurEl) blurEl.removeAttribute('src');
+            var blurImgs = l.querySelectorAll('.ss-photo-blur');
+            var bi;
+            for (bi = 0; bi < blurImgs.length; bi++) {
+                blurImgs[bi].onerror = null;
+                blurImgs[bi].removeAttribute('src');
+            }
         });
         UI.show(returnTo, { back: true });
     }
@@ -669,10 +905,25 @@
             hints: [],
             rows: function () { return []; },
             onKey: function (k) {
-                // Right = next photo (Rotate / Live). Anything else dismisses.
-                if (k === UI.KEY.RIGHT && rotating()) {
-                    wakeFromDark();
-                    advancePhoto();
+                wakeFromDark();
+                if (k === UI.KEY.UP && cycleLiveProvider(-1)) return true;
+                if (k === UI.KEY.DOWN && cycleLiveProvider(1)) return true;
+                if (k === UI.KEY.RIGHT && canAdvance()) {
+                    advancePhoto(true);
+                    return true;
+                }
+                if (k === UI.KEY.LEFT && musicReady()) {
+                    Music.next();
+                    return true;
+                }
+                if (k === UI.KEY.ENTER && musicReady()) {
+                    Music.toggle();
+                    return true;
+                }
+                // Unused arrows / OK stay on the saver; Back exits.
+                if (k === UI.KEY.UP || k === UI.KEY.DOWN ||
+                        k === UI.KEY.LEFT || k === UI.KEY.RIGHT ||
+                        k === UI.KEY.ENTER) {
                     return true;
                 }
                 close();
@@ -693,6 +944,7 @@
         DELAYS: DELAYS,
         PHOTO_EVERY: PHOTO_EVERY,
         DARK_AFTER: DARK_AFTER,
+        PAN_SPEEDS: PAN_SPEEDS,
         delay: delay,
         photoEvery: photoEvery,
         darkAfter: darkAfter,
