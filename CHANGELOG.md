@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.16
+
+### Live wallpaper / Mix
+- Multi-select Live sources in Settings; one chip alone or several as Mix
+- Screen saver ↑↓ focuses a source without rewriting Settings chips
+- Mix Shuffle permutes provider order, then plays round-robin (photos stay in fetch order)
+- Solo Immich/Bing no longer absorb Mix leftovers (strict source tags + cache scrub)
+- NASA APOD via apod-basic / assets.science.nasa.gov; leaner queues and soft Settings refresh
+
+### Screen saver
+- ↑↓ Live source, → next photo, ← next track, OK play/pause; on-screen legend
+- Side blur pillars for portraits; softer fill; fixed clock/weather corner
+- Caption/music marquee advances in place (no paging scroll)
+
+### Photo shelf
+- Save up to 20 Live pins; show count and on-device size
+- Use now (temporary) or Save permanently from the Live picker
+- Remove individual pins; hide unwanted shipped stills (Atmosphere → Restore)
+- Clear pins refreshes the size label immediately
+
+### Music / CI
+- Start playback sooner; preload next track in the background
+- Unit tests for Live multi-select / Mix behavior in CI
+
 ## 0.6.15
 
 ### Atmosphere / Live wallpaper

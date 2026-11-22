@@ -43,6 +43,15 @@
         }
     }
 
+    function resolveFocus(p) {
+        if (p.focus === 'scale' || p.focus === 'ring') return p.focus;
+        return 'both';
+    }
+
+    function gridCols() {
+        return prefs().tiles === 'compact' ? 6 : 5;
+    }
+
     function apply() {
         var p = prefs();
         document.documentElement.style.setProperty('--font', font(p.font).family + FALLBACK);
@@ -50,12 +59,22 @@
         home.classList.toggle('names-focused', p.names === 'focused');
         home.classList.toggle('names-never', p.names === 'never');
         home.classList.toggle('no-date', !p.showDate);
+        var root = document.documentElement;
+        var focus = resolveFocus(p);
+        root.classList.remove('motion-full', 'motion-reduced', 'motion-off', 'focus-off');
+        root.classList.toggle('focus-both', focus === 'both');
+        root.classList.toggle('focus-scale', focus === 'scale');
+        root.classList.toggle('focus-ring', focus === 'ring');
+        var tiles = p.tiles === 'compact' ? 'compact' : 'comfortable';
+        root.classList.toggle('tiles-comfortable', tiles === 'comfortable');
+        root.classList.toggle('tiles-compact', tiles === 'compact');
     }
 
     window.Appearance = {
         FONTS: FONTS,
         LOCALES: LOCALES,
         font: font,
+        gridCols: gridCols,
         time: time,
         date: date,
         apply: apply

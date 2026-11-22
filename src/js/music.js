@@ -68,7 +68,8 @@
     function ensureAudio() {
         if (audio) return audio;
         audio = new Audio();
-        audio.preload = 'none';
+        // Download ahead of the playhead while playing (engine-managed progressive buffer).
+        audio.preload = 'auto';
         audio.addEventListener('ended', function () { next(true); });
         audio.addEventListener('error', function () {
             lastError = 'Stream failed';
@@ -176,8 +177,10 @@
     function playSong(song, announce) {
         current = song;
         var a = ensureAudio();
+        a.preload = 'auto';
         a.src = Subsonic.streamUrl(song.id);
         applyVolume();
+        // Start immediately; the engine keeps buffering ahead while it plays.
         var playPromise = a.play();
         if (playPromise && playPromise.catch) {
             playPromise.catch(function (e) {

@@ -103,27 +103,9 @@ html, body {
     display: block;
 }
 
-/* Live on Home: contain over a blurred twin so letterbox is not flat black. */
-.bg-photo-blur {
-    display: none;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    image-orientation: from-image;
-    filter: blur(24px);
-    transform: scale(1.1);
-}
-
-.bg-photo-blur.on {
-    display: block;
-}
-
-.bg-photo.contain {
-    object-fit: contain;
+/* Portrait: still cover (quiet Home), bias up so faces/subjects stay in frame. */
+.bg-photo.portrait {
+    object-position: center 40%;
 }
 
 /*
@@ -617,6 +599,27 @@ h1, h2 {
     transform: scale(1.08);
 }
 
+/*
+ * Appearance → Focus (curated presets). Screensaver pan is separate.
+ * Both = scale + ring. Scale = grow only. Ring = outline only.
+ */
+.focus-ring .app.focused .tile,
+.focus-ring .input.focused .tile,
+.focus-ring .gear.focused,
+.focus-ring .music-btn.focused,
+.focus-ring .thumb.focused img {
+    transform: none;
+}
+
+.focus-scale .app.focused .tile,
+.focus-scale .input.focused .tile {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.focus-scale .thumb.focused img {
+    box-shadow: none;
+}
+
 /* ---------- Pages (everything except Home) ---------- */
 
 /* Static dim layer so pages stay readable over any wallpaper. */
@@ -665,31 +668,118 @@ h1, h2 {
     transition: transform 0.22s ease-out;
 }
 
+/* Appearance → Tiles. Compact fits six across All apps; Home row packs tighter before scroll. */
+.tiles-compact .app {
+    width: 248px;
+    margin-right: 28px;
+}
+
+.tiles-compact .tile {
+    height: 140px;
+    border-radius: 18px;
+}
+
+.tiles-compact .app .label {
+    margin-top: 14px;
+    font-size: 22px;
+}
+
+.tiles-compact .wordmark {
+    font-size: 48px;
+}
+
+.tiles-compact .mono {
+    font-size: 50px;
+}
+
+.tiles-compact .all-tile svg {
+    width: 52px;
+    height: 52px;
+    margin: -26px 0 0 -26px;
+}
+
+.tiles-compact .grid {
+    grid-template-columns: repeat(6, 248px);
+    column-gap: 28px;
+    row-gap: 28px;
+}
+
+/* Consoles: two compact app slots wide (248 + 28 + 248) so the shelves line up. */
+.tiles-compact .input {
+    width: 524px;
+    margin-right: 28px;
+}
+
+.tiles-compact .input .tile {
+    height: 156px;
+    padding: 0 22px;
+    border-radius: 18px;
+}
+
+.tiles-compact .input .mark {
+    width: 52px;
+    height: 52px;
+    margin: 0 0 10px;
+}
+
+.tiles-compact .input .name {
+    font-size: 24px;
+}
+
+.tiles-compact .input .port {
+    margin-top: 6px;
+    font-size: 18px;
+}
+
+.tiles-compact .dot {
+    width: 12px;
+    height: 12px;
+    margin-right: 10px;
+}
+
 /* ---------- Settings ---------- */
+
+/* List hubs sit in the middle of the stage; title centered above. */
+#settings .page-head,
+#settings-home .page-head,
+#settings-atmosphere .page-head,
+#settings-samsung .page-head,
+#consoles .page-head,
+#advanced .page-head {
+    justify-content: center;
+}
 
 .settings-list {
     position: absolute;
-    top: 230px;
-    left: var(--edge);
-    width: 1100px;
+    top: 220px;
+    bottom: 100px;
+    left: 50%;
+    width: 960px;
     margin: 0;
     padding: 0;
     list-style: none;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .setting-row {
     display: flex;
     align-items: center;
+    justify-content: center;
+    gap: 24px;
     padding: 24px 36px;
     margin-bottom: 12px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.06);
     font-size: 36px;
     font-weight: 600;
+    text-align: center;
 }
 
 .setting-label {
-    flex: 1;
+    flex: none;
 }
 
 .setting-row .mini {
@@ -1003,6 +1093,7 @@ h1, h2 {
     margin-bottom: 20px;
     font-size: 34px;
     font-weight: 700;
+    text-align: center;
 }
 
 #menu-list {
@@ -1017,6 +1108,7 @@ h1, h2 {
     border-radius: 12px;
     font-size: 30px;
     color: var(--muted);
+    text-align: center;
 }
 
 #menu-list li.focused {
@@ -1302,20 +1394,39 @@ html.preview, html.preview body {
     will-change: opacity;
 }
 
+/* Side-only blur strips for portraits (no top/bottom wash, no clip-path). */
+.ss-pillar {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.ss-photo.contain:not(.no-blur) .ss-pillar {
+    display: block;
+}
+
+.ss-pillar-left { left: 0; }
+.ss-pillar-right { right: 0; }
+
 .ss-photo-blur {
     position: absolute;
     top: 0;
-    left: 0;
-    width: 100%;
     height: 100%;
+    width: 1920px;
+    max-width: none;
     object-fit: cover;
     object-position: center;
     image-orientation: from-image;
-    filter: blur(24px);
-    transform: scale(1.1);
-    opacity: 0;
+    filter: blur(14px);
+    transform: scale(1.08);
     pointer-events: none;
 }
+
+.ss-pillar-left .ss-photo-blur { left: 0; }
+.ss-pillar-right .ss-photo-blur { right: 0; }
 
 .ss-photo-img {
     position: absolute;
@@ -1331,18 +1442,14 @@ html.preview, html.preview body {
     will-change: transform;
 }
 
-/* Live: full frame (no cover zoom); blurred cover fills the letterbox instead of black. */
-.ss-photo.contain .ss-photo-blur {
-    opacity: 1;
-}
-
+/* Portrait: sharp photo fills stage height; pillars only on the sides. */
 .ss-photo.contain .ss-photo-img {
     object-fit: contain;
+    object-position: center center;
 }
 
-/* Portrait focus-zoom aims slightly above centre (faces / subjects). */
 .ss-photo.portrait .ss-photo-img {
-    transform-origin: center 40%;
+    transform-origin: center center;
 }
 
 
@@ -1358,15 +1465,16 @@ html.preview, html.preview body {
 .ss-caption {
     position: absolute;
     left: var(--edge);
-    bottom: 40px;
-    width: 960px;
+    bottom: 72px;
+    width: 640px;
+    max-width: 34vw;
     transition: transform 1200ms ease-out;
 }
 
 .ss-title {
     font-size: 26px;
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.12em;
     color: rgba(220, 224, 232, 0.75);
 }
 
@@ -1384,21 +1492,91 @@ html.preview, html.preview body {
 #screensaver.tone-dark .ss-music-title,
 #screensaver.tone-dark .ss-music-artist,
 #screensaver.tone-dark .ss-wx-temp,
-#screensaver.tone-dark .ss-wx-detail {
+#screensaver.tone-dark .ss-wx-detail,
+#screensaver.tone-dark .ss-legend,
+#screensaver.tone-dark .ss-legend-key {
     color: #0b0d12;
+}
+
+#screensaver.tone-dark .ss-legend-key {
+    border-color: rgba(11, 13, 18, 0.35);
 }
 
 #screensaver.tone-dark .ss-wx-icon svg {
     color: #0b0d12;
 }
 
-/* Now-playing, above the photo caption; display-only (any key still dismisses). */
+/* Now-playing, above the photo caption — same fixed-width slot as caption. */
 .ss-music {
     position: absolute;
     left: var(--edge);
-    bottom: 160px;
-    width: 720px;
+    bottom: 190px;
+    width: 640px;
+    max-width: 34vw;
     transition: transform 1200ms ease-out;
+}
+
+/* Compact remote legend — center bottom, clear of caption and clock. */
+.ss-legend {
+    position: absolute;
+    left: 50%;
+    bottom: 28px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-size: 18px;
+    font-weight: 500;
+    color: rgba(220, 224, 232, 0.55);
+    pointer-events: none;
+}
+
+.ss-legend.hidden { display: none; }
+
+.ss-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.ss-legend-key {
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(243, 244, 246, 0.78);
+}
+
+/* Provider name flash on ↑↓ — plain text, screen center, no plate. */
+.ss-provider {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgba(243, 244, 246, 0.92);
+    text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 280ms ease;
+}
+
+.ss-provider.on {
+    opacity: 1;
+}
+
+#screensaver.tone-dark .ss-provider {
+    color: #0b0d12;
+    text-shadow: 0 1px 18px rgba(255, 255, 255, 0.35);
 }
 
 .ss-music-title {
@@ -1414,23 +1592,16 @@ html.preview, html.preview body {
     color: rgba(220, 224, 232, 0.6);
 }
 
-/*
- * Four anchors, cycled every couple of minutes so nothing bright sits in one place long enough
- * to mark the panel. They keep clear of the caption's bottom-left corner.
- */
+/* Fixed bottom-right — clear of the caption; photo drift covers burn-in motion. */
 .ss-clock {
     position: absolute;
+    right: var(--edge);
+    bottom: 96px;
     display: flex;
     /* Bottom-aligned so the weather detail and the date share a baseline. */
     align-items: flex-end;
     gap: 36px;
-    transition: opacity 1500ms ease-in-out;
 }
-
-.ss-clock.pos-0 { right: var(--edge); bottom: 96px; }
-.ss-clock.pos-1 { right: var(--edge); top: 96px; }
-.ss-clock.pos-2 { left: var(--edge); top: 96px; }
-.ss-clock.pos-3 { right: var(--edge); top: 470px; }
 
 .ss-clock-main {
     text-align: right;

@@ -11,6 +11,10 @@
  * EXPERIMENTAL. Latency is the open question — if the TV's audio path delays the click much past
  * ~60 ms it will feel detached from the remote and should be turned off. Measure it from the Lab
  * screen ("Sound: report audio latency") before deciding to keep this.
+ *
+ * Intermittent silence is almost always a suspended AudioContext (after another app, HDMI, or
+ * idle). resume() is async; scheduling a tone before it finishes is silent. Play waits for
+ * running, and visibility/pageshow wakes the context when the launcher returns.
  */
 (function () {
     'use strict';
@@ -18,12 +22,17 @@
     var DEFAULTS = {
         enabled: true,
         preset: 'soft',
-        volume: 0.08,
+        volume: 0.08,           // gain for "normal"; quiet/loud scale from this
         minGapMs: 45,   // key repeat can fire faster than this; extra presses are dropped
         presets: {
             soft: { label: 'Soft', freq: 620, ms: 30, type: 'sine' },
             warm: { label: 'Warm', freq: 520, ms: 44, type: 'triangle' },
             bright: { label: 'Bright', freq: 1040, ms: 30, type: 'triangle' }
+        },
+        volumes: {
+            quiet: { label: 'Quiet', scale: 0.5 },
+            normal: { label: 'Normal', scale: 1 },
+            loud: { label: 'Loud', scale: 2 }
         },
         move: { freq: 880, ms: 38, type: 'triangle' },
         edge: { freq: 200, ms: 70, type: 'sine' },
@@ -33,6 +42,8 @@
     var ctx = null;
     var broken = false;
     var lastPlay = 0;
+    var resuming = false;
+    var pending = null; // { name, force } — latest click waiting on resume()
 
     function cfg() {
         var c = (window.LAUNCHER_CONFIG && window.LAUNCHER_CONFIG.sound) || {};
@@ -66,6 +77,28 @@
         });
     }
 
+    function volumeOptions() {
+        var volumes = cfg().volumes;
+        return Object.keys(volumes).map(function (key) {
+            return { key: key, label: volumes[key].label || key };
+        });
+    }
+
+    function selectedVolume() {
+        var c = cfg();
+        var prefs = window.Prefs && Prefs.get ? Prefs.get() : null;
+        var key = prefs && prefs.sound && prefs.sound.volume || 'normal';
+        return c.volumes[key] || c.volumes.normal;
+    }
+
+    function playLevel() {
+        var c = cfg();
+        var level = c.volume * (selectedVolume().scale || 1);
+        // Duck nav clicks while Subsonic ambient music is audible.
+        if (window.Music && Music.isPlaying()) level = Math.min(level, 0.03);
+        return level;
+    }
+
     /*
      * The context is created on the first key press rather than at boot: engines may refuse to
      * start audio without a user gesture, and on a TV the first remote press is that gesture.
@@ -87,6 +120,81 @@
         return ctx;
     }
 
+    function emit(ac, name) {
+        var c = cfg();
+        var voice = name === 'move' ? selectedPreset() : (c[name] || c.move);
+        var t = ac.currentTime;
+        var seconds = voice.ms / 1000;
+        var level = playLevel();
+
+        var osc = ac.createOscillator();
+        osc.type = voice.type;
+        osc.frequency.value = voice.freq;
+
+        var gain = ac.createGain();
+        // Tiny attack keeps the start from clicking; exponential decay reads as a tick.
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(level, t + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(t);
+        osc.stop(t + seconds + 0.02);
+        osc.onended = function () {
+            try {
+                gain.disconnect();
+                osc.disconnect();
+            } catch (e) {
+                // Already torn down.
+            }
+        };
+    }
+
+    function flushPending() {
+        var p = pending;
+        pending = null;
+        if (!p) return;
+        if (!p.force && !enabled()) return;
+        var ac = ctx;
+        if (!ac || ac.state !== 'running') return;
+        var now = Date.now();
+        if (!p.force && now - lastPlay < cfg().minGapMs) return;
+        try {
+            emit(ac, p.name);
+            lastPlay = now;
+        } catch (e) {
+            if (window.DevLog) DevLog.log('Sound failed: ' + DevLog.errorText(e));
+        }
+    }
+
+    /*
+     * Platforms suspend the context when another app / HDMI takes the foreground. resume() is
+     * a promise; tones scheduled before it settles never sound. Keep one pending click and play
+     * it once running.
+     */
+    function ensureRunning(then) {
+        var ac = context();
+        if (!ac) return;
+        if (ac.state === 'running') {
+            then(ac);
+            return;
+        }
+        if (!ac.resume) return;
+        if (resuming) return;
+        resuming = true;
+        Promise.resolve(ac.resume()).then(function () {
+            resuming = false;
+            if (ac.state === 'running') {
+                then(ac);
+                flushPending();
+            }
+        }, function (err) {
+            resuming = false;
+            if (window.DevLog) DevLog.log('Sound resume failed: ' + DevLog.errorText(err));
+        });
+    }
+
     function play(name, force) {
         if (!force && !enabled()) return;
         var c = cfg();
@@ -96,45 +204,33 @@
         var ac = context();
         if (!ac) return;
 
-        try {
-            // Held keys can arrive while the context is suspended by the platform.
-            if (ac.state === 'suspended' && ac.resume) ac.resume();
-
-            var voice = name === 'move' ? selectedPreset() : (c[name] || c.move);
-            var t = ac.currentTime;
-            var seconds = voice.ms / 1000;
-            // Duck nav clicks while Subsonic ambient music is audible.
-            var level = c.volume;
-            if (window.Music && Music.isPlaying()) level = Math.min(level, 0.03);
-
-            var osc = ac.createOscillator();
-            osc.type = voice.type;
-            osc.frequency.value = voice.freq;
-
-            var gain = ac.createGain();
-            // Tiny attack keeps the start from clicking; exponential decay reads as a tick.
-            gain.gain.setValueAtTime(0.0001, t);
-            gain.gain.exponentialRampToValueAtTime(level, t + 0.004);
-            gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
-
-            osc.connect(gain);
-            gain.connect(ac.destination);
-            osc.start(t);
-            osc.stop(t + seconds + 0.02);
-            osc.onended = function () {
-                try {
-                    gain.disconnect();
-                    osc.disconnect();
-                } catch (e) {
-                    // Already torn down.
-                }
-            };
-            lastPlay = now;
-        } catch (e) {
-            broken = true;
-            if (window.DevLog) DevLog.log('Sound failed, disabling: ' + DevLog.errorText(e));
+        if (ac.state === 'running') {
+            try {
+                emit(ac, name);
+                lastPlay = now;
+            } catch (e) {
+                // Transient graph errors must not permanently kill nav clicks.
+                if (window.DevLog) DevLog.log('Sound failed: ' + DevLog.errorText(e));
+            }
+            return;
         }
+
+        pending = { name: name, force: !!force };
+        ensureRunning(function () {
+            // flushPending handles the queued click after resume.
+        });
     }
+
+    function wake() {
+        if (document.hidden) return;
+        if (!ctx || broken) return;
+        if (ctx.state === 'running') return;
+        ensureRunning(function () { /* primed for the next key */ });
+    }
+
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('focus', wake);
 
     // ---------- Lab diagnostics
 
@@ -218,7 +314,9 @@
         preview: function () { play('move', true); },
         enabled: enabled,
         presetOptions: presetOptions,
+        volumeOptions: volumeOptions,
         presetLabel: function () { return selectedPreset().label || 'Custom'; },
+        volumeLabel: function () { return selectedVolume().label || 'Normal'; },
         actions: function () {
             return [
                 { label: 'Sound: report audio latency', run: report },

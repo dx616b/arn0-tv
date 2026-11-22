@@ -64,52 +64,41 @@ createServer(async (req, res) => {
     }
 
     if (path === '/api/live/apod') {
-        // Preview: resolve one APOD day via science.nasa.gov WP (old apYYMMDD.html is a shell).
+        // Preview: official apod-basic endpoint (hdurl). Legacy apod.nasa.gov image paths redirect to HTML.
         const date = u.searchParams.get('date') || '';
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
             res.writeHead(400).end();
             return;
         }
-        const months = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ];
-        const parts = date.split('-');
-        const query = `APOD: ${parts[0]} ${months[Number(parts[1]) - 1]} ${Number(parts[2])}`;
         try {
-            const searchUrl = 'https://science.nasa.gov/wp-json/wp/v2/image-article?search=' +
-                encodeURIComponent(query) + '&per_page=5';
-            const search = await fetch(searchUrl, { signal: AbortSignal.timeout(15000) });
-            const list = await search.json();
-            const want = query.toLowerCase();
-            const post = (Array.isArray(list) ? list : []).find((p) => {
-                const t = String(p?.title?.rendered || '')
-                    .replace(/&#8211;/g, '–')
-                    .replace(/&amp;/g, '&')
-                    .toLowerCase();
-                return t.startsWith(want);
-            });
-            if (!post?.featured_media) {
+            const basicUrl = 'https://science.nasa.gov/wp-json/wp/v2/apod-basic/?date=' +
+                encodeURIComponent(date);
+            const basicRes = await fetch(basicUrl, { signal: AbortSignal.timeout(15000) });
+            const raw = await basicRes.json();
+            const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+            const item = list.find((x) => x && x.date === date) || null;
+            const hd = item && item.hdurl ? String(item.hdurl) : '';
+            if (!item || item.media_type !== 'image' || !/^https?:\/\//i.test(hd) ||
+                    /\/image-article\//i.test(hd)) {
                 res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
                 res.end(JSON.stringify({ error: 'not found' }));
                 return;
             }
-            const mediaRes = await fetch(
-                'https://science.nasa.gov/wp-json/wp/v2/media/' + post.featured_media,
-                { signal: AbortSignal.timeout(15000) }
-            );
-            const media = await mediaRes.json();
-            const sizes = media?.media_details?.sizes || {};
-            const pick = sizes['2048x2048'] || sizes.large || sizes['1536x1536'] || sizes.medium_large;
-            const file = pick?.source_url || media?.source_url || '';
-            const thumb = sizes.medium?.source_url || sizes.thumbnail?.source_url || file;
-            let title = String(post.title?.rendered || '')
-                .replace(/&#8211;/g, '–')
+            const base = hd.split('?')[0];
+            const file = /assets\.science\.nasa\.gov/i.test(base)
+                ? base + '?w=1920&fit=clip'
+                : hd;
+            const thumb = /assets\.science\.nasa\.gov/i.test(base)
+                ? base + '?w=480&fit=clip'
+                : hd;
+            const strip = (s) => String(s || '')
+                .replace(/<[^>]+>/g, '')
                 .replace(/&amp;/g, '&')
-                .replace(/^APOD:\s*/i, '')
-                .replace(/^\d{4} [A-Za-z]+ \d{1,2}\s*[–\-]\s*/, '')
-                .replace(/\s*-\s*NASA Science\s*$/i, '')
-                .trim() || 'NASA APOD';
+                .replace(/&quot;/g, '"')
+                .replace(/&#8211;/g, '–')
+                .trim();
+            const title = strip(item.title).replace(/\s*-\s*NASA Science\s*$/i, '').trim() ||
+                'NASA APOD';
             res.writeHead(200, {
                 'Content-Type': 'application/json; charset=utf-8',
                 'Cache-Control': 'no-store'
@@ -119,7 +108,7 @@ createServer(async (req, res) => {
                 title,
                 file,
                 thumb,
-                credit: 'NASA APOD',
+                credit: strip(item.credit || item.copyright) || 'NASA APOD',
                 remote: true
             }));
         } catch (e) {

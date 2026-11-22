@@ -11,8 +11,8 @@
         { key: '1d', label: 'Daily', ms: 24 * 60 * 60 * 1000 }
     ];
 
-    // Decode the next few photos (sharp + blur thumb) before they are shown.
-    var PRELOAD_N = 3;
+    // Decode the next photo (sharp + blur thumb) before it is shown — keep lean on TV.
+    var PRELOAD_N = 1;
     var preloadHold = [];
 
     var token = 0;
@@ -20,14 +20,44 @@
 
     function bundled() { return window.WALLPAPERS || []; }
 
-    function isLive() { return Prefs.get().wallpaper.mode === 'live'; }
-
-    // Active catalog for the current mode (bundled or live pool).
-    function list() {
-        return isLive() ? LiveWallpaper.list() : bundled();
+    function hiddenBundledKeys() {
+        var list = Prefs.get().wallpaper.hiddenBundled;
+        return Array.isArray(list) ? list : [];
     }
 
-    var PIN_MAX = 5;
+    function isBundledHidden(key) {
+        return hiddenBundledKeys().indexOf(key) >= 0;
+    }
+
+    // Shipped stills still shown in Photo / Rotate.
+    function bundledVisible() {
+        return bundled().filter(function (w) { return w && !isBundledHidden(w.key); });
+    }
+
+    function isLive() { return Prefs.get().wallpaper.mode === 'live'; }
+
+    // Active catalog for the current mode (visible bundled or live pool).
+    function list() {
+        return isLive() ? LiveWallpaper.list() : bundledVisible();
+    }
+
+    // First usable Photo key after a remove/hide (temp, pins, then visible shipped).
+    function fallbackPhotoKey(exceptKey) {
+        var temp = tempMeta();
+        if (temp && temp.key && temp.key !== exceptKey) return temp.key;
+        var pins = pinsMeta();
+        var i;
+        for (i = 0; i < pins.length; i++) {
+            if (pins[i] && pins[i].key && pins[i].key !== exceptKey) return pins[i].key;
+        }
+        var ship = bundledVisible();
+        for (i = 0; i < ship.length; i++) {
+            if (ship[i] && ship[i].key && ship[i].key !== exceptKey) return ship[i].key;
+        }
+        return '';
+    }
+
+    var PIN_MAX = 20;
     var PIN_DB = 'arn0.pins.v1';
     var PIN_STORE = 'blobs';
     var blobUrls = {}; // key → object URL (session)
@@ -35,6 +65,29 @@
     function pinsMeta() {
         var list = Prefs.get().wallpaper.pins;
         return Array.isArray(list) ? list : [];
+    }
+
+    function formatBytes(n) {
+        var b = Math.max(0, Math.floor(Number(n) || 0));
+        if (b < 1024) return b + ' B';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(b < 10 * 1024 ? 1 : 0) + ' KB';
+        return (b / (1024 * 1024)).toFixed(b < 10 * 1024 * 1024 ? 1 : 0) + ' MB';
+    }
+
+    // Sum of stored pin image bytes (IndexedDB). Missing sizes count as 0 until hydrate.
+    function pinsBytes() {
+        return pinsMeta().reduce(function (sum, p) {
+            return sum + (p && p.bytes > 0 ? p.bytes : 0);
+        }, 0);
+    }
+
+    // e.g. "3/20 · 4.2 MB" for Settings labels.
+    function pinsStorageSummary() {
+        var n = pinsMeta().length;
+        var bytes = pinsBytes();
+        var count = n + '/' + PIN_MAX;
+        if (!n || !bytes) return count;
+        return count + ' · ' + formatBytes(bytes);
     }
 
     function openPinDb() {
@@ -122,7 +175,8 @@
             thumb: local || meta.thumb || meta.file,
             credit: meta.credit || '',
             remote: !local,
-            stored: !!local
+            stored: !!local,
+            bytes: meta.bytes > 0 ? meta.bytes : 0
         };
     }
 
@@ -136,11 +190,73 @@
         return pinsMeta().map(entryFromPin).filter(Boolean);
     }
 
+    function tempMeta() {
+        var t = Prefs.get().wallpaper.tempPhoto;
+        return t && t.key ? t : null;
+    }
+
+    function entryFromTemp(meta) {
+        if (!meta || !meta.key) return null;
+        return {
+            key: meta.key,
+            title: meta.title || 'Temporary',
+            sub: meta.sub || '',
+            file: meta.file,
+            fileFallback: meta.fileFallback || '',
+            fileFallbacks: meta.fileFallbacks || [],
+            thumb: meta.thumb || meta.file,
+            credit: meta.credit || '',
+            remote: true,
+            stored: false,
+            temporary: true
+        };
+    }
+
+    function tempPhotoEntry() {
+        return entryFromTemp(tempMeta());
+    }
+
+    function clearTempPhoto() {
+        var w = Prefs.get().wallpaper;
+        if (!w.tempPhoto) return;
+        w.tempPhoto = null;
+        Prefs.save();
+    }
+
     function find(key) {
         if (isLive()) return LiveWallpaper.find(key);
         var pin = pinsMeta().find(function (p) { return p.key === key; });
         if (pin) return entryFromPin(pin);
-        return bundled().find(function (w) { return w.key === key; }) || bundled()[0] || null;
+        var temp = tempMeta();
+        if (temp && temp.key === key) return entryFromTemp(temp);
+        var hit = bundled().find(function (w) { return w.key === key; });
+        if (hit && !isBundledHidden(hit.key)) return hit;
+        if (temp) return entryFromTemp(temp);
+        var visible = bundledVisible();
+        if (visible[0]) return visible[0];
+        return entryFromPin(pinsMeta()[0]) || bundled()[0] || null;
+    }
+
+    // Apply a Live photo as Photo without adding it to the pin shelf (needs network).
+    function useTemporary(entry) {
+        if (!entry || !entry.key || !entry.file) return false;
+        var w = Prefs.get().wallpaper;
+        w.tempPhoto = {
+            key: entry.key,
+            title: entry.title || 'Temporary',
+            sub: entry.sub || '',
+            file: entry.file,
+            fileFallback: entry.fileFallback || '',
+            fileFallbacks: entry.fileFallbacks || [],
+            thumb: entry.thumb || entry.file,
+            credit: entry.credit || '',
+            source: entry.source || ''
+        };
+        w.photo = entry.key;
+        w.mode = 'photo';
+        Prefs.save();
+        apply();
+        return true;
     }
 
     function fetchBlob(url) {
@@ -206,6 +322,8 @@
     function activatePin(meta) {
         rememberPinMeta(meta);
         var p = Prefs.get().wallpaper;
+        // Permanent pin replaces any temporary use of this (or another) Live shot.
+        p.tempPhoto = null;
         p.photo = meta.key;
         p.mode = 'photo';
         Prefs.save();
@@ -216,6 +334,7 @@
     // Returns a Promise<boolean> — true when bytes were stored locally.
     function pinLive(entry) {
         if (!entry || !entry.key || !entry.file) return Promise.resolve(false);
+        var existing = pinsMeta().find(function (x) { return x.key === entry.key; });
         var meta = {
             key: entry.key,
             title: entry.title || 'Pinned',
@@ -225,9 +344,10 @@
             fileFallbacks: entry.fileFallbacks || [],
             thumb: entry.thumb || entry.file,
             credit: entry.credit || '',
-            remote: true
+            remote: true,
+            bytes: existing && existing.bytes > 0 ? existing.bytes : 0
         };
-        if (blobUrls[entry.key] || pinsMeta().some(function (x) { return x.key === entry.key; })) {
+        if (blobUrls[entry.key] || existing) {
             if (blobUrls[entry.key]) {
                 activatePin(meta);
                 return Promise.resolve(true);
@@ -236,6 +356,7 @@
         return downloadPinBlob(entry).then(function (blob) {
             return putPinBlob(entry.key, blob).then(function () {
                 setBlobUrl(entry.key, blob);
+                meta.bytes = blob && blob.size ? blob.size : 0;
                 activatePin(meta);
                 return true;
             });
@@ -256,15 +377,72 @@
         return clearPinBlobs();
     }
 
+    // Drop one saved pin (metadata + IndexedDB bytes). Returns true if it was removed.
+    function removePin(key) {
+        if (!key) return Promise.resolve(false);
+        var before = pinsMeta();
+        if (!before.some(function (p) { return p.key === key; })) {
+            return Promise.resolve(false);
+        }
+        revokeBlobUrl(key);
+        var w = Prefs.get().wallpaper;
+        w.pins = before.filter(function (p) { return p.key !== key; });
+        w.pinned = null;
+        if (w.photo === key) {
+            w.photo = fallbackPhotoKey(key) || (bundled()[0] && bundled()[0].key) || 'forest';
+            if (w.mode === 'photo') apply();
+        }
+        Prefs.save();
+        return deletePinBlob(key).then(function () { return true; }, function () { return true; });
+    }
+
+    // Hide a shipped still from Photo / Rotate (app file stays; Restore bundled brings it back).
+    // Returns false when this would leave no photos at all.
+    function hideBundled(key) {
+        if (!key || !bundled().some(function (w) { return w.key === key; })) return false;
+        if (isBundledHidden(key)) return true;
+        if (!fallbackPhotoKey(key)) return false;
+        var w = Prefs.get().wallpaper;
+        var hidden = hiddenBundledKeys().slice();
+        if (hidden.indexOf(key) < 0) hidden.push(key);
+        w.hiddenBundled = hidden;
+        if (w.photo === key) {
+            w.photo = fallbackPhotoKey(key);
+            if (w.mode === 'photo') apply();
+        }
+        Prefs.save();
+        return true;
+    }
+
+    function restoreBundled() {
+        var w = Prefs.get().wallpaper;
+        var n = hiddenBundledKeys().length;
+        w.hiddenBundled = [];
+        Prefs.save();
+        if (w.mode === 'photo' || w.mode === 'rotate') apply();
+        return n;
+    }
+
+    function hiddenBundledCount() {
+        return hiddenBundledKeys().length;
+    }
+
     // Legacy name used when switching to a bundled photo (does not wipe the pin shelf).
     function clearPinned() { /* no-op: pins are kept until Clear saved pins */ }
 
     function hydratePins() {
+        var sizeChanged = false;
         return Promise.all(pinsMeta().map(function (meta) {
             return getPinBlob(meta.key).then(function (blob) {
-                if (blob) setBlobUrl(meta.key, blob);
+                if (!blob) return;
+                setBlobUrl(meta.key, blob);
+                if (!(meta.bytes > 0) || meta.bytes !== blob.size) {
+                    meta.bytes = blob.size || 0;
+                    sizeChanged = true;
+                }
             }, function () {});
         })).then(function () {
+            if (sizeChanged) Prefs.save();
             if (!isLive() && Prefs.get().wallpaper.mode === 'photo') apply();
         });
     }
@@ -276,7 +454,6 @@
 
     function bg() { return document.getElementById('bg'); }
     function bgPhoto() { return document.getElementById('bg-photo'); }
-    function bgPhotoBlur() { return document.getElementById('bg-photo-blur'); }
     function scrim() { return document.getElementById('bg-scrim'); }
 
     function setScrim(on) {
@@ -347,7 +524,7 @@
         preloadEntries(ahead, PRELOAD_N);
     }
 
-    // Home is static cover (no letterbox blur). Screensaver still owns contain+blur.
+    // Home: always cover. Portrait biases object-position up (faces/subjects).
     function homeUrls(w) {
         var urls = [];
         function add(u) {
@@ -361,21 +538,50 @@
         return urls.length ? urls : photoUrls(w);
     }
 
+    /*
+     * naturalWidth/Height ignore EXIF rotation; many phone JPEGs store a landscape buffer that
+     * displays as portrait with image-orientation: from-image. Measure a hidden oriented <img>.
+     */
+    function orientedSize(url, fallback, done) {
+        var probe = document.createElement('img');
+        var settled = false;
+        var finish = function (w, h) {
+            if (settled) return;
+            settled = true;
+            if (probe.parentNode) probe.parentNode.removeChild(probe);
+            if (!w || !h) {
+                w = (fallback && fallback.naturalWidth) || 0;
+                h = (fallback && fallback.naturalHeight) || 0;
+            }
+            done(w, h);
+        };
+        probe.setAttribute('alt', '');
+        probe.style.cssText = 'position:fixed;left:0;top:0;margin:0;border:0;padding:0;' +
+            'width:auto;height:auto;max-width:none;max-height:none;' +
+            'opacity:0;pointer-events:none;image-orientation:from-image;z-index:-1';
+        probe.onload = function () {
+            document.body.appendChild(probe);
+            void probe.offsetWidth;
+            finish(probe.offsetWidth, probe.offsetHeight);
+        };
+        probe.onerror = function () { finish(0, 0); };
+        probe.src = url;
+        if (probe.complete && probe.naturalWidth) {
+            document.body.appendChild(probe);
+            void probe.offsetWidth;
+            finish(probe.offsetWidth, probe.offsetHeight);
+        }
+    }
+
     function display(w) {
         var t = ++token;
         var photo = bgPhoto();
-        var blur = bgPhotoBlur();
         if (!w) {
             lastHomeUrl = '';
             bg().style.backgroundImage = '';
             if (photo) {
                 photo.removeAttribute('src');
-                photo.classList.remove('on', 'contain');
-            }
-            if (blur) {
-                blur.onerror = null;
-                blur.removeAttribute('src');
-                blur.classList.remove('on');
+                photo.classList.remove('on', 'portrait');
             }
             setScrim(false);
             return;
@@ -384,6 +590,20 @@
 
         var i = 0;
         var probe = new Image();
+        function paint(url, ow, oh) {
+            if (t !== token) return;
+            if (url === lastHomeUrl && photo && photo.classList.contains('on')) return;
+            lastHomeUrl = url;
+            bg().style.backgroundImage = 'none';
+            // Portrait (after EXIF): cover with upward bias — no tiles/blur on Home.
+            var portrait = !!(ow && oh && oh > ow);
+            if (photo) {
+                photo.src = url;
+                photo.classList.add('on');
+                photo.classList.toggle('portrait', portrait);
+            }
+            setScrim(!!w.remote);
+        }
         function tryUrl() {
             if (i >= urls.length) {
                 DevLog.log('Wallpaper failed to load: ' + w.file);
@@ -393,20 +613,9 @@
             probe.onload = function () {
                 if (t !== token) return;
                 var url = urls[i];
-                if (url === lastHomeUrl && photo && photo.classList.contains('on')) return;
-                lastHomeUrl = url;
-                bg().style.backgroundImage = 'none';
-                if (blur) {
-                    blur.onerror = null;
-                    blur.removeAttribute('src');
-                    blur.classList.remove('on');
-                }
-                if (photo) {
-                    photo.src = url;
-                    photo.classList.add('on');
-                    photo.classList.remove('contain');
-                }
-                setScrim(!!w.remote);
+                orientedSize(url, probe, function (ow, oh) {
+                    paint(url, ow, oh);
+                });
             };
             probe.onerror = function () {
                 i++;
@@ -427,6 +636,16 @@
         if (p.mode === 'off') {
             display(null);
             return;
+        }
+        // Hidden shipped still: move Photo / Rotate onto something still visible.
+        if ((p.mode === 'photo' || p.mode === 'rotate') &&
+                !pinsMeta().some(function (x) { return x.key === p.photo; }) &&
+                isBundledHidden(p.photo)) {
+            var next = fallbackPhotoKey(p.photo);
+            if (next) {
+                p.photo = next;
+                Prefs.save();
+            }
         }
         display(find(currentKey()));
     }
@@ -489,10 +708,10 @@
     }
 
     function ensureLive(thenApply) {
-        if (!isLive() || !window.LiveWallpaper) return;
+        if (!isLive() || !window.LiveWallpaper) return Promise.resolve(false);
         // First paint / Settings apply: show the ring while the first photo is fetched.
         if (thenApply) UI.busyShow();
-        LiveWallpaper.ensureDaily().then(function (changed) {
+        return LiveWallpaper.ensureDaily().then(function (changed) {
             if (thenApply) UI.busyHide();
             var p = Prefs.get().wallpaper;
             var l = LiveWallpaper.list();
@@ -502,8 +721,10 @@
             }
             if (changed || thenApply) apply();
             if (!l.length && thenApply) UI.toast('Live wallpaper unavailable');
+            return !!changed;
         }, function () {
             if (thenApply) UI.busyHide();
+            return false;
         });
     }
 
@@ -555,12 +776,24 @@
 
     window.Wallpaper = {
         INTERVALS: INTERVALS,
+        PIN_MAX: PIN_MAX,
         list: list,
         bundled: bundled,
+        bundledVisible: bundledVisible,
         find: find,
         pinnedEntry: pinnedEntry,
         pinsList: pinsList,
+        pinsBytes: pinsBytes,
+        pinsStorageSummary: pinsStorageSummary,
+        formatBytes: formatBytes,
         pinLive: pinLive,
+        useTemporary: useTemporary,
+        tempPhotoEntry: tempPhotoEntry,
+        clearTempPhoto: clearTempPhoto,
+        removePin: removePin,
+        hideBundled: hideBundled,
+        restoreBundled: restoreBundled,
+        hiddenBundledCount: hiddenBundledCount,
         clearPins: clearPins,
         clearPinned: clearPinned,
         interval: interval,
@@ -571,7 +804,7 @@
         start: start,
         isLive: isLive,
         preloadAhead: preloadAhead,
-        ensureLive: function () { ensureLive(true); }
+        ensureLive: function () { return ensureLive(true); }
     };
 })();
 
