@@ -1829,12 +1829,13 @@
         lastFailure = 0;
         retryDelay = RETRY_MS;
         lastError = '';
-        saveCache(provider(), true);
+        // Debounced — sync localStorage + immediate notify made every photo change hitch on TV.
+        saveCache(provider());
         // First Mix frame landed — later slots may use every ready source again.
         avoidSource = '';
         DevLog.log('Live wallpaper: showing ' + (entry.credit || entry.title || entry.key) +
             (entry.source ? ' [' + entry.source + ']' : ''));
-        notify(true);
+        notify();
         return entry;
     }
 
@@ -1905,13 +1906,14 @@
         while (stream.plan.length) {
             var ready = stream.plan.shift();
             if (want === 'mix' || (ready && ready.source === want)) {
-                fillPlan(0);
+                // Defer plan top-up so the new photo can decode without competing for network/CPU.
+                fillPlan(700);
                 return showEntry(ready);
             }
         }
         return advanceOne(g, true).then(function (entry) {
             if (g !== generation || !entry) return null;
-            fillPlan(0);
+            fillPlan(700);
             return showEntry(entry);
         }, function (e) {
             if (!list().length) {
@@ -1920,7 +1922,7 @@
                 notify();
             }
             DevLog.log('Live wallpaper: takeNext failed: ' + (e && e.message ? e.message : e));
-            fillPlan(0);
+            fillPlan(700);
             return null;
         });
     }

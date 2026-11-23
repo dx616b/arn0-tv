@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.18
+
+### Music
+- Curated online Radio (no server): SomaFM + Radio Record house/dance/hip-hop/DnB and more
+- Station picker menu; custom HTTPS stream URL; Next switches station
+- Dead stream auto-fix (ice mirrors / aac, then next station); remember last good host
+- Home bar and screensaver work with Radio alone (same pause/resume as Navidrome)
+
+### Live wallpaper / performance
+- Faster photo changes: debounce Live cache writes, skip extra EXIF decode for Bing/NASA/etc., defer plan fill and preload
+
 ## 0.6.17
 
 ### Live wallpaper / Mix

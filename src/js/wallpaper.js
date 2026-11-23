@@ -511,18 +511,17 @@
         }
     }
 
-    // Best quality first (Home sharp cover); thumb last for screensaver blur preload.
+    // One URL only — decoding every fallback + thumb on each change stalls this SoC.
     function preloadEntry(w) {
         if (!w) return;
-        var urls = [];
-        function add(u) {
-            if (u && urls.indexOf(u) < 0) urls.push(u);
-        }
-        add(w.file);
-        add(w.fileFallback);
-        (w.fileFallbacks || []).forEach(add);
-        add(w.thumb);
-        urls.forEach(preloadUrl);
+        preloadUrl(w.file || w.fileFallback || w.thumb);
+    }
+
+    // EXIF-oriented measure is costly (second full decode). Only Immich / local pins need it.
+    function needsOrientProbe(w) {
+        if (!w) return false;
+        if (!w.remote) return true;
+        return w.source === 'immich';
     }
 
     function preloadEntries(list, n) {
@@ -638,6 +637,10 @@
             probe.onload = function () {
                 if (t !== token) return;
                 var url = urls[i];
+                if (!needsOrientProbe(w)) {
+                    paint(url, probe.naturalWidth, probe.naturalHeight);
+                    return;
+                }
                 orientedSize(url, probe, function (ow, oh) {
                     paint(url, ow, oh);
                 });
@@ -703,7 +706,7 @@
                 p.lastChange = Date.now();
                 Prefs.save();
                 if (!(window.Screensaver && Screensaver.isOpen())) apply();
-                preloadAhead();
+                setTimeout(preloadAhead, 600);
                 finish(w);
             }, function () {
                 if (typeof done === 'function') UI.busyHide();
@@ -721,7 +724,7 @@
         if (p.mode === 'off') p.mode = 'photo';
         Prefs.save();
         apply();
-        preloadAhead();
+        setTimeout(preloadAhead, 600);
         return finish(w);
     }
 

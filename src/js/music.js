@@ -1,5 +1,6 @@
 /*
- * Ambient Subsonic playback while the launcher is foreground (including screensaver).
+ * Ambient playback while the launcher is foreground (including screensaver):
+ * curated online Radio (no server) and/or Subsonic/Navidrome.
  * Pauses on document.hidden when another app takes over. Starts only after a user gesture.
  */
 (function () {
@@ -13,18 +14,173 @@
         { key: 'high', label: 'High', value: 0.55 }
     ];
 
+    // Curated streams. SomaFM paths try SOMA_HOSTS (+ aac). `urls` = fixed HTTPS list.
+    var SOMA_HOSTS = [
+        'https://ice2.somafm.com/',
+        'https://ice1.somafm.com/',
+        'https://ice4.somafm.com/',
+        'https://ice6.somafm.com/'
+    ];
+    var STATIONS = [
+        // House / dance first (distinct channels — no near-duplicate chill pairs).
+        { id: 'beatblender', title: 'Beat Blender', genre: 'Deep house', credit: 'SomaFM',
+            path: 'beatblender-128-mp3', alt: ['beatblender-128-aac'] },
+        { id: 'thetrip', title: 'The Trip', genre: 'Prog house', credit: 'SomaFM',
+            path: 'thetrip-128-mp3', alt: ['thetrip-128-aac'] },
+        { id: 'rrdeep', title: 'Deep', genre: 'Deep house', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/deep96.aacp',
+                'https://radiorecord.hostingradio.ru/deep64.aacp'
+            ] },
+        { id: 'rrhouse', title: 'House Hits', genre: 'House', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/house96.aacp',
+                'https://radiorecord.hostingradio.ru/house64.aacp'
+            ] },
+        { id: 'rrtechno', title: 'Techno', genre: 'Techno', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/techno96.aacp',
+                'https://radiorecord.hostingradio.ru/techno64.aacp'
+            ] },
+        { id: 'poptron', title: 'PopTron', genre: 'Electropop', credit: 'SomaFM',
+            path: 'poptron-128-mp3', alt: ['poptron-128-aac'] },
+        { id: 'defcon', title: 'DEF CON Radio', genre: 'Electronic', credit: 'SomaFM',
+            path: 'defcon-128-mp3', alt: ['defcon-128-aac'] },
+        { id: 'dubstep', title: 'Dub Step Beyond', genre: 'Bass', credit: 'SomaFM',
+            path: 'dubstep-128-mp3', alt: ['dubstep-128-aac'] },
+        { id: 'fluid', title: 'Fluid', genre: 'Trip-hop', credit: 'SomaFM',
+            path: 'fluid-128-mp3', alt: ['fluid-128-aac'] },
+        { id: 'groovesalad', title: 'Groove Salad', genre: 'Downtempo', credit: 'SomaFM',
+            path: 'groovesalad-128-mp3', alt: ['groovesalad-128-aac'] },
+        { id: 'rrhiphop', title: 'Hip-Hop', genre: 'Hip-hop', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/rap96.aacp',
+                'https://radiorecord.hostingradio.ru/rap64.aacp'
+            ] },
+        { id: 'rrtrap', title: 'Trap', genre: 'Hip-hop', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/trap96.aacp',
+                'https://radiorecord.hostingradio.ru/trap64.aacp'
+            ] },
+        { id: 'rrdnb', title: 'Drum & Bass', genre: 'DnB', credit: 'Radio Record',
+            urls: [
+                'https://radiorecord.hostingradio.ru/drumhits96.aacp',
+                'https://radiorecord.hostingradio.ru/drumhits64.aacp'
+            ] },
+        { id: 'indiepop', title: 'Indie Pop Rocks', genre: 'Indie pop', credit: 'SomaFM',
+            path: 'indiepop-128-mp3', alt: ['indiepop-128-aac'] },
+        { id: 'u80s', title: 'Underground 80s', genre: '80s', credit: 'SomaFM',
+            path: 'u80s-128-mp3', alt: ['u80s-128-aac'] },
+        { id: 'digitalis', title: 'Digitalis', genre: 'Synth', credit: 'SomaFM',
+            path: 'digitalis-128-mp3', alt: ['digitalis-128-aac'] },
+        { id: 'reggae', title: 'Heavyweight Reggae', genre: 'Reggae', credit: 'SomaFM',
+            path: 'reggae-128-mp3', alt: ['reggae-128-aac'] },
+        { id: 'illstreet', title: 'Illinois Street Lounge', genre: 'Lounge', credit: 'SomaFM',
+            path: 'illstreet-128-mp3', alt: ['illstreet-128-aac'] },
+        { id: 'goa', title: 'Suburbs of Goa', genre: 'World', credit: 'SomaFM',
+            path: 'suburbsofgoa-128-mp3', alt: ['suburbsofgoa-128-aac'] },
+        { id: 'sonicuniverse', title: 'Sonic Universe', genre: 'Jazz', credit: 'SomaFM',
+            path: 'sonicuniverse-128-mp3', alt: ['sonicuniverse-128-aac'] },
+        { id: 'seveninch', title: 'Seven Inch Soul', genre: 'Soul', credit: 'SomaFM',
+            path: 'seveninch-128-mp3', alt: ['seveninch-128-aac'] },
+        { id: 'dronezone', title: 'Drone Zone', genre: 'Ambient', credit: 'SomaFM',
+            path: 'dronezone-128-mp3', alt: ['dronezone-128-aac'] }
+    ];
+
     var audio = null;
     var queue = [];
     var current = null;
     var fetching = false;
     var lastError = '';
     var toastSkip = false;
+    var radioFailStreak = 0;
+    var radioMirror = 0;       // index into urlsFor(current station)
+    var radioPlayGen = 0;      // ignore stale Audio error after a src change
     var listeners = [];
     // Cached playlist entries for source === 'playlist' (shuffled, cursor walks through).
     var playlistCache = { id: null, songs: [], cursor: 0 };
 
     function prefs() {
         return Prefs.get().music;
+    }
+
+    function isRadio() {
+        return prefs().source === 'radio';
+    }
+
+    // Home bar / screensaver: Radio needs no server; Random/Playlist need Subsonic.
+    function ready() {
+        return isRadio() || !!(window.Subsonic && Subsonic.configured());
+    }
+
+    function customUrl() {
+        return String(prefs().radioCustomUrl || '').trim();
+    }
+
+    function customStation() {
+        var url = customUrl();
+        return {
+            id: 'custom',
+            title: 'Custom',
+            genre: 'URL',
+            url: url,
+            custom: true
+        };
+    }
+
+    function findStation(id) {
+        if (id === 'custom') return customStation();
+        var hit = STATIONS.find(function (s) { return s.id === id; });
+        return hit || STATIONS[0];
+    }
+
+    // Curated list, plus Custom when a URL is saved (for Next wrap).
+    function playableStations() {
+        var list = STATIONS.slice();
+        if (customUrl()) list.push(customStation());
+        return list;
+    }
+
+    function stationIndex(id) {
+        var list = playableStations();
+        var i = list.findIndex(function (s) { return s.id === id; });
+        return i < 0 ? 0 : i;
+    }
+
+    // Ordered candidate URLs for a station (good host first, then mirrors / aac).
+    function urlsFor(st) {
+        if (!st) return [];
+        if (st.custom || st.id === 'custom') {
+            return st.url ? [st.url] : [];
+        }
+        if (st.urls && st.urls.length) return st.urls.slice();
+        var paths = [st.path].concat(st.alt || []).filter(Boolean);
+        var good = String(prefs().radioGoodHost || '');
+        var hosts = SOMA_HOSTS.slice();
+        if (good) {
+            hosts = [good].concat(hosts.filter(function (h) { return h !== good; }));
+        }
+        var out = [];
+        paths.forEach(function (path) {
+            hosts.forEach(function (host) {
+                out.push(host + path);
+            });
+        });
+        return out;
+    }
+
+    function rememberGoodUrl(url) {
+        if (!url) return;
+        var i;
+        for (i = 0; i < SOMA_HOSTS.length; i++) {
+            if (url.indexOf(SOMA_HOSTS[i]) === 0) {
+                if (prefs().radioGoodHost !== SOMA_HOSTS[i]) {
+                    prefs().radioGoodHost = SOMA_HOSTS[i];
+                    Prefs.save();
+                }
+                return;
+            }
+        }
     }
 
     function shuffleInPlace(list) {
@@ -44,6 +200,15 @@
 
     function sourceLabel() {
         var p = prefs();
+        if (p.source === 'radio') {
+            if (p.radioId === 'custom') {
+                var u = customUrl();
+                if (!u) return 'Custom';
+                return u.length > 28 ? ('Custom · ' + u.slice(0, 24) + '…') : ('Custom · ' + u);
+            }
+            var st = findStation(p.radioId);
+            return st ? st.title : 'Radio';
+        }
         if (p.source === 'playlist' && p.playlistName) return p.playlistName;
         if (p.source === 'playlist' && p.playlistId) return 'Playlist';
         return 'Random';
@@ -56,7 +221,9 @@
     }
 
     function statusText() {
-        if (!Subsonic.configured()) return 'Not configured — set server in Settings → Music';
+        if (!ready()) {
+            return 'Pick Radio, or set a Subsonic server';
+        }
         if (lastError) return lastError;
         if (current) {
             return current.title + (current.artist ? ' · ' + current.artist : '');
@@ -65,20 +232,50 @@
         return prefs().enabled ? 'Ready' : 'Off';
     }
 
+    function onAudioError() {
+        var gen = radioPlayGen;
+        lastError = 'Stream failed';
+        DevLog.log('Music: stream error');
+        if (!isRadio()) {
+            if (!toastSkip) {
+                toastSkip = true;
+                UI.toast('Music stream failed — skipping');
+            }
+            next(true);
+            return;
+        }
+        // Stale error from a previous src — ignore.
+        if (gen !== radioPlayGen) return;
+        var st = findStation(prefs().radioId);
+        var urls = urlsFor(st);
+        radioMirror++;
+        if (radioMirror < urls.length) {
+            DevLog.log('Music: radio try mirror ' + radioMirror + '/' + urls.length +
+                ' for ' + st.id);
+            playRadioUrl(st, urls[radioMirror], false, gen);
+            return;
+        }
+        // All mirrors for this station failed — advance station.
+        if (!toastSkip) {
+            toastSkip = true;
+            UI.toast('Station failed — trying next');
+        }
+        radioMirror = 0;
+        next(true);
+    }
+
     function ensureAudio() {
         if (audio) return audio;
         audio = new Audio();
         // Download ahead of the playhead while playing (engine-managed progressive buffer).
         audio.preload = 'auto';
         audio.addEventListener('ended', function () { next(true); });
-        audio.addEventListener('error', function () {
-            lastError = 'Stream failed';
-            DevLog.log('Music: stream error');
-            if (!toastSkip) {
-                toastSkip = true;
-                UI.toast('Music stream failed — skipping');
-            }
-            next(true);
+        audio.addEventListener('error', onAudioError);
+        audio.addEventListener('playing', function () {
+            if (!isRadio() || !audio || !audio.src) return;
+            radioFailStreak = 0;
+            lastError = '';
+            rememberGoodUrl(audio.src);
         });
         applyVolume();
         return audio;
@@ -129,7 +326,7 @@
     }
 
     function refill() {
-        if (fetching || !Subsonic.configured()) return Promise.resolve();
+        if (fetching || isRadio() || !Subsonic.configured()) return Promise.resolve();
         fetching = true;
         var p = prefs();
         var fetch = (p.source === 'playlist' && p.playlistId)
@@ -149,9 +346,26 @@
         });
     }
 
+    function dropCurrentAudio() {
+        radioPlayGen++;
+        current = null;
+        if (audio) {
+            audio.pause();
+            audio.removeAttribute('src');
+            audio.load();
+        }
+    }
+
     function setSource(source, playlist) {
         var p = prefs();
-        if (source === 'playlist' && playlist && playlist.id != null) {
+        if (source === 'radio') {
+            p.source = 'radio';
+            if (p.radioId === 'custom') {
+                if (!customUrl()) p.radioId = STATIONS[0].id;
+            } else if (!p.radioId || !STATIONS.some(function (s) { return s.id === p.radioId; })) {
+                p.radioId = STATIONS[0].id;
+            }
+        } else if (source === 'playlist' && playlist && playlist.id != null) {
             p.source = 'playlist';
             p.playlistId = String(playlist.id);
             p.playlistName = playlist.name || 'Playlist';
@@ -163,15 +377,145 @@
         Prefs.save();
         clearQueue();
         lastError = '';
-        // Drop the current track so the next Play/Next uses the new source.
-        current = null;
-        if (audio) {
-            audio.pause();
-            audio.removeAttribute('src');
-            audio.load();
+        radioFailStreak = 0;
+        radioMirror = 0;
+        dropCurrentAudio();
+        if (p.playing && p.enabled) {
+            if (p.source === 'radio') playStation(findStation(p.radioId), false);
+            else next(true);
         }
-        if (p.playing && p.enabled) next(true);
         notify();
+    }
+
+    function setRadio(id) {
+        var st = findStation(id);
+        var p = prefs();
+        p.source = 'radio';
+        p.radioId = st.id;
+        Prefs.save();
+        clearQueue();
+        lastError = '';
+        radioFailStreak = 0;
+        radioMirror = 0;
+        dropCurrentAudio();
+        if (p.playing && p.enabled) playStation(st, false);
+        notify();
+        return st;
+    }
+
+    function setCustomUrl(url) {
+        var p = prefs();
+        p.radioCustomUrl = String(url || '').trim();
+        p.source = 'radio';
+        p.radioId = p.radioCustomUrl ? 'custom' : (STATIONS[0] && STATIONS[0].id);
+        Prefs.save();
+        clearQueue();
+        lastError = '';
+        radioFailStreak = 0;
+        radioMirror = 0;
+        dropCurrentAudio();
+        var st = findStation(p.radioId);
+        if (p.playing && p.enabled && p.radioCustomUrl) playStation(st, false);
+        notify();
+        return st;
+    }
+
+    function playRadioUrl(st, url, announce, gen) {
+        if (!st || !url) return;
+        if (gen != null && gen !== radioPlayGen) return;
+        lastError = '';
+        current = {
+            id: st.id,
+            title: st.title,
+            artist: st.custom
+                ? 'Custom stream'
+                : (st.genre + ' · ' + (st.credit || 'SomaFM')),
+            album: st.genre || '',
+            radio: true
+        };
+        var a = ensureAudio();
+        a.preload = 'auto';
+        a.src = url;
+        applyVolume();
+        var playPromise = a.play();
+        if (playPromise && playPromise.catch) {
+            playPromise.catch(function (e) {
+                if (gen != null && gen !== radioPlayGen) return;
+                var msg = (e && e.message) ? e.message : String(e || '');
+                DevLog.log('Music: play() failed: ' + msg);
+                // Gesture / autoplay block — do not burn through mirrors.
+                if (e && (e.name === 'NotAllowedError' || /not allowed|user gesture|interact/i.test(msg))) {
+                    lastError = 'Play blocked';
+                    prefs().playing = false;
+                    Prefs.save();
+                    notify();
+                    return;
+                }
+                // Network / decode — try next mirror or station.
+                onAudioError();
+            });
+        }
+        if (announce && !barVisible()) {
+            UI.toast(st.title + (st.genre ? ' · ' + st.genre : ''));
+        }
+        notify();
+    }
+
+    function playStation(st, announce) {
+        if (!st) return;
+        var urls = urlsFor(st);
+        if (!urls.length) {
+            lastError = st.id === 'custom' ? 'Set a stream URL' : 'No stream URL';
+            UI.toast(lastError);
+            prefs().playing = false;
+            Prefs.save();
+            notify();
+            return;
+        }
+        radioPlayGen++;
+        radioMirror = 0;
+        radioFailStreak = 0;
+        playRadioUrl(st, urls[0], announce, radioPlayGen);
+    }
+
+    function nextRadio(auto) {
+        var p = prefs();
+        if (!p.enabled) {
+            p.enabled = true;
+        }
+        p.playing = true;
+        Prefs.save();
+
+        var list = playableStations();
+        if (!list.length) {
+            lastError = 'No stations';
+            p.playing = false;
+            Prefs.save();
+            notify();
+            return;
+        }
+        var i = stationIndex(p.radioId);
+        // First Play: keep the selected station. Next / stream error: advance (wrap).
+        var advance = auto || !!(current && current.radio);
+        if (advance) {
+            if (auto) {
+                radioFailStreak++;
+                if (radioFailStreak > list.length) {
+                    lastError = 'All stations failed';
+                    p.playing = false;
+                    Prefs.save();
+                    dropCurrentAudio();
+                    notify();
+                    return;
+                }
+            }
+            i = (i + 1) % list.length;
+        }
+        var st = list[i];
+        p.radioId = st.id;
+        Prefs.save();
+        radioMirror = 0;
+        playStation(st, !auto);
     }
 
     function playSong(song, announce) {
@@ -200,6 +544,11 @@
     }
 
     function next(auto) {
+        if (!ready()) return;
+        if (isRadio()) {
+            nextRadio(auto);
+            return;
+        }
         if (!Subsonic.configured()) return;
         var p = prefs();
         if (!p.enabled) {
@@ -221,7 +570,11 @@
     }
 
     function play() {
-        if (!Subsonic.configured()) {
+        if (!ready()) {
+            UI.toast('Pick Radio, or set a Subsonic server');
+            return;
+        }
+        if (!isRadio() && !Subsonic.configured()) {
             UI.toast('Set server, user and password in Music settings');
             return;
         }
@@ -231,6 +584,7 @@
         Prefs.save();
         toastSkip = false;
         lastError = '';
+        radioFailStreak = 0;
         if (current && audio && audio.src && audio.paused && !audio.ended) {
             applyVolume();
             audio.play().catch(function () { next(false); });
@@ -312,7 +666,7 @@
         var sep = document.getElementById('home-music-sep');
         var clock = document.querySelector('#home .clock');
         if (!bar) return;
-        var show = Subsonic.configured();
+        var show = ready();
         var weatherOn = !!(clock && clock.classList.contains('with-weather'));
         bar.classList.toggle('hidden', !show);
         if (sep) sep.classList.toggle('hidden', !(show && weatherOn));
@@ -333,7 +687,7 @@
             fillMarquee(artist, 'Music', false);
         } else {
             fillMarquee(title, 'Not playing', false);
-            fillMarquee(artist, '', false);
+            fillMarquee(artist, isRadio() ? 'Radio' : '', false);
         }
         if (playIcon) playIcon.classList.toggle('hidden', playing);
         if (pauseIcon) pauseIcon.classList.toggle('hidden', !playing);
@@ -372,7 +726,7 @@
     }
 
     function summary() {
-        if (!Subsonic.configured()) return 'Not configured';
+        if (!ready()) return 'Radio or server';
         var p = prefs();
         var src = sourceLabel();
         if (!p.enabled) return 'Off · ' + src;
@@ -409,7 +763,9 @@
 
     window.Music = {
         VOLUMES: VOLUMES,
+        STATIONS: STATIONS,
         init: init,
+        ready: ready,
         play: play,
         pause: pause,
         toggle: toggle,
@@ -418,6 +774,9 @@
         setEnabled: setEnabled,
         setVolume: setVolume,
         setSource: setSource,
+        setRadio: setRadio,
+        setCustomUrl: setCustomUrl,
+        customUrl: customUrl,
         sourceLabel: sourceLabel,
         clearQueue: clearQueue,
         isPlaying: isPlaying,

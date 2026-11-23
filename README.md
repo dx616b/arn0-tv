@@ -20,7 +20,7 @@ TV label is **Arn0+**; app id stays `Arn0Lnchr0.Launcher` so Home / Vetro setup 
 - Home screen with clock, apps, and HDMI consoles (normal remote)
 - Live wallpapers from the web or your own photos
 - Weather on Home and on the screen saver
-- Ambient music from Navidrome (or any Subsonic-compatible server)
+- Ambient music: curated online Radio (no server), or Navidrome / Subsonic
 - Screen saver with captions; **Right** skips to the next photo
 
 This copy is installed with [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) (thanks
@@ -36,7 +36,7 @@ You can also just open it from the app list.
 - **Immich** — your album on the TV; place/title captions fill in when ready
 - **Screen saver** — landscape pan; portrait focus-zoom over a blurred background; remote next
 - **Weather** — current conditions + 7-day strip (Open-Meteo); auto-detect location or search a city
-- **Music** — Navidrome / OpenSubsonic / Subsonic play & next on Home and on the screen saver; random or playlist source
+- **Music** — curated Radio (electropop / dance / beats / chill) without a server, or Navidrome / Subsonic random & playlist; play & next on Home and the screen saver
 - Glass-style app tiles and a few Home polish details
 
 ## How to configure
@@ -47,7 +47,7 @@ Almost everything is in **Settings** on the TV (gear on Home):
 | --- | --- |
 | **Background** | Off / Photo / Rotate / **Live**. Pick provider (Bing, NASA, Wikimedia, Unsplash, Immich, Mix). Turn **Shuffle** on or off. Unsplash Access Key and Immich share link go here. |
 | **Weather** | Location (detect / search) and °C / °F |
-| **Music** | On/off, server, source (random or playlist), transport / volume |
+| **Music** | On/off, Radio stations or Subsonic server, source, transport / volume |
 | **Screen saver** | Delay, how often photos change, when to go dark |
 | **Apps / Consoles** | What appears on Home, HDMI ports |
 | **Appearance** | Clock, date, font, app name labels |
@@ -70,7 +70,7 @@ Arrow keys + Enter; Esc = Back.
 
 ## Put it on a TV
 
-1. Download **[Arn0Plus-0.6.17.wgt](https://github.com/dx616b/arn0-tv/releases/download/v0.6.17/Arn0Plus-0.6.17.wgt)**
+1. Download **[Arn0Plus-0.6.18.wgt](https://github.com/dx616b/arn0-tv/releases/download/v0.6.18/Arn0Plus-0.6.18.wgt)**
    (or build yourself: `npm run build` → `dist/Arn0Plus.wgt`)
 2. Install with [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) → Custom WGT
    (it signs on install)
