@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.17
+
+### Live wallpaper / Mix
+- Mix Mode Off = one source (radio); On = multi-select roster for Mix
+- NASA APOD restored to science.nasa.gov image-article + media (working TV path)
+- Seen-ring recycle so tiny Bing/NASA pools do not lock empty on a new install
+- Leaner cold start: defer Live warm, pin hydrate, and weather fetch until after first paint
+- Mix boots one ahead per source, sequential warm, then grows the queue
+
+### Screen saver
+- Caption and music marquees scroll at most 3 times (no minute replay)
+- Weather temperature centered in the clock corner block
+
 ## 0.6.16
 
 ### Live wallpaper / Mix

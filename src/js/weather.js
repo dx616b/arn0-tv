@@ -434,6 +434,9 @@
         return where + ' · ' + (p.unit === 'fahrenheit' ? '°F' : '°C');
     }
 
+    // Cached reading available before Home paints; network refresh stays in start().
+    load();
+
     window.Weather = {
         seedFromConfig: seedFromConfig,
         resolvePlace: resolvePlace,

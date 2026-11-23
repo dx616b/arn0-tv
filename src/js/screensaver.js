@@ -61,7 +61,6 @@
     // Portrait zoom may be cut mid-leg when the photo changes — factor > 1 keeps it slow.
     var ZOOM_LEG_FACTOR = 1.25;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
-    var SCROLL_EVERY_MS = 60 * 1000; // repeat the scroll of long caption / music lines (3 × 14 s pass + pause)
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
     var FALLBACK_DRIFT = {
@@ -78,7 +77,6 @@
     var photoIndex = 0;
     var openedAt = 0;
     var nextPhotoAt = 0;
-    var nextScrollAt = 0;
     var captionText = '';
     var nextPanAt = 0;
     var panSign = 1;            // flipped on each leg, so the drift alternates direction
@@ -574,14 +572,6 @@
         $('ss-caption').classList.toggle('hidden', !w || (!captionText && !captionSub));
     }
 
-    // Replay marquee passes for long caption / music lines.
-    function refreshScroll() {
-        fillLine($('ss-title'), captionText, true);
-        fillLine($('ss-sub'), captionSub, true);
-        lastMusicSig = '';
-        renderMusic();
-    }
-
     // Hidden outright when there is no usable reading: see the note on staleness in weather.js.
     function renderWeather() {
         var w = window.Weather && Weather.current();
@@ -723,7 +713,6 @@
         var now = Date.now();
         openedAt = now;
         nextPhotoAt = now + photoEvery().ms;
-        nextScrollAt = now + SCROLL_EVERY_MS;
         nextPanAt = 0;
 
         UI.show('screensaver');
@@ -814,10 +803,6 @@
         if (!dark && until && now - openedAt >= until) goDark();
         // Behind an opaque black layer there is nothing worth moving.
         if (dark) return;
-        if (now >= nextScrollAt) {
-            nextScrollAt = now + SCROLL_EVERY_MS;
-            refreshScroll();
-        }
         if (rotating() && now >= nextPhotoAt) {
             advancePhoto();
         } else if (nextPanAt && now >= nextPanAt) {

@@ -15,9 +15,12 @@
     UI.init();
     Settings.init();
     Screensaver.init();
-    Weather.start();
     Music.init();
     Home.init();
+    // Weather after Home paints — avoids competing with Live wallpaper on cold start.
+    setTimeout(function () {
+        if (window.Weather) Weather.start();
+    }, 900);
 
     // Preview only: open a screen directly, e.g. http://localhost:8080/#settings
     var view = location.hash.slice(1);
