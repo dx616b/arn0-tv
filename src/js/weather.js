@@ -448,6 +448,7 @@
         start: start,
         refresh: refresh,
         applySettings: applySettings,
+        clearReading: clearReading,
         current: current,
         configured: configured,
         summary: summary,

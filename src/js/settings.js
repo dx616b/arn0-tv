@@ -636,6 +636,8 @@
 
         var poolBlock = $('bg-live-pool-block');
         if (poolBlock) {
+            // Solo Bing: 8 stays selectable; 20/40 stay visible but locked (Bing window ~8).
+            var bingSolo = browseLive && prov === 'bing';
             poolBlock.classList.toggle('hidden', !browseLive);
             var poolChips = $('bg-live-pool');
             poolChips.innerHTML = '';
@@ -644,10 +646,24 @@
                 normal: { label: '20' },
                 large: { label: '40' }
             };
+            if (bingSolo && p.livePool && p.livePool !== 'small') {
+                p.livePool = 'small';
+                Prefs.save();
+            }
             Object.keys(pools).forEach(function (key) {
-                poolChips.appendChild(chip(pools[key].label, (p.livePool || 'normal') === key,
-                    { kind: 'livePool', value: key }));
+                var locked = bingSolo && key !== 'small';
+                var c = chip(
+                    pools[key].label,
+                    !locked && (p.livePool || 'small') === key,
+                    locked
+                        ? { kind: 'livePoolLocked', value: key }
+                        : { kind: 'livePool', value: key }
+                );
+                if (locked) c.classList.add('disabled');
+                poolChips.appendChild(c);
             });
+            var poolTitle = poolBlock.querySelector('h2');
+            if (poolTitle) poolTitle.textContent = 'Queue size';
         }
 
         var liveStatus = $('bg-live-status-block');
@@ -863,7 +879,14 @@
             if (p.mode === 'live' && window.LiveWallpaper && LiveWallpaper.rebuildPlan) {
                 LiveWallpaper.rebuildPlan();
             }
+        } else if (item.kind === 'livePoolLocked') {
+            UI.toast('Bing only offers 8 photos');
+            return;
         } else if (item.kind === 'livePool') {
+            if (p.liveProvider === 'bing' && item.value !== 'small') {
+                UI.toast('Bing only offers 8 photos');
+                return;
+            }
             if (p.livePool === item.value) return;
             p.livePool = item.value;
             Prefs.save();
@@ -1623,6 +1646,7 @@
             blocks.push({ title: 'Change photo every', key: 'photoEvery', options: optionPairs(Screensaver.PHOTO_EVERY) });
         }
         blocks.push({ title: 'Go dark after', key: 'dark', options: optionPairs(Screensaver.DARK_AFTER) });
+        blocks.push({ title: 'Hide text after', key: 'chromeHide', options: optionPairs(Screensaver.CHROME_HIDE) });
         blocks.push({ title: 'Drift', key: 'pan', options: [[true, 'On'], [false, 'Off']] });
         if (Prefs.get().screensaver.pan !== false) {
             blocks.push({ title: 'Drift speed', key: 'panSpeed', options: optionPairs(Screensaver.PAN_SPEEDS) });

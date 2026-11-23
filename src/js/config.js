@@ -109,8 +109,8 @@ window.LAUNCHER_CONFIG = {
         select: { freq: 1320, ms: 55, type: 'triangle' }
     },
 
-    // Development only: where the Lab screen sends its logs (npm run devlog on your computer).
-    // null disables it; set it to http://<your-computer-ip>:8099/log while debugging.
+    // Lab log mirror to a PC (`npm run devlog`). Release builds keep null.
+    // Local sideloads: `npm run build:local` injects http://<LAN-IP>:8099/log into the .wgt.
     devLogUrl: null
 };
 

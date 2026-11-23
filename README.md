@@ -69,10 +69,14 @@ Needs Node.js 20+.
 git clone https://github.com/dx616b/arn0-tv.git
 cd arn0-tv
 npm run preview        # http://localhost:8080
-npm run build          # dist/Arn0Plus.wgt
+npm run build          # release .wgt (no local config / no devLogUrl)
+npm run build:local    # sideload .wgt with config.local.js + Lab → PC logs
+npm run devlog         # receive those logs on this machine (:8099)
 ```
 
-Arrow keys + Enter; Esc = Back.
+`build:local` sets `devLogUrl` to the Windows LAN IP when built from WSL. Run
+`npm run devlog` on **Windows** (firewall allow Node on :8099). Override with
+`DEV_LOG_HOST` if needed. Arrow keys + Enter; Esc = Back.
 
 Every push to `main` rebuilds a rolling prerelease; tag `v*` publishes a versioned `.wgt`.
 

@@ -31,7 +31,9 @@ window.LAUNCHER_LOCAL = {
     // wallpaper: { mode: 'live', liveProvider: 'immich', interval: '30s', random: true },
     // music: { enabled: true, volume: 'med', source: 'random' },
 
-    // Receives Lab logs; see scripts/devlog-server.mjs.
+    // Lab → PC log mirror. Release wgts leave this off.
+    // Local TV sideloads: npm run build:local injects http://<Windows-LAN>:8099/log
+    // (WSL asks Windows for the IP). Run npm run devlog on Windows. Override: DEV_LOG_HOST.
     // devLogUrl: null,
 
     // locale: 'fr-FR',

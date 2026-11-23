@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.19
+
+### Screen saver
+- Caption / clock / music / legend fade after idle; next key only shows them again
+- Hide text after: 10 s / 20 s / 30 s / 1 min / Never (Settings; default 20 s)
+- Go dark options include 5 / 10 / 15 min; default 15 min (was 1 hour)
+- Wake from dark restarts the go-dark timer (was blacking out again on the next tick)
+
+### Live wallpaper
+- Stop Bing/NASA recycle spin when the upcoming plan already holds the tiny unique pool
+- Bing HP archive: one network fetch per calendar day (cached); queue fills reuse that window
+- Solo Bing: queue 8 stays selectable; 20/40 visible but locked
+
+### Develop
+- `npm run build:local` injects Lab → PC `devLogUrl`; `npm run build` (release/CI) keeps it off
+- Lab action list and log panel scroll; Right focuses the log
+- Reset all settings also clears the weather reading cache
+
 ## 0.6.18
 
 ### Music
