@@ -1416,9 +1416,12 @@
         if (!entry || !entry.key || !stream.immichAlbum) return Promise.resolve(entry);
         if ((entry.credit || '').indexOf('Immich') !== 0) return Promise.resolve(entry);
         var album = stream.immichAlbum;
-        return fetchImmichAsset(entry.key).then(function (full) {
+        // Catalog keys are "immich:<uuid>"; the assets API wants the bare id.
+        var id = String(entry.key).replace(/^immich:/, '');
+        if (!id) return Promise.resolve(entry);
+        return fetchImmichAsset(id).then(function (full) {
             if (!full) return entry;
-            var merged = mergeImmichAsset({ id: entry.key, exifInfo: {} }, full);
+            var merged = mergeImmichAsset({ id: id, exifInfo: {} }, full);
             var better = immichEntry(merged, album.origin, album.query, album.name);
             entry.title = better.title;
             entry.sub = better.sub;

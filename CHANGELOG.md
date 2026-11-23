@@ -12,6 +12,7 @@
 - Stop Bing/NASA recycle spin when the upcoming plan already holds the tiny unique pool
 - Bing HP archive: one network fetch per calendar day (cached); queue fills reuse that window
 - Solo Bing: queue 8 stays selectable; 20/40 visible but locked
+- Fix Immich caption polish (was calling /assets with `immich:`-prefixed key, so place/title never enriched)
 
 ### Develop
 - `npm run build:local` injects Lab → PC `devLogUrl`; `npm run build` (release/CI) keeps it off
