@@ -50,9 +50,13 @@
         normal: { label: '20', ahead: 20, plan: 10, pick: 5 },
         large: { label: '40', ahead: 40, plan: 15, pick: 10 }
     };
-    // Mix: fill one ahead first so the first frame wins; grow later.
+    // Mix: tiny per-source buffers (round-robin does not need solo Queue depth).
+    // Boot: 1 ahead / short plan; then grow slightly — never to full livePool ahead.
     var MIX_AHEAD_BOOT = 1;
-    var MIX_GROW_MS = 5000;
+    var MIX_AHEAD_FULL = 2;
+    var MIX_PLAN_BOOT = 2;
+    var MIX_PLAN_FULL = 4;
+    var MIX_GROW_MS = 8000;
     var mixWarmPhase = 'boot'; // 'boot' | 'full'
     var mixGrowTimer = null;
 
@@ -64,8 +68,10 @@
     function sourceAhead() { return livePool().ahead; }
     function planSize() {
         var n = livePool().plan;
-        // Mix boot: shorter upcoming list until queues catch up.
-        if (provider() === 'mix' && mixWarmPhase === 'boot') n = Math.min(n, 3);
+        // Mix: keep the upcoming list short so APIs are not all hit at once.
+        if (provider() === 'mix') {
+            n = Math.min(n, mixWarmPhase === 'boot' ? MIX_PLAN_BOOT : MIX_PLAN_FULL);
+        }
         if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
         return n;
     }
@@ -74,11 +80,11 @@
         if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
         return n;
     }
-    // Effective per-source queue target (Mix boots small, then grows to sourceAhead).
+    // Effective per-source queue target (Mix stays shallow; solo uses livePool).
     function effectiveAhead() {
         var n;
         if (provider() !== 'mix') n = sourceAhead();
-        else if (mixWarmPhase === 'full') n = sourceAhead();
+        else if (mixWarmPhase === 'full') n = Math.min(MIX_AHEAD_FULL, sourceAhead());
         else n = Math.min(MIX_AHEAD_BOOT, sourceAhead());
         if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
         return n;
@@ -2068,27 +2074,28 @@
     function warmSources() {
         var keys = streamKeys();
         if (!keys.length) return Promise.resolve();
-        // Mix boot: one source at a time (next slot first) so Home keeps the decoder free.
-        if (provider() === 'mix' && mixWarmPhase === 'boot') {
+        // Mix: never Promise.all every roster source — that storms the TV when Mix On
+        // has Bing+NASA+Wiki+Wallhaven+…. Only warm the next slot (boot) or next two (full).
+        if (provider() === 'mix') {
             var ordered = orderedMixKeys();
+            if (!ordered.length) return Promise.resolve();
             var start = nextSlotStart(ordered);
-            var seq = [];
-            var i;
-            for (i = 0; i < ordered.length; i++) {
-                seq.push(ordered[(start + i) % ordered.length]);
-            }
+            var want = mixWarmPhase === 'boot' ? 1 : Math.min(2, ordered.length);
             var chain = Promise.resolve();
-            seq.forEach(function (name) {
-                chain = chain.then(function () { return warmOne(name); });
-            });
+            var i;
+            for (i = 0; i < want; i++) {
+                (function (name) {
+                    chain = chain.then(function () { return warmOne(name); });
+                })(ordered[(start + i) % ordered.length]);
+            }
             return chain;
         }
-        // fillSourceQueue with no limit uses effectiveAhead().
+        // Solo: fillSourceQueue with no limit uses effectiveAhead().
         return Promise.all(keys.map(warmOne));
     }
 
     // Top up queues + plan without blocking UI (after the first few are ready).
-    // Mix: boot with a small ahead, then grow to the full Queue size.
+    // Mix: boot shallow, then grow slightly (still capped — not livePool ahead).
     function backgroundFill() {
         if (needsSetup()) return;
         warmSources();
@@ -2561,8 +2568,14 @@
         warmForPicker: warmForPicker,
         loadMorePicks: loadMorePicks,
         pickBatch: pickBatch,
+        planSize: planSize,
+        effectiveAhead: effectiveAhead,
         LIVE_POOLS: LIVE_POOLS,
         BING_WINDOW: BING_WINDOW,
+        MIX_AHEAD_BOOT: MIX_AHEAD_BOOT,
+        MIX_AHEAD_FULL: MIX_AHEAD_FULL,
+        MIX_PLAN_BOOT: MIX_PLAN_BOOT,
+        MIX_PLAN_FULL: MIX_PLAN_FULL,
         preloadPickThumbs: preloadPickThumbs,
         find: find,
         ensureDaily: ensureDaily,

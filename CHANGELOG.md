@@ -16,6 +16,7 @@
 - Wallhaven provider (SFW, category chips; Mix defaults off); selecting it applies Home wallpaper like other sources
 - Wallhaven captions: tags + uploader (no resolution); detail polish fills search rows
 - Wallhaven category flags forced as 3-char strings + client filter (General no longer admits Anime)
+- Mix no longer warms every source to the full Queue size in parallel (shallow ahead/plan; warm next 1–2 only)
 
 ## 0.6.19
 

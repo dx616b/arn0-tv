@@ -79,6 +79,35 @@ test('Mix stream keys follow enabled sources only', function () {
     );
 });
 
+test('Mix keeps shallow ahead/plan (not full livePool)', function () {
+    var ctx = createLauncherSandbox({
+        prefs: {
+            wallpaper: {
+                mode: 'live',
+                liveProvider: 'mix',
+                mixEnabled: {
+                    bing: true, nasa: true, wikimedia: true,
+                    wallhaven: true, unsplash: false, immich: false
+                },
+                liveMultiSelect: true,
+                livePool: 'large',
+                interval: '15m',
+                random: false
+            }
+        }
+    });
+    assert.equal(ctx.LiveWallpaper.provider(), 'mix');
+    // Boot phase: 1 ahead / short plan even when Queue is 40.
+    assert.equal(ctx.LiveWallpaper.effectiveAhead(), ctx.LiveWallpaper.MIX_AHEAD_BOOT);
+    assert.equal(ctx.LiveWallpaper.planSize(), ctx.LiveWallpaper.MIX_PLAN_BOOT);
+    assert.ok(ctx.LiveWallpaper.MIX_AHEAD_FULL < ctx.LiveWallpaper.LIVE_POOLS.large.ahead);
+    assert.ok(ctx.LiveWallpaper.MIX_PLAN_FULL < ctx.LiveWallpaper.LIVE_POOLS.large.plan);
+    // Solo still uses the pool size.
+    ctx.LiveWallpaper.setSoloProvider('nasa');
+    assert.equal(ctx.LiveWallpaper.effectiveAhead(), 40);
+    assert.equal(ctx.LiveWallpaper.planSize(), 15);
+});
+
 test('Mix Shuffle permutes provider order only', function () {
     var ctx = createLauncherSandbox({
         prefs: {
