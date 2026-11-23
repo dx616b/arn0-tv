@@ -11,6 +11,10 @@
 ### Live wallpaper / performance
 - Faster photo changes: debounce Live cache writes, skip extra EXIF decode for Bing/NASA/etc., defer plan fill and preload
 
+### Screen saver
+- While blacked out: any key (including Back) wakes the picture first; Back again exits
+- Freeze photo drift under the black layer to reduce music glitches
+
 ## 0.6.17
 
 ### Live wallpaper / Mix

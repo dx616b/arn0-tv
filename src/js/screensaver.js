@@ -7,7 +7,7 @@
  *   Right    next photo (Rotate / Live)
  *   Left     next music track
  *   OK       play / pause music
- *   Back     exit
+ *   Back     exit (from black screen: wake first; Back again to exit)
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -608,11 +608,12 @@
                 ? ('play:' + (song.title || '') + '\0' + (song.artist || song.album || ''))
                 : 'idle';
             // Only rebuild marquees when the line text changes (play/pause must not restart scroll).
+            // No scroll animation while blacked out — keeps CPU free for audio.
             if (sig !== lastMusicSig) {
                 lastMusicSig = sig;
                 if (song) {
-                    fillLine($('ss-music-title'), song.title, true);
-                    fillLine($('ss-music-artist'), song.artist || song.album || '', true);
+                    fillLine($('ss-music-title'), song.title, !dark);
+                    fillLine($('ss-music-artist'), song.artist || song.album || '', !dark);
                 } else {
                     fillLine($('ss-music-title'), 'Not playing', false);
                     fillLine($('ss-music-artist'), '', false);
@@ -739,16 +740,43 @@
         DevLog.log('Screen saver on');
     }
 
+    // Park drift under the black layer — ongoing CSS transforms fight the audio decoder on this SoC.
+    function freezePan() {
+        nextPanAt = 0;
+        if (!layers || !layers.length) return;
+        layers.forEach(function (layer) {
+            if (!layer) return;
+            var sharp = sharpEl(layer);
+            var lt = window.getComputedStyle(layer).transform;
+            layer.style.transition = 'none';
+            if (lt && lt !== 'none') layer.style.transform = lt;
+            if (sharp) {
+                var st = window.getComputedStyle(sharp).transform;
+                sharp.style.transition = 'none';
+                if (st && st !== 'none') sharp.style.transform = st;
+            }
+        });
+    }
+
     function goDark() {
+        if (dark) return;
         dark = true;
+        freezePan();
         $('ss-dark').style.opacity = '1';
         DevLog.log('Screen saver dark after ' + darkAfter().label);
     }
 
+    // Returns true when this call cleared the black screen.
     function wakeFromDark() {
-        if (!dark) return;
+        if (!dark) return false;
         dark = false;
         $('ss-dark').style.opacity = '0';
+        // Resume drift on the visible layer without fetching a new photo.
+        if (layers && layers[front]) {
+            resetPan(layers[front], panSign);
+            startPan();
+        }
+        return true;
     }
 
     function applyPhoto(w) {
@@ -902,7 +930,11 @@
             hints: [],
             rows: function () { return []; },
             onKey: function (k) {
-                wakeFromDark();
+                // Black screen: any key only wakes (do not exit or change track/photo).
+                if (dark) {
+                    wakeFromDark();
+                    return true;
+                }
                 if (k === UI.KEY.UP && cycleLiveProvider(-1)) return true;
                 if (k === UI.KEY.DOWN && cycleLiveProvider(1)) return true;
                 if (k === UI.KEY.RIGHT && canAdvance()) {
@@ -917,7 +949,7 @@
                     Music.toggle();
                     return true;
                 }
-                // Unused arrows / OK stay on the saver; Back exits.
+                // Unused arrows / OK stay on the saver; other keys exit.
                 if (k === UI.KEY.UP || k === UI.KEY.DOWN ||
                         k === UI.KEY.LEFT || k === UI.KEY.RIGHT ||
                         k === UI.KEY.ENTER) {
@@ -926,7 +958,14 @@
                 close();
                 return true;
             },
-            onBack: function () { close(); return true; }
+            onBack: function () {
+                if (dark) {
+                    wakeFromDark();
+                    return true;
+                }
+                close();
+                return true;
+            }
         });
         setInterval(function () {
             if (open) {
