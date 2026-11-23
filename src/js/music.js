@@ -99,6 +99,16 @@
     var listeners = [];
     // Cached playlist entries for source === 'playlist' (shuffled, cursor walks through).
     var playlistCache = { id: null, songs: [], cursor: 0 };
+    // Silent stall recovery (ice streams often die without firing `error`).
+    var WATCH_MS = 5000;
+    var STALL_MS = 14000;
+    var RETRY_ALL_MS = 45000;
+    var watchTimer = null;
+    var lastProgressAt = 0;
+    var lastProgressTime = -1;
+    var softRestartUsed = false;
+    var healing = false;
+    var retryAllTimer = null;
 
     function prefs() {
         return Prefs.get().music;
@@ -232,6 +242,102 @@
         return prefs().enabled ? 'Ready' : 'Off';
     }
 
+    function wantPlaying() {
+        var p = prefs();
+        return !!(p.enabled && p.playing && !document.hidden);
+    }
+
+    function markProgress() {
+        if (!audio) return;
+        var t = audio.currentTime;
+        if (t !== lastProgressTime) {
+            lastProgressTime = t;
+            lastProgressAt = Date.now();
+            softRestartUsed = false;
+        } else if (!lastProgressAt) {
+            lastProgressAt = Date.now();
+        }
+    }
+
+    function startWatch() {
+        if (watchTimer) return;
+        watchTimer = setInterval(watchTick, WATCH_MS);
+    }
+
+    function stopWatch() {
+        if (watchTimer) {
+            clearInterval(watchTimer);
+            watchTimer = null;
+        }
+        if (retryAllTimer) {
+            clearTimeout(retryAllTimer);
+            retryAllTimer = null;
+        }
+    }
+
+    function resetProgressClock() {
+        lastProgressTime = audio ? audio.currentTime : -1;
+        lastProgressAt = Date.now();
+        softRestartUsed = false;
+    }
+
+    // Soft-restart same URL once, then mirrors / next station via onAudioError.
+    function healRadio(reason) {
+        if (healing || !wantPlaying() || !isRadio()) return;
+        healing = true;
+        var st = findStation(prefs().radioId);
+        var urls = urlsFor(st);
+        var gen = radioPlayGen;
+        DevLog.log('Music: radio heal (' + reason + ')' +
+            (softRestartUsed ? ' → mirror/next' : ' → soft restart'));
+        if (!softRestartUsed && urls.length) {
+            softRestartUsed = true;
+            lastProgressAt = Date.now();
+            var url = urls[Math.min(radioMirror, urls.length - 1)];
+            playRadioUrl(st, url, false, gen);
+            healing = false;
+            return;
+        }
+        healing = false;
+        lastProgressAt = Date.now();
+        softRestartUsed = false;
+        onAudioError();
+    }
+
+    function watchTick() {
+        if (!wantPlaying()) return;
+        if (!isRadio()) {
+            // Subsonic: unexpected pause while prefs say playing.
+            if (audio && audio.paused && current && audio.src) {
+                audio.play().catch(function () { /* next via user / error */ });
+            }
+            return;
+        }
+        if (!audio || !audio.src || !current) {
+            healRadio('empty');
+            return;
+        }
+        if (audio.paused) {
+            DevLog.log('Music: watchdog resume (paused while playing)');
+            audio.play().catch(function () { healRadio('play-fail'); });
+            return;
+        }
+        markProgress();
+        if (!lastProgressAt) {
+            lastProgressAt = Date.now();
+            return;
+        }
+        if (Date.now() - lastProgressAt < STALL_MS) return;
+        healRadio('stall');
+    }
+
+    // After a long black / idle stretch: force a progress check now.
+    function kick() {
+        if (!wantPlaying()) return;
+        startWatch();
+        watchTick();
+    }
+
     function onAudioError() {
         var gen = radioPlayGen;
         lastError = 'Stream failed';
@@ -252,6 +358,7 @@
         if (radioMirror < urls.length) {
             DevLog.log('Music: radio try mirror ' + radioMirror + '/' + urls.length +
                 ' for ' + st.id);
+            resetProgressClock();
             playRadioUrl(st, urls[radioMirror], false, gen);
             return;
         }
@@ -271,11 +378,22 @@
         audio.preload = 'auto';
         audio.addEventListener('ended', function () { next(true); });
         audio.addEventListener('error', onAudioError);
+        audio.addEventListener('timeupdate', markProgress);
         audio.addEventListener('playing', function () {
-            if (!isRadio() || !audio || !audio.src) return;
+            if (!audio || !audio.src) return;
+            resetProgressClock();
+            if (!isRadio()) return;
             radioFailStreak = 0;
             lastError = '';
             rememberGoodUrl(audio.src);
+            startWatch();
+        });
+        audio.addEventListener('stalled', function () {
+            if (wantPlaying() && isRadio()) DevLog.log('Music: stream stalled');
+        });
+        audio.addEventListener('waiting', function () {
+            // Buffer underrun — do not reset the stall clock; watchdog will heal if stuck.
+            if (wantPlaying() && isRadio()) DevLog.log('Music: stream waiting');
         });
         applyVolume();
         return audio;
@@ -435,8 +553,16 @@
         };
         var a = ensureAudio();
         a.preload = 'auto';
+        // Drop previous src so a soft-restart of the same URL actually reconnects.
+        try {
+            a.pause();
+            a.removeAttribute('src');
+            a.load();
+        } catch (e) { /* ignore */ }
         a.src = url;
         applyVolume();
+        resetProgressClock();
+        startWatch();
         var playPromise = a.play();
         if (playPromise && playPromise.catch) {
             playPromise.catch(function (e) {
@@ -448,6 +574,7 @@
                     lastError = 'Play blocked';
                     prefs().playing = false;
                     Prefs.save();
+                    stopWatch();
                     notify();
                     return;
                 }
@@ -469,12 +596,13 @@
             UI.toast(lastError);
             prefs().playing = false;
             Prefs.save();
+            stopWatch();
             notify();
             return;
         }
         radioPlayGen++;
         radioMirror = 0;
-        radioFailStreak = 0;
+        // Keep radioFailStreak — cleared on successful `playing` or user Play.
         playRadioUrl(st, urls[0], announce, radioPlayGen);
     }
 
@@ -501,11 +629,20 @@
             if (auto) {
                 radioFailStreak++;
                 if (radioFailStreak > list.length) {
-                    lastError = 'All stations failed';
-                    p.playing = false;
-                    Prefs.save();
+                    // Keep intent to play — retry after a cooldown instead of giving up.
+                    lastError = 'All stations failed — retrying…';
+                    DevLog.log('Music: all stations failed; retry in ' + (RETRY_ALL_MS / 1000) + 's');
                     dropCurrentAudio();
                     notify();
+                    if (retryAllTimer) clearTimeout(retryAllTimer);
+                    retryAllTimer = setTimeout(function () {
+                        retryAllTimer = null;
+                        if (!wantPlaying() || !isRadio()) return;
+                        radioFailStreak = 0;
+                        radioMirror = 0;
+                        toastSkip = false;
+                        playStation(findStation(prefs().radioId), false);
+                    }, RETRY_ALL_MS);
                     return;
                 }
             }
@@ -515,6 +652,7 @@
         p.radioId = st.id;
         Prefs.save();
         radioMirror = 0;
+        resetProgressClock();
         playStation(st, !auto);
     }
 
@@ -585,8 +723,14 @@
         toastSkip = false;
         lastError = '';
         radioFailStreak = 0;
+        if (retryAllTimer) {
+            clearTimeout(retryAllTimer);
+            retryAllTimer = null;
+        }
+        startWatch();
         if (current && audio && audio.src && audio.paused && !audio.ended) {
             applyVolume();
+            resetProgressClock();
             audio.play().catch(function () { next(false); });
             notify();
             return;
@@ -598,6 +742,7 @@
         var p = prefs();
         p.playing = false;
         Prefs.save();
+        stopWatch();
         if (audio) audio.pause();
         notify();
     }
@@ -708,6 +853,7 @@
         p.enabled = !!on;
         if (!on) {
             p.playing = false;
+            stopWatch();
             if (audio) audio.pause();
         }
         Prefs.save();
@@ -741,7 +887,9 @@
         }
         // Back in the launcher: resume only if the user left music in a playing state.
         if (prefs().enabled && prefs().playing && current && audio && audio.src) {
-            audio.play().catch(function () { /* gesture / stream may need Next */ });
+            resetProgressClock();
+            startWatch();
+            audio.play().catch(function () { kick(); });
         }
     }
 
@@ -787,6 +935,7 @@
         showFull: showFull,
         fillMarquee: fillMarquee,
         barVisible: barVisible,
+        kick: kick,
         onUpdate: function (fn) { listeners.push(fn); }
     };
 })();

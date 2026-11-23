@@ -38,7 +38,7 @@ Full Home / recovery notes: [docs/setup-tv.md](docs/setup-tv.md).
 ## Features
 
 - **Home** — clock, apps, HDMI consoles; normal remote
-- **Live backgrounds** — Bing, NASA APOD, Wikimedia, Unsplash, Immich shared album, or **Mix**
+- **Live backgrounds** — Bing, NASA APOD, Wikimedia, Wallhaven (SFW), Unsplash, Immich shared album, or **Mix**
   (Mix Mode Off = one source; On = multi-select roster)
 - **Photo shelf** — pin Live stills, temporary “Use now”, hide bundled wallpapers
 - **Weather** — current + week (Open-Meteo); auto-detect or search a city
@@ -51,7 +51,7 @@ Almost everything is in **Settings** (gear on Home):
 
 | Area | What to set |
 | --- | --- |
-| **Atmosphere → Background** | Off / Photo / Rotate / Live; Mix Mode; sources; Unsplash key; Immich share link |
+| **Atmosphere → Background** | Off / Photo / Rotate / Live; Mix Mode; sources; Wallhaven category; Unsplash key; Immich share link |
 | **Weather** | Place (auto / search) and °C / °F |
 | **Music** | Radio station or Subsonic server; play / next / volume |
 | **Screen saver** | Delay, photo interval, go-dark |

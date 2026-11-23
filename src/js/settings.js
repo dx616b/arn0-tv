@@ -370,7 +370,8 @@
     var bgPhotosGridMode = '';
     var bgPhotosKeys = {};
     var bgLiveRefreshTimer = null;
-    // After Save from Live, Home switches to Photo but the Live picker stays open for more saves.
+    // After Use now / Save from Live, Home is Photo but the Live picker stays open for more picks.
+    // Mode chips still show the real mode (Photo); only the Live grid/provider chrome stays.
     var bgKeepLivePicker = false;
     // Soft onChange refresh: skip chip rebuild when only the live catalog grew.
     var bgSoftSig = '';
@@ -396,7 +397,7 @@
         var boot = LiveWallpaper.ensureDaily().then(function () {
             var wall = Prefs.get().wallpaper;
             var l = LiveWallpaper.list();
-            if (l.length && !LiveWallpaper.find(wall.liveKey)) {
+            if (l.length && (!wall.liveKey || !LiveWallpaper.find(wall.liveKey))) {
                 wall.liveKey = l[0].key;
                 Prefs.save();
             }
@@ -418,7 +419,24 @@
             }
             tick();
         });
-        var work = Promise.all([boot, warm, hasPhotos]);
+        var work = Promise.all([boot, warm, hasPhotos]).then(function () {
+            var wall = Prefs.get().wallpaper;
+            var l = LiveWallpaper.list();
+            // warmForPicker may fill picks before history — promote first pick onto Home.
+            if (!l.length && LiveWallpaper.pickList) {
+                var picks = LiveWallpaper.pickList();
+                if (picks[0] && picks[0].key) {
+                    wall.liveKey = picks[0].key;
+                    Prefs.save();
+                    // takeNext would wait on plan; apply the pick we already have.
+                    if (LiveWallpaper.showPick) LiveWallpaper.showPick(picks[0]);
+                }
+            } else if (l.length && (!wall.liveKey || !LiveWallpaper.find(wall.liveKey))) {
+                wall.liveKey = l[0].key;
+                Prefs.save();
+            }
+            if (window.Wallpaper && Wallpaper.apply) Wallpaper.apply();
+        });
         var cap = new Promise(function (resolve) { setTimeout(resolve, maxMs); });
         return UI.busy(Promise.race([work, cap]));
     }
@@ -526,9 +544,7 @@
         var modes = $('bg-mode');
         modes.innerHTML = '';
         [['off', 'Off'], ['photo', 'Photo'], ['rotate', 'Rotate'], ['live', 'Live']].forEach(function (m) {
-            // While saving more from Live, keep Live highlighted even though Home is Photo.
-            var on = bgKeepLivePicker ? m[0] === 'live' : p.mode === m[0];
-            modes.appendChild(chip(m[1], on, { kind: 'mode', key: m[0] }));
+            modes.appendChild(chip(m[1], p.mode === m[0], { kind: 'mode', key: m[0] }));
         });
 
         var intervals = $('bg-interval');
@@ -601,6 +617,24 @@
                 !!(window.LiveWallpaper && LiveWallpaper.unsplashCollection()),
                 { kind: 'unsplashCollection' }
             ));
+        }
+
+        var wallhavenOn = mixOn
+            ? (window.LiveWallpaper ? LiveWallpaper.mixSourceOn('wallhaven') : false)
+            : prov === 'wallhaven';
+        var showWallhaven = browseLive && wallhavenOn;
+        var wallhavenBlock = $('bg-live-wallhaven-block');
+        if (wallhavenBlock) {
+            wallhavenBlock.classList.toggle('hidden', !showWallhaven);
+            var whChips = $('bg-live-wallhaven');
+            whChips.innerHTML = '';
+            var whCats = (window.LiveWallpaper && LiveWallpaper.WALLHAVEN_CATEGORIES) || [
+                { key: 'general', label: 'General' }
+            ];
+            var whCur = window.LiveWallpaper ? LiveWallpaper.wallhavenCategory() : 'general';
+            whCats.forEach(function (c) {
+                whChips.appendChild(chip(c.label, whCur === c.key, { kind: 'wallhavenCategory', key: c.key }));
+            });
         }
 
         var immichOn = mixOn
@@ -723,15 +757,20 @@
                     : 'Save (up to ' + pinMax + ')';
             }
             if (storageEl) {
-                storageEl.textContent = (pinCount
+                var liveNote = (pinCount
                     ? 'Saved ' + pinSum + '. '
                     : 'Up to ' + pinMax + ' saved locally. ') +
                     'OK → Use now (no save) or Save permanently.';
+                if (bgKeepLivePicker && p.mode === 'photo') {
+                    liveNote = 'Home is Photo (frozen). ' + liveNote;
+                }
+                storageEl.textContent = liveNote;
                 storageEl.classList.remove('hidden');
             }
             var pool = (window.LiveWallpaper && LiveWallpaper.pickList)
                 ? LiveWallpaper.pickList()
                 : ((window.LiveWallpaper && LiveWallpaper.list()) || []);
+            var usingKey = (!live && p.photo) ? p.photo : '';
             if (!pool.length && !Object.keys(bgPhotosKeys).length) {
                 photosBlock.insertBefore(
                     el('p', 'setting-note muted bg-photos-empty',
@@ -742,7 +781,7 @@
                 pool.forEach(function (w) {
                     if (bgPhotosKeys[w.key]) return;
                     bgPhotosKeys[w.key] = true;
-                    addThumb(w, 'pinLive', false);
+                    addThumb(w, 'pinLive', !!(usingKey && w.key === usingKey));
                 });
                 // Thumbs load lazily via <img loading=lazy>; rememberPick already warms a few.
             }
@@ -864,6 +903,27 @@
                 renderBackground();
                 UI.refresh();
             }, { title: 'Unsplash collection ID', maxLength: 64, allowEmpty: true });
+            return;
+        }
+        if (item.kind === 'wallhavenCategory') {
+            if (!window.LiveWallpaper) return;
+            var prevCat = LiveWallpaper.wallhavenCategory ? LiveWallpaper.wallhavenCategory() : '';
+            if (prevCat === item.key) return;
+            LiveWallpaper.setWallhavenCategory(item.key);
+            p.liveKey = '';
+            p.lastChange = Date.now();
+            bgPhotosGridMode = '';
+            bgPhotosKeys = {};
+            Prefs.save();
+            if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
+            else LiveWallpaper.clearCache();
+            busyLiveProviderChange().then(function () {
+                renderBackground();
+                UI.refresh();
+            }, function () {
+                renderBackground();
+                UI.refresh();
+            });
             return;
         }
         if (item.kind === 'mode') {
@@ -1639,7 +1699,7 @@
     function screensaverBlocks() {
         var mode = Prefs.get().wallpaper.mode;
         var blocks = [
-            { title: 'Screen saver', key: 'enabled', options: [[true, 'On'], [false, 'Off']] },
+            { title: 'Enabled', key: 'enabled', options: [[true, 'On'], [false, 'Off']] },
             { title: 'Start after', key: 'delay', options: optionPairs(Screensaver.DELAYS) }
         ];
         if (mode === 'rotate' || mode === 'live') {

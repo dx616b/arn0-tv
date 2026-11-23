@@ -826,6 +826,8 @@
             resetPan(layers[front], panSign);
             startPan();
         }
+        // Long dark stretches can stall ice streams without an Audio error — nudge recovery.
+        if (window.Music && Music.kick) Music.kick();
         return true;
     }
 

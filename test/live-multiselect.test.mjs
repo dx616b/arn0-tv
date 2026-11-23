@@ -106,6 +106,7 @@ test('PROVIDERS still includes mix for runtime; UI filters it', function () {
     var keyList = list.map(function (p) { return p.key; }).join(',');
     assert.ok(keyList.indexOf('mix') >= 0);
     assert.ok(keyList.indexOf('bing') >= 0);
+    assert.ok(keyList.indexOf('wallhaven') >= 0);
 });
 
 test('SS selectLiveProvider changes focus only; Settings Mix roster stays', function () {
@@ -125,7 +126,7 @@ test('SS selectLiveProvider changes focus only; Settings Mix roster stays', func
         }
     });
     var list = Array.prototype.slice.call(ctx.LiveWallpaper.switchableProviders());
-    assert.equal(list.join(','), 'bing,nasa,wikimedia,mix');
+    assert.equal(list.join(','), 'bing,nasa,wikimedia,wallhaven,mix');
     assert.equal(ctx.LiveWallpaper.selectLiveProvider('nasa'), 'nasa');
     assert.equal(ctx.LiveWallpaper.provider(), 'nasa');
     assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys().slice().sort()), 'bing,nasa');
