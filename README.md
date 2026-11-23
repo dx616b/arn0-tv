@@ -1,10 +1,10 @@
-# Arn0+ — Immich / Mix / Navidrome
+# Arn0+
 
-A quieter home screen for a Samsung Tizen TV: clock, your apps, your consoles — plus live photos
-(Immich, Mix, and more), weather, and optional Navidrome music.
+A quieter home screen for Samsung Tizen TVs: clock, your apps, your consoles — plus live photos,
+weather, curated radio, and optional Navidrome music.
 
-Fork of [NelsonEU/arn0-tv](https://github.com/NelsonEU/arn0-tv) by [NelsonEU](https://github.com/NelsonEU) — thank you.
-TV label is **Arn0+**; app id stays `Arn0Lnchr0.Launcher` so Home / Vetro setup matches upstream.
+Fork of [NelsonEU/arn0-tv](https://github.com/NelsonEU/arn0-tv). On the TV the label is **Arn0+**;
+the app id stays `Arn0Lnchr0.Launcher` so Home / Vetro setup matches upstream.
 
 ![Home](docs/preview.png)
 
@@ -15,48 +15,53 @@ TV label is **Arn0+**; app id stays `Arn0Lnchr0.Launcher` so Home / Vetro setup 
 **Use at your own risk.** Making this the TV Home button changes undocumented settings. See
 [docs/setup-tv.md](docs/setup-tv.md).
 
-## What it does
+## Install on a TV
 
-- Home screen with clock, apps, and HDMI consoles (normal remote)
-- Live wallpapers from the web or your own photos
-- Weather on Home and on the screen saver
-- Ambient music: curated online Radio (no server), or Navidrome / Subsonic
-- Screen saver with captions; **Right** skips to the next photo
+### Apps2Samsung catalog (recommended)
 
-This copy is installed with [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) (thanks
-[PatrickSt1991](https://github.com/PatrickSt1991)) and set as the TV Home screen with
-[Vetro](https://github.com/andrearicci93/vetro) (thanks [andrearicci93](https://github.com/andrearicci93)).
-You can also just open it from the app list.
+1. Install [Apps2Samsung](https://apps2samsung.com/) on your phone or computer
+   ([GitHub](https://github.com/Apps2Samsung/Apps2Samsung))
+2. Put the TV in **Developer Mode** and connect on the same network
+3. In Apps2Samsung, open the catalog and install **Arn0+**
+   (also listed in the [community packages](https://github.com/Apps2Samsung/tizen-community-packages) bundle)
 
-## What’s added in this fork
+Open **Arn0+** from the Samsung app list. No manual `.wgt` download needed for normal installs.
 
-- **Live backgrounds** — Bing, NASA APOD, Wikimedia Picture of the Day, Unsplash, Immich shared
-  album, or **Mix** (all of those together)
-- **Shuffle** — random order for Mix providers and for Immich / day-based photos
-- **Immich** — your album on the TV; place/title captions fill in when ready
-- **Screen saver** — landscape pan; portrait focus-zoom over a blurred background; remote next
-- **Weather** — current conditions + 7-day strip (Open-Meteo); auto-detect location or search a city
-- **Music** — curated Radio (electropop / dance / beats / chill) without a server, or Navidrome / Subsonic random & playlist; play & next on Home and the screen saver
-- Glass-style app tiles and a few Home polish details
+Optional: use [Vetro](https://github.com/andrearicci93/vetro) so the Home button opens this launcher.
+Full Home / recovery notes: [docs/setup-tv.md](docs/setup-tv.md).
 
-## How to configure
+### Manual `.wgt` (updates / offline)
 
-Almost everything is in **Settings** on the TV (gear on Home):
+1. Download the latest **[release `.wgt`](https://github.com/dx616b/arn0-tv/releases/latest)**
+2. Apps2Samsung → **Custom WGT** (signs on install)
 
-| Setting | What to set |
+## Features
+
+- **Home** — clock, apps, HDMI consoles; normal remote
+- **Live backgrounds** — Bing, NASA APOD, Wikimedia, Unsplash, Immich shared album, or **Mix**
+  (Mix Mode Off = one source; On = multi-select roster)
+- **Photo shelf** — pin Live stills, temporary “Use now”, hide bundled wallpapers
+- **Weather** — current + week (Open-Meteo); auto-detect or search a city
+- **Music** — curated online **Radio** (no server), or Navidrome / Subsonic (random / playlist)
+- **Screen saver** — pan / portrait zoom, captions, weather, music; remote legend for source / photo / track
+
+## Configure on the TV
+
+Almost everything is in **Settings** (gear on Home):
+
+| Area | What to set |
 | --- | --- |
-| **Background** | Off / Photo / Rotate / **Live**. Pick provider (Bing, NASA, Wikimedia, Unsplash, Immich, Mix). Turn **Shuffle** on or off. Unsplash Access Key and Immich share link go here. |
-| **Weather** | Location (detect / search) and °C / °F |
-| **Music** | On/off, Radio stations or Subsonic server, source, transport / volume |
-| **Screen saver** | Delay, how often photos change, when to go dark |
-| **Apps / Consoles** | What appears on Home, HDMI ports |
+| **Atmosphere → Background** | Off / Photo / Rotate / Live; Mix Mode; sources; Unsplash key; Immich share link |
+| **Weather** | Place (auto / search) and °C / °F |
+| **Music** | Radio station or Subsonic server; play / next / volume |
+| **Screen saver** | Delay, photo interval, go-dark |
+| **Home / Consoles** | Tiles on Home, HDMI ports |
 | **Appearance** | Clock, date, font, app name labels |
 
-Optional seed before first run: copy `src/js/config.local.example.js` → `src/js/config.local.js`
-(Immich link, Unsplash key, music server, weather). That file stays on your machine / in the
-package and is not committed.
+Optional build-time seed: copy `src/js/config.local.example.js` → `src/js/config.local.js`
+(not committed). Most users can ignore this and use Settings on the TV.
 
-## Try it on a computer
+## Develop
 
 Needs Node.js 20+.
 
@@ -64,26 +69,18 @@ Needs Node.js 20+.
 git clone https://github.com/dx616b/arn0-tv.git
 cd arn0-tv
 npm run preview        # http://localhost:8080
+npm run build          # dist/Arn0Plus.wgt
 ```
 
 Arrow keys + Enter; Esc = Back.
 
-## Put it on a TV
-
-1. Download **[Arn0Plus-0.6.18.wgt](https://github.com/dx616b/arn0-tv/releases/download/v0.6.18/Arn0Plus-0.6.18.wgt)**
-   (or build yourself: `npm run build` → `dist/Arn0Plus.wgt`)
-2. Install with [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) → Custom WGT
-   (it signs on install)
-3. Optional: use [Vetro](https://github.com/andrearicci93/vetro) so Home opens this launcher
-
-Details and recovery: [docs/setup-tv.md](docs/setup-tv.md).
-
-Every push to `main` rebuilds a rolling prerelease; tag `v*` for a versioned release.
+Every push to `main` rebuilds a rolling prerelease; tag `v*` publishes a versioned `.wgt`.
 
 ## Thanks
 
 - [NelsonEU](https://github.com/NelsonEU) — original Arn0 launcher
-- [PatrickSt1991](https://github.com/PatrickSt1991) / [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) — easy sideload
+- [PatrickSt1991](https://github.com/PatrickSt1991) / [Apps2Samsung](https://apps2samsung.com/) — install & catalog
 - [andrearicci93](https://github.com/andrearicci93) / [Vetro](https://github.com/andrearicci93/vetro) — Home remapping
+- [SomaFM](https://somafm.com/) — listener radio streams (credited in-app)
 
-MIT — see [LICENSE](LICENSE). Not affiliated with Samsung, Immich, Navidrome, Apps2Samsung, or Vetro.
+MIT — see [LICENSE](LICENSE). Not affiliated with Samsung, Immich, Navidrome, SomaFM, Apps2Samsung, or Vetro.

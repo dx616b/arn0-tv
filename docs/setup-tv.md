@@ -25,23 +25,33 @@ other regions' firmware are all untested here.
 
 ## Part 1 — install the launcher
 
-Prerequisites: Node.js 20+, and the TV in Developer Mode on the same network.
+Prerequisites: the TV in Developer Mode on the same network as the device running the installer.
 
-1. Build the package:
+### Easiest — Apps2Samsung catalog
+
+1. Install [Apps2Samsung](https://apps2samsung.com/) ([GitHub](https://github.com/Apps2Samsung/Apps2Samsung)).
+2. Connect to the TV, open the catalog, and install **Arn0+**
+   (also in the [community packages](https://github.com/Apps2Samsung/tizen-community-packages) bundle).
+3. Open **Arn0+** from the Samsung app list and check it works: apps launch, HDMI tiles switch
+   inputs, Settings saves across a restart.
+
+### Manual — Custom WGT / build yourself
+
+1. Download a release `.wgt` from [GitHub Releases](https://github.com/dx616b/arn0-tv/releases),
+   or build with Node.js 20+:
 
    ```sh
    npm run build          # -> dist/Arn0Plus.wgt
    ```
 
-2. Install it. Either Apps2Samsung's **Custom WGT File** option, or Tizen Studio's CLI. Use the
-   same Samsung author certificate/profile used for the existing installation when updating.
-   Apps2Samsung certificate options depend on its version and signing setup; do not assume that
-   **Force Samsung certificate** should always be on or always be off. If an update reports an
-   author-certificate mismatch, preserve the current install and resolve signing consistency
-   before uninstalling, since uninstalling clears the launcher's saved settings.
+2. Install with Apps2Samsung → **Custom WGT File**, or Tizen Studio's CLI. Use the same Samsung
+   author certificate/profile used for the existing installation when updating. Apps2Samsung
+   certificate options depend on its version and signing setup; do not assume that **Force Samsung
+   certificate** should always be on or always be off. If an update reports an author-certificate
+   mismatch, preserve the current install and resolve signing consistency before uninstalling,
+   since uninstalling clears the launcher's saved settings.
 
-3. Open it from the Samsung app list and check it works: apps launch, HDMI tiles switch inputs,
-   Settings saves across a restart.
+3. Open it from the Samsung app list and check it works (same as above).
 
 Stop here if you only want the dashboard. You can open it manually from the app list forever and
 nothing about the TV's own behaviour has changed. **Part 2 is not required for the launcher to
