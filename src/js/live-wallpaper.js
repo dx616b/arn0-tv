@@ -38,6 +38,8 @@
     // Tizen: keep catalog lean; browser preview can hold more.
     var PICK_CATALOG_MAX = (typeof tizen !== 'undefined') ? 80 : 120;
     // Prefs.wallpaper.livePool → how many entries each source queue / plan aims for.
+    // Bing’s public HP window is ~8; solo Bing cannot usefully target more.
+    var BING_WINDOW = 8;
     var LIVE_POOLS = {
         small: { label: '8', ahead: 8, plan: 5, pick: 3 },
         normal: { label: '20', ahead: 20, plan: 10, pick: 5 },
@@ -58,15 +60,23 @@
     function planSize() {
         var n = livePool().plan;
         // Mix boot: shorter upcoming list until queues catch up.
-        if (provider() === 'mix' && mixWarmPhase === 'boot') return Math.min(n, 3);
+        if (provider() === 'mix' && mixWarmPhase === 'boot') n = Math.min(n, 3);
+        if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
         return n;
     }
-    function pickBatch() { return livePool().pick; }
+    function pickBatch() {
+        var n = livePool().pick;
+        if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
+        return n;
+    }
     // Effective per-source queue target (Mix boots small, then grows to sourceAhead).
     function effectiveAhead() {
-        if (provider() !== 'mix') return sourceAhead();
-        if (mixWarmPhase === 'full') return sourceAhead();
-        return Math.min(MIX_AHEAD_BOOT, sourceAhead());
+        var n;
+        if (provider() !== 'mix') n = sourceAhead();
+        else if (mixWarmPhase === 'full') n = sourceAhead();
+        else n = Math.min(MIX_AHEAD_BOOT, sourceAhead());
+        if (provider() === 'bing') n = Math.min(n, BING_WINDOW);
+        return n;
     }
     function resetMixWarm() {
         mixWarmPhase = 'boot';
@@ -119,6 +129,10 @@
     var notifyTimer = null;
     var saveTimer = null;
     var pendingSaveProvider = '';
+    // Plan fill (no reuse) hit the unique pool ceiling — do not retry until a slot is consumed.
+    var planUniqueExhausted = false;
+    // Bing HP window (~8 days): one network fetch per calendar day + market, then serve from RAM.
+    var bingDay = { day: '', market: '', entries: [], inflight: null };
 
     // Coalesce UI refresh storms from queue/plan fills (Home/Settings listeners).
     function notify(immediate) {
@@ -340,6 +354,7 @@
         cachedMarket = '';
         avoidSource = '';
         mixOrder = [];
+        clearBingDay();
         resetMixWarm();
         resetStream();
     }
@@ -414,6 +429,16 @@
             fetchedDay = raw.fetchedDay || '';
             cachedProvider = raw.provider;
             cachedMarket = raw.market || '';
+            if (raw.bingDay && raw.bingDay.day === todayKey() &&
+                    raw.bingDay.market === cfg().market &&
+                    Array.isArray(raw.bingDay.entries) && raw.bingDay.entries.length) {
+                bingDay = {
+                    day: raw.bingDay.day,
+                    market: raw.bingDay.market,
+                    entries: raw.bingDay.entries.map(normalize).filter(Boolean),
+                    inflight: null
+                };
+            }
             var beforeItems = raw.items.length;
             items = raw.items.slice(-HISTORY_MAX).map(normalize).filter(function (w) {
                 if (cachedProvider === 'mix') return !!w.source;
@@ -518,6 +543,10 @@
                 picks: picksForCache(),
                 plan: stream.plan,
                 queues: queuesForCache(),
+                // Persist today's Bing window so a relaunch does not re-hit the API.
+                bingDay: (bingDay.day === todayKey() && bingDay.entries && bingDay.entries.length)
+                    ? { day: bingDay.day, market: bingDay.market, entries: bingDay.entries }
+                    : null,
                 immichPage: stream.immichPage || 1,
                 immichAlbum: stream.immichAlbum ? {
                     id: stream.immichAlbum.id,
@@ -733,6 +762,30 @@
         if (preview()) return '/api/live/bing?' + query;
         // Same TV URL as v0.6.15 — direct Bing (no CORS proxy).
         return BING + '/HPImageArchive.aspx?format=js&' + query;
+    }
+
+    function clearBingDay() {
+        bingDay = { day: '', market: '', entries: [], inflight: null };
+    }
+
+    // One HPImageArchive pull per day; further queue fills walk the cached list (no re-fetch).
+    function ensureBingDayWindow() {
+        var day = todayKey();
+        var market = cfg().market;
+        if (bingDay.day === day && bingDay.market === market && bingDay.entries.length) {
+            return Promise.resolve(bingDay.entries);
+        }
+        if (bingDay.inflight) return bingDay.inflight;
+        bingDay.inflight = xhrGet(bingArchiveUrl(0, BING_WINDOW)).then(function (data) {
+            var entries = (data.images || []).map(parseBingImage).filter(Boolean);
+            bingDay = { day: day, market: market, entries: entries, inflight: null };
+            DevLog.log('Live wallpaper: bing day fetch ' + entries.length + ' (' + day + ', ' + market + ')');
+            return entries;
+        }, function (err) {
+            bingDay.inflight = null;
+            throw err;
+        });
+        return bingDay.inflight;
     }
 
     /* ---------- NASA APOD (v0.6.15 image-article + media; proven on TV) ---------- */
@@ -1420,13 +1473,11 @@
     // One server pull → zero or more fresh entries (Immich/Bing return a page; others one).
     function pullFresh(name) {
         if (name === 'bing') {
-            // Live API window is ~8 days; older days stay in picks/history and pad the lists.
-            var idx = stream.bing || 0;
-            var n = 8;
-            return xhrGet(bingArchiveUrl(idx, n)).then(function (data) {
-                var imgs = data.images || [];
-                if (!imgs.length) {
-                    if (idx === 0) throw new Error('empty Bing');
+            // Live API window is ~8 days — fetched once per calendar day (ensureBingDayWindow).
+            return ensureBingDayWindow().then(function (all) {
+                if (!all.length) throw new Error('empty Bing');
+                var idx = stream.bing || 0;
+                if (idx >= all.length) {
                     if (!stream.bingWrapped) {
                         stream.bingWrapped = true;
                         stream.bing = 0;
@@ -1434,12 +1485,11 @@
                     }
                     return { entries: [], done: true };
                 }
-                stream.bing = idx + imgs.length;
+                // Hand the whole remaining window in one step; no further network this day.
+                var batch = all.slice(idx);
+                stream.bing = all.length;
                 stream.bingWrapped = false;
-                return {
-                    entries: imgs.map(parseBingImage).filter(Boolean),
-                    done: imgs.length < n
-                };
+                return { entries: batch, done: true };
             });
         }
         if (name === 'nasa') {
@@ -1503,6 +1553,7 @@
     function fillSourceQueue(name, limit) {
         var q = sourceQueue(name);
         var cap = typeof limit === 'number' && limit > 0 ? limit : effectiveAhead();
+        if (name === 'bing') cap = Math.min(cap, BING_WINDOW);
         if (q.filling) {
             // Picker must not wait for a full Live ahead fill — resolve once we
             // already have enough catalogued, otherwise continue after the current fill.
@@ -1546,12 +1597,32 @@
                     }
 
                     batch.forEach(function (entry) { absorb(entry, false); });
-                    // Bing/NASA pools are tiny — once every photo is "seen", recycle the batch.
+                    /*
+                     * Bing/NASA pools are tiny. Once every key is already known, force-requeue
+                     * for playback reuse — but only when the upcoming *plan* does not already
+                     * hold them. isDuplicate also checks plan/history; recycling those keys
+                     * cannot make them "fresh" for plan fill, and dropStale would immediately
+                     * remove the force-adds → empty-bing spin in the log.
+                     */
                     if (!added && batch.length && batch.every(isDuplicate)) {
+                        var heldInPlan = batch.every(function (e) {
+                            return stream.plan.some(function (w) {
+                                return w.key === e.key || (e.file && w.file === e.file);
+                            });
+                        });
+                        if (heldInPlan) {
+                            padFromKnown(name, cap);
+                            return;
+                        }
                         forgetSeenEntries(batch);
                         if (name === 'bing') stream.bingWrapped = false;
                         batch.forEach(function (entry) { absorb(entry, true); });
-                        DevLog.log('Live wallpaper: ' + name + ' recycled ' + batch.length);
+                        if (added) {
+                            DevLog.log('Live wallpaper: ' + name + ' recycled ' + batch.length);
+                            dirty = true;
+                        }
+                        // One recycle pass — do not dropStale the forced batch or step again.
+                        return;
                     }
                     if (added) {
                         dropStale(q, added);
@@ -1752,10 +1823,10 @@
                 mixGrowTimer = null;
                 mixWarmPhase = 'full';
                 warmSources();
-                if (stream.plan.length < planSize()) fillPlan(80);
+                if (!planUniqueExhausted && stream.plan.length < planSize()) fillPlan(80);
             }, MIX_GROW_MS);
         }
-        if (stream.plan.length < planSize()) fillPlan(120);
+        if (!planUniqueExhausted && stream.plan.length < planSize()) fillPlan(120);
     }
 
     // Mix: strict round-robin over orderedMixKeys (Shuffle only changed that order).
@@ -1848,16 +1919,21 @@
     // Fill upcoming slots in the background; never notify (that re-applied wallpaper each slot).
     function fillPlan(delayMs) {
         if (stream.filling) return stream.filling;
+        if (planUniqueExhausted && stream.plan.length > 0) return Promise.resolve();
         var g = generation;
         var wait = delayMs > 0 ? delayMs : 0;
 
         function step() {
             if (g !== generation) return Promise.resolve();
-            if (stream.plan.length >= planSize()) return Promise.resolve();
+            if (stream.plan.length >= planSize()) {
+                planUniqueExhausted = false;
+                return Promise.resolve();
+            }
             // Plan fill never reuses — stop when the unique pool is exhausted.
             return advanceOne(g, false).then(function (entry) {
                 if (g !== generation || !entry) return;
                 stream.plan.push(entry);
+                planUniqueExhausted = false;
                 saveCache(provider());
                 // Only warm the next decode when the plan was empty / just started.
                 if (stream.plan.length <= 2 && window.Wallpaper && Wallpaper.preloadAhead) {
@@ -1867,6 +1943,7 @@
                     ' (' + (entry.credit || entry.key) + ')');
                 return planPause().then(step);
             }, function (e) {
+                planUniqueExhausted = true;
                 DevLog.log('Live wallpaper: plan fill stopped: ' + (e && e.message ? e.message : e) +
                     (stream.plan.length ? ' (' + stream.plan.length + ' ready)' : ''));
             });
@@ -1906,11 +1983,14 @@
         while (stream.plan.length) {
             var ready = stream.plan.shift();
             if (want === 'mix' || (ready && ready.source === want)) {
+                // Slot freed — unique pool may have room again.
+                planUniqueExhausted = false;
                 // Defer plan top-up so the new photo can decode without competing for network/CPU.
                 fillPlan(700);
                 return showEntry(ready);
             }
         }
+        planUniqueExhausted = false;
         return advanceOne(g, true).then(function (entry) {
             if (g !== generation || !entry) return null;
             fillPlan(700);
@@ -1983,10 +2063,12 @@
 
         if (list().length && p === 'bing' && cachedMarket !== cfg().market) resetPool();
 
-        // New calendar day: let Bing restart from today.
+        // New calendar day: drop yesterday's Bing window so the next pull fetches today.
         if (fetchedDay && fetchedDay !== todayKey()) {
             stream.bingWrapped = false;
             stream.bing = 0;
+            clearBingDay();
+            planUniqueExhausted = false;
         }
 
         var g = generation;
@@ -2128,6 +2210,7 @@
         resetMixWarm();
         stream.plan = [];
         stream.filling = null;
+        planUniqueExhausted = false;
         // Always clear queues + pick catalog — Mix leftovers (or blank-tagged
         // orphans once re-labelled) must not ride into a solo Immich focus.
         SOURCE_NAMES.forEach(function (name) {
@@ -2138,6 +2221,7 @@
         // Fresh cursors so a stuck Bing idx / NASA wrap cannot starve the new focus.
         stream.bing = 0;
         stream.bingWrapped = false;
+        // Keep today's Bing window across focus changes — only market/day invalidates it.
         stream.nasa = 0;
         stream.wiki = 0;
         stream.unsplash = 0;
@@ -2158,6 +2242,7 @@
         generation++;
         stream.plan = [];
         stream.filling = null;
+        planUniqueExhausted = false;
         if (provider() === 'mix' && shuffleOn()) reshuffleMixOrder();
         else {
             mixOrder = readyMixKeys().slice();
@@ -2195,6 +2280,7 @@
         loadMorePicks: loadMorePicks,
         pickBatch: pickBatch,
         LIVE_POOLS: LIVE_POOLS,
+        BING_WINDOW: BING_WINDOW,
         preloadPickThumbs: preloadPickThumbs,
         find: find,
         ensureDaily: ensureDaily,

@@ -7,7 +7,10 @@
  *   Right    next photo (Rotate / Live)
  *   Left     next music track
  *   OK       play / pause music
- *   Back     exit (from black screen: wake first; Back again to exit)
+ *   Back     exit (chrome hidden or black: first key only reveals / wakes)
+ *
+ * Caption, clock, weather, music, and legend fade out after idle; the next key
+ * shows them again without changing photo or track.
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -39,9 +42,21 @@
     ];
 
     var DARK_AFTER = [
+        { key: '5m', label: '5 min', ms: 5 * 60 * 1000 },
+        { key: '10m', label: '10 min', ms: 10 * 60 * 1000 },
+        { key: '15m', label: '15 min', ms: 15 * 60 * 1000 },
         { key: '30m', label: '30 min', ms: 30 * 60 * 1000 },
         { key: '1h', label: '1 hour', ms: 60 * 60 * 1000 },
         { key: '2h', label: '2 hours', ms: 2 * 60 * 60 * 1000 },
+        { key: 'never', label: 'Never', ms: 0 }
+    ];
+
+    // Caption / clock / weather / music / legend idle fade.
+    var CHROME_HIDE = [
+        { key: '10s', label: '10 s', ms: 10 * 1000 },
+        { key: '20s', label: '20 s', ms: 20 * 1000 },
+        { key: '30s', label: '30 s', ms: 30 * 1000 },
+        { key: '1m', label: '1 min', ms: 60 * 1000 },
         { key: 'never', label: 'Never', ms: 0 }
     ];
 
@@ -82,6 +97,8 @@
     var panSign = 1;            // flipped on each leg, so the drift alternates direction
     var lastClockText = '';
     var dark = false;
+    var chromeHidden = false;   // writings faded; next key only reveals them
+    var lastChromeAt = 0;       // last time chrome was shown or touched
     var advancing = false;      // one in-flight live takeNext (timer or remote)
     var shownKey = '';          // live polish may update caption after the photo is up
     var providerFlashTimer = 0;
@@ -101,7 +118,8 @@
 
     function delay() { return option(DELAYS, prefs().delay, '5m'); }
     function photoEvery() { return option(PHOTO_EVERY, prefs().photoEvery, '75s'); }
-    function darkAfter() { return option(DARK_AFTER, prefs().dark, '1h'); }
+    function darkAfter() { return option(DARK_AFTER, prefs().dark, '15m'); }
+    function chromeHide() { return option(CHROME_HIDE, prefs().chromeHide, '20s'); }
     function panSpeed() { return option(PAN_SPEEDS, prefs().panSpeed, 'normal'); }
 
     function driftOf(layer) {
@@ -718,8 +736,10 @@
         layers[1].style.opacity = '0';
         resetPan(layers[0], panSign);
         resetPan(layers[1], panSign);
-        $('ss-dark').style.opacity = '0';
-        $('ss-clock').style.opacity = '1';
+        var rootOpen = $('screensaver');
+        if (rootOpen) rootOpen.classList.remove('is-dark');
+        var veilOpen = $('ss-dark');
+        if (veilOpen) veilOpen.style.opacity = '0';
 
         var now = Date.now();
         openedAt = now;
@@ -727,6 +747,7 @@
         nextPanAt = 0;
 
         UI.show('screensaver');
+        showChrome();
         updateClock();
         // Shows the cached reading at once, and asks for a new one only if the hour is up.
         renderWeather();
@@ -738,6 +759,25 @@
         caption(w);
         showPhoto(w);
         DevLog.log('Screen saver on');
+    }
+
+    function showChrome() {
+        chromeHidden = false;
+        lastChromeAt = Date.now();
+        var root = $('screensaver');
+        if (root) root.classList.remove('chrome-off');
+    }
+
+    function hideChrome() {
+        if (!open || dark || chromeHidden) return;
+        chromeHidden = true;
+        var root = $('screensaver');
+        if (root) root.classList.add('chrome-off');
+    }
+
+    function touchChrome() {
+        if (chromeHidden) return;
+        lastChromeAt = Date.now();
     }
 
     // Park drift under the black layer — ongoing CSS transforms fight the audio decoder on this SoC.
@@ -761,8 +801,12 @@
     function goDark() {
         if (dark) return;
         dark = true;
+        hideChrome();
         freezePan();
-        $('ss-dark').style.opacity = '1';
+        var root = $('screensaver');
+        if (root) root.classList.add('is-dark');
+        var veil = $('ss-dark');
+        if (veil) veil.style.opacity = '1';
         DevLog.log('Screen saver dark after ' + darkAfter().label);
     }
 
@@ -770,7 +814,13 @@
     function wakeFromDark() {
         if (!dark) return false;
         dark = false;
-        $('ss-dark').style.opacity = '0';
+        // Restart the go-dark clock — otherwise the next tick blacks out again immediately.
+        openedAt = Date.now();
+        var root = $('screensaver');
+        if (root) root.classList.remove('is-dark');
+        var veil = $('ss-dark');
+        if (veil) veil.style.opacity = '0';
+        showChrome();
         // Resume drift on the visible layer without fetching a new photo.
         if (layers && layers[front]) {
             resetPan(layers[front], panSign);
@@ -843,6 +893,8 @@
         if (!dark && until && now - openedAt >= until) goDark();
         // Behind an opaque black layer there is nothing worth moving.
         if (dark) return;
+        var hideAfter = chromeHide().ms;
+        if (hideAfter && !chromeHidden && now - lastChromeAt >= hideAfter) hideChrome();
         if (rotating() && now >= nextPhotoAt) {
             advancePhoto();
         } else if (nextPanAt && now >= nextPanAt) {
@@ -855,12 +907,18 @@
         if (!open) return;
         open = false;
         advancing = false;
+        chromeHidden = false;
+        dark = false;
         shownKey = '';
         lastInput = Date.now();
         photoToken++;
         clearTimeout(providerFlashTimer);
         captionSub = '';
         lastMusicSig = '';
+        var root = $('screensaver');
+        if (root) root.classList.remove('chrome-off', 'is-dark');
+        var veil = $('ss-dark');
+        if (veil) veil.style.opacity = '0';
         var flash = $('ss-provider');
         if (flash) {
             flash.classList.remove('on');
@@ -930,11 +988,16 @@
             hints: [],
             rows: function () { return []; },
             onKey: function (k) {
-                // Black screen: any key only wakes (do not exit or change track/photo).
+                // Black screen: wake only. Chrome hidden: show writings only.
                 if (dark) {
                     wakeFromDark();
                     return true;
                 }
+                if (chromeHidden) {
+                    showChrome();
+                    return true;
+                }
+                touchChrome();
                 if (k === UI.KEY.UP && cycleLiveProvider(-1)) return true;
                 if (k === UI.KEY.DOWN && cycleLiveProvider(1)) return true;
                 if (k === UI.KEY.RIGHT && canAdvance()) {
@@ -963,6 +1026,10 @@
                     wakeFromDark();
                     return true;
                 }
+                if (chromeHidden) {
+                    showChrome();
+                    return true;
+                }
                 close();
                 return true;
             }
@@ -980,10 +1047,12 @@
         DELAYS: DELAYS,
         PHOTO_EVERY: PHOTO_EVERY,
         DARK_AFTER: DARK_AFTER,
+        CHROME_HIDE: CHROME_HIDE,
         PAN_SPEEDS: PAN_SPEEDS,
         delay: delay,
         photoEvery: photoEvery,
         darkAfter: darkAfter,
+        chromeHide: chromeHide,
         init: init,
         open: openSaver,
         close: close,

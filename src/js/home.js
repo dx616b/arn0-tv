@@ -426,14 +426,21 @@
         });
         var list = $('lab-list');
         list.innerHTML = '';
+        UI.resetScroll(list);
         actions.forEach(function (a) {
             var li = el('li', '', a.label);
             li._item = { kind: 'lab', run: a.run };
             list.appendChild(li);
         });
-        DevLog.onLine(function () {
-            $('lab-log').textContent = DevLog.lines().slice(-26).join('\n');
-        });
+        paintLabLog();
+        DevLog.onLine(paintLabLog);
+    }
+
+    function paintLabLog() {
+        var log = $('lab-log');
+        if (!log) return;
+        log.textContent = DevLog.lines().slice(-120).join('\n');
+        log.scrollTop = log.scrollHeight;
     }
 
     // ---------- Actions
@@ -666,9 +673,35 @@
 
         UI.register('lab', {
             el: $('lab'),
-            rows: function () { return UI.children($('lab-list')).map(function (li) { return [li]; }); },
-            activate: function (item) { item.run(); },
-            hints: [['OK', 'Run'], ['Back', 'Home']]
+            rows: function () {
+                var log = $('lab-log');
+                return UI.children($('lab-list')).map(function (li) { return [li, log]; });
+            },
+            activate: function (item) { if (item && item.run) item.run(); },
+            onFocus: function () { UI.refreshHints(); },
+            onKey: function (k) {
+                var log = $('lab-log');
+                if (!log || !log.classList.contains('focused')) return false;
+                if (k === KEY.UP) {
+                    log.scrollTop = Math.max(0, log.scrollTop - 56);
+                    if (window.Sound) Sound.play('move');
+                    return true;
+                }
+                if (k === KEY.DOWN) {
+                    var max = Math.max(0, log.scrollHeight - log.clientHeight);
+                    log.scrollTop = Math.min(max, log.scrollTop + 56);
+                    if (window.Sound) Sound.play(log.scrollTop >= max ? 'edge' : 'move');
+                    return true;
+                }
+                return false;
+            },
+            hints: function () {
+                var log = $('lab-log');
+                if (log && log.classList.contains('focused')) {
+                    return [['▲▼', 'Scroll'], ['◀', 'Actions'], ['Back', 'Home']];
+                }
+                return [['OK', 'Run'], ['▶', 'Log'], ['Back', 'Home']];
+            }
         });
     }
 

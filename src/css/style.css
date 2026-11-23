@@ -891,6 +891,15 @@ h1, h2 {
     color: var(--bg);
 }
 
+.chip.disabled {
+    opacity: 0.35;
+}
+
+.chip.disabled.focused {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--muted);
+}
+
 .setting-inline-heads {
     display: flex;
     align-items: baseline;
@@ -1172,7 +1181,6 @@ h1, h2 {
 .lab-log {
     position: absolute;
     top: 220px;
-    bottom: 120px;
     left: 1040px;
     right: var(--edge);
     margin: 0;
@@ -1183,7 +1191,12 @@ h1, h2 {
     color: #cfd3da;
     white-space: pre-wrap;
     word-break: break-all;
-    overflow: hidden;
+    /* .scroll-y: bottom + overflow so long probe output is readable */
+}
+
+.lab-log.focused {
+    outline: 2px solid rgba(220, 224, 232, 0.35);
+    outline-offset: -2px;
 }
 
 /* ---------- Footer, toast ---------- */
@@ -1468,7 +1481,26 @@ html.preview, html.preview body {
     bottom: 72px;
     width: 640px;
     max-width: 34vw;
-    transition: transform 1200ms ease-out;
+    transition: transform 1200ms ease-out, opacity 900ms linear;
+}
+
+/* Idle: fade all writings; first remote key brings them back without other actions. */
+#screensaver .ss-scrim,
+#screensaver .ss-music,
+#screensaver .ss-clock,
+#screensaver .ss-legend,
+#screensaver .ss-provider {
+    transition: opacity 900ms linear;
+}
+
+#screensaver.chrome-off .ss-caption,
+#screensaver.chrome-off .ss-scrim,
+#screensaver.chrome-off .ss-music,
+#screensaver.chrome-off .ss-clock,
+#screensaver.chrome-off .ss-legend,
+#screensaver.chrome-off .ss-provider {
+    opacity: 0;
+    pointer-events: none;
 }
 
 .ss-title {
@@ -1513,7 +1545,7 @@ html.preview, html.preview body {
     bottom: 190px;
     width: 640px;
     max-width: 34vw;
-    transition: transform 1200ms ease-out;
+    transition: transform 1200ms ease-out, opacity 900ms linear;
 }
 
 /* Compact remote legend — center bottom, clear of caption and clock. */
@@ -1666,7 +1698,13 @@ html.preview, html.preview body {
     left: 0;
     width: 1920px;
     height: 1080px;
+    z-index: 80;
     background: #000;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 10000ms linear;
+}
+
+#screensaver.is-dark .ss-dark {
+    opacity: 1;
 }
