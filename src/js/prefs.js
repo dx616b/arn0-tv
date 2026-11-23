@@ -24,13 +24,14 @@
                 // Fresh install: Live Bing + shuffle (no API key). Seeds from config.local override.
                 mode: wallSeed.mode || 'live',   // 'off' | 'photo' | 'rotate' | 'live'
                 photo: wallSeed.photo || theme.wallpaper || 'forest',
-                liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'unsplash' | 'immich' | 'mix'
+                liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'wallhaven' | 'unsplash' | 'immich' | 'mix'
                 liveKey: '',            // current entry in the live pool (date key)
-                // Multi-select Live sources (missing key = on). One on → that provider; 2+ → mix.
+                // Multi-select Live sources (missing key uses default). Wallhaven starts off.
                 mixEnabled: {
                     bing: true,
                     nasa: true,
                     wikimedia: true,
+                    wallhaven: false,
                     unsplash: true,
                     immich: true
                 },
@@ -109,15 +110,19 @@
             if (saved) {
                 merge(prefs.sound, saved.sound);
                 merge(prefs.wallpaper, saved.wallpaper);
-                // mixEnabled is a map; fill any keys missing from older saves.
+                // mixEnabled is a map; fill any keys missing from older saves (keep def for new keys).
                 (function () {
-                    var def = { bing: true, nasa: true, wikimedia: true, unsplash: true, immich: true };
+                    var def = {
+                        bing: true, nasa: true, wikimedia: true,
+                        wallhaven: false, unsplash: true, immich: true
+                    };
                     var cur = prefs.wallpaper.mixEnabled;
                     if (!cur || typeof cur !== 'object') {
                         prefs.wallpaper.mixEnabled = def;
                         return;
                     }
                     Object.keys(def).forEach(function (k) {
+                        if (cur[k] === undefined) return;
                         def[k] = cur[k] !== false;
                     });
                     prefs.wallpaper.mixEnabled = def;
@@ -197,6 +202,7 @@
         if (window.LiveWallpaper) {
             LiveWallpaper.clearCache();
             if (LiveWallpaper.clearUnsplashKey) LiveWallpaper.clearUnsplashKey();
+            if (LiveWallpaper.clearWallhavenSettings) LiveWallpaper.clearWallhavenSettings();
             if (LiveWallpaper.clearImmichLink) LiveWallpaper.clearImmichLink();
         }
         if (window.Wallpaper && Wallpaper.clearPins) Wallpaper.clearPins();

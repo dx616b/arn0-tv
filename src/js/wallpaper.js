@@ -744,7 +744,7 @@
             if (needBusy) UI.busyHide();
             var p = Prefs.get().wallpaper;
             var l = LiveWallpaper.list();
-            if (l.length && !LiveWallpaper.find(p.liveKey)) {
+            if (l.length && (!p.liveKey || !LiveWallpaper.find(p.liveKey))) {
                 p.liveKey = l[0].key;
                 Prefs.save();
             }
@@ -787,7 +787,7 @@
                 var p = Prefs.get().wallpaper;
                 var l = list();
                 if (!l.length) return;
-                if (!LiveWallpaper.find(p.liveKey)) {
+                if (!p.liveKey || !LiveWallpaper.find(p.liveKey)) {
                     p.liveKey = l[0].key;
                     Prefs.save();
                 }

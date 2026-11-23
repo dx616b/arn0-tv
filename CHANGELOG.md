@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.20
+
+### Music
+- Radio stall watchdog: if playback should be on but audio pauses or stops advancing, soft-restart → mirrors → next station; retry after all stations fail
+- Kick recovery when waking from screensaver dark
+
+### UI
+- Toasts are text-only (no panel background)
+- After Use now / Save from Live, mode chip shows Photo (Live picker stays open)
+- Screen saver settings: keep block titles visible when focusing On/Off chips; legend wraps
+
+### Live wallpaper
+- Remote photos target 1920×1080 (Bing HD; Unsplash w/h fit=max; Wallhaven exact 1920×1080); Unsplash skips portraits
+- Wallhaven provider (SFW, category chips; Mix defaults off); selecting it applies Home wallpaper like other sources
+- Wallhaven captions: tags + uploader (no resolution); detail polish fills search rows
+- Wallhaven category flags forced as 3-char strings + client filter (General no longer admits Anime)
+
 ## 0.6.19
 
 ### Screen saver

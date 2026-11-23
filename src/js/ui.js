@@ -185,9 +185,11 @@
     function ensureVisible(item) {
         var scroller = item.closest && item.closest('.scroll-y');
         if (scroller) {
-            var r = item.getBoundingClientRect();
+            // Prefer the whole setting block so the h2 is not clipped above On/Off chips.
+            var target = (item.closest && item.closest('.setting-block')) || item;
+            var r = target.getBoundingClientRect();
             var p = scroller.getBoundingClientRect();
-            var pad = 24;
+            var pad = 28;
             if (r.bottom > p.bottom - pad) scroller.scrollTop += r.bottom - (p.bottom - pad);
             else if (r.top < p.top + pad) scroller.scrollTop -= (p.top + pad) - r.top;
             return;

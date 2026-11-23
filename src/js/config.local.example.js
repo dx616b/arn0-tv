@@ -20,7 +20,7 @@ window.LAUNCHER_LOCAL = {
     // },
 
     // Live wallpapers (metadata cache only; photos fetched on demand into a planned queue).
-    // Provider in Settings → Background (bing | nasa | wikimedia | unsplash | immich | mix).
+    // Provider in Settings → Background (bing | nasa | wikimedia | wallhaven | unsplash | immich | mix).
     // liveWallpaper: { market: 'en-GB', unsplashAccessKey: 'YOUR_ACCESS_KEY' },
     // Immich album (share link from Immich → Sharing → Shared links):
     // liveWallpaper: { market: 'en-GB', immichLink: 'https://host/share/KEY' },

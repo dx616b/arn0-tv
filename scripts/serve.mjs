@@ -1,6 +1,6 @@
 // Serves src/ for desktop preview. Arrow keys + Enter navigate, Esc/Backspace = Back.
-// Also proxies Bing / NASA APOD / Wikimedia / Unsplash / Immich so Live wallpapers
-// can fetch despite browser CORS.
+// Also proxies Bing / NASA APOD / Wikimedia / Wallhaven / Unsplash / Immich so Live
+// wallpapers can fetch despite browser CORS.
 import { createServer } from 'node:http';
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -29,6 +29,7 @@ const types = {
 };
 
 const UNSPLASH_API = 'https://api.unsplash.com';
+const WALLHAVEN_API = 'https://wallhaven.cc/api/v1';
 
 async function proxyJson(res, url, headers) {
     try {
@@ -240,6 +241,24 @@ createServer(async (req, res) => {
             return;
         }
         await proxyJson(res, target.toString(), { Authorization: auth });
+        return;
+    }
+
+    if (path === '/api/live/wallhaven') {
+        // Relative to /api/v1/ so "/search" is not resolved as host-root /search.
+        let raw = u.searchParams.get('path') || '';
+        if (raw.startsWith('/')) raw = raw.slice(1);
+        const target = new URL(raw, WALLHAVEN_API + '/');
+        const pathOk = target.pathname === '/api/v1/search' ||
+            /^\/api\/v1\/w\/[A-Za-z0-9]+$/.test(target.pathname);
+        if (target.origin !== 'https://wallhaven.cc' || !pathOk) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: 'path not allowed' }));
+            return;
+        }
+        // Hard-lock SFW on search; detail fetch is still SFW-only in-app.
+        if (target.pathname === '/api/v1/search') target.searchParams.set('purity', '100');
+        await proxyJson(res, target.toString());
         return;
     }
 

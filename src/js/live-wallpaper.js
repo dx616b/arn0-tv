@@ -1,22 +1,25 @@
 /*
  * Live wallpapers: Bing (no key), NASA APOD (no key), Wikimedia Picture of
- * the Day (no key), Unsplash (Access Key), Immich shared album, or Mix (all ready sources).
+ * the Day (no key), Wallhaven (no key, SFW), Unsplash (Access Key), Immich shared
+ * album, or Mix (all ready sources).
  *
  * Metadata only in localStorage (url, title, credit, date key) — never image bytes.
  *
  * First photo shows as soon as one source returns; an upcoming playlist fills in the
  * background. Image bytes still load only when a photo's turn arrives. Each source is
- * fetched in order into its queue (Bing/NASA/Wiki/Unsplash day cursor, Immich pages).
- * Photos are always taken in queue order. Shuffle only permutes the Mix provider list;
- * Mix then walks that list round-robin (never a random source per slot). History, plan,
- * offsets, queues, and a seen-key ring persist in localStorage.
+ * fetched in order into its queue (Bing/NASA/Wiki/Unsplash day cursor, Wallhaven /
+ * Immich pages). Photos are always taken in queue order. Shuffle only permutes the Mix
+ * provider list; Mix then walks that list round-robin (never a random source per slot).
+ * History, plan, offsets, queues, and a seen-key ring persist in localStorage.
  *
  * NASA APOD: science.nasa.gov WordPress image-article + media API (same path as v0.6.15).
  * Legacy apod.nasa.gov HTML shells / api.nasa.gov DEMO_KEY are not used.
  *
  * Unsplash Access Key: Settings → Background (saved on the TV). liveWallpaper.unsplashAccessKey
  * in config.local.js is used as a fallback when nothing has been saved. Stored separately so
- * Advanced → Export does not dump it.
+ * Advanced → Export does not dump it. Image URLs are sized to 1920×1080 (fit=max); portraits skipped.
+ *
+ * Wallhaven: SFW only (purity=100). Exact resolutions=1920x1080 + ratios=16x9. Category in Settings.
  *
  * Browser preview (`npm run preview`) routes API calls through /api/live/* so Chrome
  * CORS does not block fetches; on the TV the real endpoints are used directly (as before).
@@ -27,9 +30,11 @@
     var CACHE_KEY = 'arn0.liveWallpaper.v11';
     var IMMICH_STORE = 'arn0.immich.v1';
     var UNSPLASH_KEY_STORE = 'arn0.unsplash.v1';
+    var WALLHAVEN_STORE = 'arn0.wallhaven.v1';
     var TIMEOUT_MS = 15000;
     var BING = 'https://www.bing.com';
     var UNSPLASH = 'https://api.unsplash.com';
+    var WALLHAVEN = 'https://wallhaven.cc/api/v1';
     var UNSPLASH_PER_PAGE = 30;
     var UNSPLASH_PAGES = 50;
     // Planned upcoming + display history + long seen ring (dedup across days/restarts).
@@ -100,12 +105,20 @@
     var IMMICH_XHR_MS = 40 * 1000;
     var IMMICH_PAGE = 100;
     var RETRY_MS = 5 * 60 * 1000;
-    var SOURCE_NAMES = ['bing', 'nasa', 'wikimedia', 'unsplash', 'immich'];
+    var SOURCE_NAMES = ['bing', 'nasa', 'wikimedia', 'wallhaven', 'unsplash', 'immich'];
+
+    var WALLHAVEN_CATEGORIES = [
+        { key: 'general', label: 'General', flags: '100' },
+        { key: 'anime', label: 'Anime', flags: '010' },
+        { key: 'people', label: 'People', flags: '001' },
+        { key: 'all', label: 'All', flags: '111' }
+    ];
 
     var PROVIDERS = [
         { key: 'bing', label: 'Bing', needsKey: false },
         { key: 'nasa', label: 'NASA APOD', needsKey: false },
         { key: 'wikimedia', label: 'Wikimedia POTD', needsKey: false },
+        { key: 'wallhaven', label: 'Wallhaven', needsKey: false },
         { key: 'unsplash', label: 'Unsplash', needsKey: true },
         { key: 'immich', label: 'Immich album', needsKey: true },
         { key: 'mix', label: 'Mix', needsKey: false }
@@ -125,6 +138,7 @@
     var generation = 0;
     var unsplashKey = '';
     var unsplashCollection = '';
+    var wallhavenCategory = 'general';
     var listeners = [];
     var notifyTimer = null;
     var saveTimer = null;
@@ -242,6 +256,57 @@
         unsplashCollection = s.collection;
     }
 
+    function wallhavenCategoryMeta(key) {
+        return WALLHAVEN_CATEGORIES.find(function (x) { return x.key === key; }) || WALLHAVEN_CATEGORIES[0];
+    }
+
+    function readWallhavenStore() {
+        var raw = null;
+        try { raw = JSON.parse(localStorage.getItem(WALLHAVEN_STORE)); } catch (e) { /* ignore */ }
+        raw = raw || {};
+        var cat = typeof raw.category === 'string' ? raw.category : 'general';
+        if (!WALLHAVEN_CATEGORIES.some(function (x) { return x.key === cat; })) cat = 'general';
+        return { category: cat };
+    }
+
+    function saveWallhavenStore() {
+        try {
+            localStorage.setItem(WALLHAVEN_STORE, JSON.stringify({
+                category: wallhavenCategory
+            }));
+        } catch (e) {
+            DevLog.log('Live wallpaper: could not save Wallhaven settings');
+        }
+    }
+
+    function setWallhavenCategory(key) {
+        var meta = wallhavenCategoryMeta(key);
+        wallhavenCategory = meta.key;
+        saveWallhavenStore();
+        resetWallhavenState();
+    }
+
+    function clearWallhavenSettings() {
+        try { localStorage.removeItem(WALLHAVEN_STORE); } catch (e) { /* ignore */ }
+        applyWallhavenStore();
+        resetWallhavenState();
+    }
+
+    function resetWallhavenState() {
+        if (!stream) return;
+        stream.wallhavenPage = 1;
+        stream.wallhavenSeed = '';
+        stream.wallhavenWrapped = false;
+        if (stream.queues && stream.queues.wallhaven) {
+            stream.queues.wallhaven.buf = [];
+            stream.queues.wallhaven.filling = null;
+        }
+    }
+
+    function applyWallhavenStore() {
+        wallhavenCategory = readWallhavenStore().category;
+    }
+
     var immichLink = '';
 
     // Share link as pasted: https://host[/prefix]/s/SLUG or https://host[/prefix]/share/KEY.
@@ -320,6 +385,9 @@
             bingWrapped: false,
             nasa: 0,
             wiki: 0,
+            wallhavenPage: 1,
+            wallhavenSeed: '',
+            wallhavenWrapped: false,
             unsplash: 0,
             immichPage: 1,
             immichAlbum: null,
@@ -390,6 +458,11 @@
             var n = Number(raw[k]);
             if (n >= 0 && isFinite(n)) stream[k] = Math.floor(n);
         });
+        if (raw.wallhavenPage != null) {
+            var wp = Math.floor(Number(raw.wallhavenPage));
+            if (wp >= 1 && isFinite(wp)) stream.wallhavenPage = wp;
+        }
+        if (typeof raw.wallhavenSeed === 'string') stream.wallhavenSeed = raw.wallhavenSeed;
     }
 
     // Drop Mix orphans / mis-tagged cache rows (e.g. Bing URL saved as Immich).
@@ -412,6 +485,9 @@
         }
         if (name === 'unsplash') {
             return /unsplash\.com|images\.unsplash/i.test(f);
+        }
+        if (name === 'wallhaven') {
+            return /wallhaven\.cc|whvn\.cc/i.test(f) || key.indexOf('wallhaven:') === 0;
         }
         return w.source === name;
     }
@@ -456,6 +532,11 @@
                 cacheNeedsRewrite = true;
             }
             loadOffsets(raw.offsets);
+            if (raw.wallhavenPage != null) {
+                var whp = Math.floor(Number(raw.wallhavenPage));
+                if (whp >= 1 && isFinite(whp)) stream.wallhavenPage = whp;
+            }
+            if (typeof raw.wallhavenSeed === 'string') stream.wallhavenSeed = raw.wallhavenSeed;
             if (raw.immichPage != null) {
                 var ip = Math.floor(Number(raw.immichPage));
                 if (ip >= 1 && isFinite(ip)) stream.immichPage = ip;
@@ -477,7 +558,12 @@
                     if (!saved || !Array.isArray(saved.buf)) return;
                     var beforeQ = saved.buf.length;
                     sourceQueue(name).buf = saved.buf.map(normalize).filter(function (w) {
-                        return entryMatchesSource(w, name);
+                        if (!entryMatchesSource(w, name)) return false;
+                        // Drop Wallhaven rows from another category after a settings change.
+                        if (name === 'wallhaven' && w.whCat && !wallhavenCategoryAllowed(w.whCat)) {
+                            return false;
+                        }
+                        return true;
                     }).map(function (w) {
                         w.source = name;
                         return w;
@@ -547,6 +633,8 @@
                 bingDay: (bingDay.day === todayKey() && bingDay.entries && bingDay.entries.length)
                     ? { day: bingDay.day, market: bingDay.market, entries: bingDay.entries }
                     : null,
+                wallhavenPage: stream.wallhavenPage || 1,
+                wallhavenSeed: stream.wallhavenSeed || '',
                 immichPage: stream.immichPage || 1,
                 immichAlbum: stream.immichAlbum ? {
                     id: stream.immichAlbum.id,
@@ -557,7 +645,9 @@
                     nasa: stream.nasa || 0,
                     wiki: stream.wiki || 0,
                     unsplash: stream.unsplash || 0,
-                    sourceIndex: stream.sourceIndex || 0
+                    sourceIndex: stream.sourceIndex || 0,
+                    wallhavenPage: stream.wallhavenPage || 1,
+                    wallhavenSeed: stream.wallhavenSeed || ''
                 },
                 mixOrder: mixOrder.slice()
             }));
@@ -709,22 +799,10 @@
     // Browser preview: same-origin proxy in scripts/serve.mjs (Chrome CORS blocks the APIs).
     function preview() { return !!window.__TIZEN_MOCK__; }
 
-    // Target width for remote photos: at least 1080p, up to UHD when the panel reports it.
-    function panelDisplayWidth() {
-        var w = 0;
-        try {
-            w = Math.max(
-                window.screen && screen.width || 0,
-                window.innerWidth || 0,
-                document.documentElement && document.documentElement.clientWidth || 0
-            );
-        } catch (e) {
-            w = 0;
-        }
-        if (!w || w < 1920) w = 1920;
-        if (w > 3840) w = 3840;
-        return w;
-    }
+    // Fixed TV wallpaper size — avoid UHD downloads that stall decode on the SoC.
+    var DISPLAY_W = 1920;
+    var DISPLAY_H = 1080;
+    var DISPLAY_ATLEAST = DISPLAY_W + 'x' + DISPLAY_H;
 
     /* ---------- Bing ---------- */
 
@@ -738,19 +816,13 @@
         }
         if (!base) return null;
         var hd = BING + base + '_1920x1080.jpg';
-        var uhd = BING + base + '_UHD.jpg';
         var thumb = BING + base + '_320x180.jpg';
-        // Prefer 1080p: UHD is ~3–4MB and often fails to decode on TV / slow preview.
-        // Only try UHD first on wide panels; always keep 1080p as fallback.
-        var preferUhd = panelDisplayWidth() >= 2560;
         var title = img.title || (img.copyright || '').split('(')[0].trim() || 'Bing daily';
         var credit = img.copyright || 'Bing';
         return normalize({
             key: String(img.startdate || title),
             title: title,
-            file: preferUhd ? uhd : hd,
-            fileFallback: preferUhd ? hd : '',
-            fileFallbacks: preferUhd ? [hd] : [],
+            file: hd,
             thumb: thumb,
             credit: credit,
             source: 'bing'
@@ -902,11 +974,10 @@
             .replace(/\.[a-z0-9]+$/i, '')
             .replace(/_/g, ' ');
         var artist = (img.artist && img.artist.text) || '';
-        var target = panelDisplayWidth();
         return normalize({
             key: 'wikimedia:' + ymd,
             title: title || 'Picture of the day',
-            file: wikimediaSized(img.thumbnail.source, target),
+            file: wikimediaSized(img.thumbnail.source, DISPLAY_W),
             thumb: wikimediaSized(img.thumbnail.source, 480),
             credit: 'Wikimedia Commons' + (artist ? ' · ' + artist : ''),
             source: 'wikimedia'
@@ -979,10 +1050,14 @@
 
     function parseUnsplashImage(img) {
         if (!img || !img.urls || !img.urls.raw) return null;
-        // Size the raw URL to the panel (1080p–UHD); regular/full API URLs are fixed-size.
+        // Prefer landscape for TV; skip portraits when dimensions are known.
+        if (img.width > 0 && img.height > 0 && img.width < img.height) return null;
+        // Size the raw URL to 1080p; regular/full API URLs are fixed-size.
         var raw = img.urls.raw;
         var file = raw + (raw.indexOf('?') === -1 ? '?' : '&') +
-            'w=' + panelDisplayWidth() + '&fit=max&q=85&auto=format';
+            'w=' + DISPLAY_W +
+            '&h=' + DISPLAY_H +
+            '&fit=max&q=85&auto=format';
         var title = img.alt_description || img.description || 'Unsplash';
         if (title.length > 48) title = title.slice(0, 45) + '…';
         var credit = (img.user && img.user.name) ? (img.user.name + ' on Unsplash') : 'Unsplash';
@@ -1010,6 +1085,184 @@
                 .catch(function (e) {
                     DevLog.log('Live wallpaper: Unsplash download ping failed: ' + e.message);
                 });
+        });
+    }
+
+    /* ---------- Wallhaven (SFW wallpapers) ---------- */
+
+    function wallhavenApi(pathQuery) {
+        var path = pathQuery.indexOf('/') === 0 ? pathQuery : '/' + pathQuery;
+        return preview()
+            ? '/api/live/wallhaven?path=' + encodeURIComponent(path)
+            : WALLHAVEN + path;
+    }
+
+    // Docs: categories bit flags — general=100, anime=010, people=001 (combine, e.g. 111=all).
+    // Keep as a 3-char string; numeric coercion of "010" becomes 10 and breaks the filter.
+    function wallhavenCategoryFlags() {
+        var f = String(wallhavenCategoryMeta(wallhavenCategory).flags || '100');
+        if (!/^[01]{3}$/.test(f)) f = '100';
+        return f;
+    }
+
+    function wallhavenCategoryAllowed(apiCategory) {
+        if (wallhavenCategory === 'all') return true;
+        var c = String(apiCategory || '').toLowerCase();
+        if (!c) return true;
+        return c === wallhavenCategory;
+    }
+
+    function wallhavenSearchPath(page, seed) {
+        var cat = wallhavenCategoryFlags();
+        // Exact 1080p only — Wallhaven has no resize CDN; `atleast` would still return 4K originals.
+        // purity=100 SFW only (sketchy/nsfw need an API key per docs).
+        var q =
+            'purity=100' +
+            '&categories=' + cat +
+            '&resolutions=' + encodeURIComponent(DISPLAY_ATLEAST) +
+            '&ratios=16x9' +
+            '&sorting=random' +
+            '&page=' + page;
+        if (seed) q += '&seed=' + encodeURIComponent(seed);
+        return '/search?' + q;
+    }
+
+    // Search hits omit tags/uploader; detail `/w/{id}` has them (polished on show).
+    var WALLHAVEN_SKIP_TAGS = {
+        'simple background': 1,
+        'black background': 1,
+        'white background': 1,
+        'gradient': 1,
+        'dark': 1,
+        'light': 1,
+        'artwork': 1,
+        'digital art': 1
+    };
+
+    function wallhavenCap(s, n) {
+        s = String(s || '').trim();
+        if (!s) return '';
+        return s.length > n ? s.slice(0, n - 1) + '…' : s;
+    }
+
+    function wallhavenTitleFromTags(tags) {
+        var names = (Array.isArray(tags) ? tags : []).map(function (t) {
+            return t && t.name ? String(t.name).trim() : '';
+        }).filter(Boolean);
+        var rich = names.filter(function (n) {
+            return !WALLHAVEN_SKIP_TAGS[n.toLowerCase()];
+        });
+        if (!rich.length) rich = names;
+        if (!rich.length) return '';
+        return wallhavenCap(rich.slice(0, 2).join(' · '), 48);
+    }
+
+    // Caption fields only — never apply size filters here (detail polish must always run).
+    function wallhavenCaptionFields(w) {
+        var cat = w && w.category ? String(w.category) : '';
+        var catLabel = cat ? (cat.charAt(0).toUpperCase() + cat.slice(1)) : '';
+        var title = wallhavenTitleFromTags(w && w.tags) || catLabel || 'Wallhaven';
+        var uploader = w && w.uploader && w.uploader.username ? String(w.uploader.username) : '';
+        var credit = uploader
+            ? (uploader + ' on Wallhaven')
+            : ('Wallhaven' + (catLabel ? ' · ' + catLabel : ''));
+        return {
+            title: title,
+            sub: '',
+            credit: credit
+        };
+    }
+
+    function parseWallhavenImage(w) {
+        if (!w || !w.path || !w.id) return null;
+        // Honour selected category even if the API ignores a bad flags string.
+        if (!wallhavenCategoryAllowed(w.category)) return null;
+        // Landscape only (ratios=16x9 already; double-check dimensions when present).
+        if (w.dimension_x > 0 && w.dimension_y > 0 && w.dimension_x < w.dimension_y) return null;
+        // Hard cap — no 1440p/UHD originals (Wallhaven serves the file as-is).
+        if (w.dimension_x > DISPLAY_W || w.dimension_y > DISPLAY_H) return null;
+        // 1080p PNG can be several MB; only skip extremes that decode poorly on TV.
+        if (w.file_size && w.file_size > 8 * 1024 * 1024) return null;
+        var cap = wallhavenCaptionFields(w);
+        var entry = normalize({
+            key: 'wallhaven:' + w.id,
+            title: cap.title,
+            sub: cap.sub,
+            file: w.path,
+            thumb: (w.thumbs && (w.thumbs.large || w.thumbs.small)) || w.path,
+            credit: cap.credit,
+            source: 'wallhaven'
+        });
+        entry.whCat = String(w.category || wallhavenCategory || '').toLowerCase();
+        return entry;
+    }
+
+    function fetchWallhavenDetail(id) {
+        if (!id) return Promise.resolve(null);
+        return xhrGet(wallhavenApi('/w/' + encodeURIComponent(id))).then(function (res) {
+            return (res && res.data) || null;
+        }, function (e) {
+            DevLog.log('Live wallpaper: Wallhaven detail failed: ' +
+                (e && e.message ? e.message : e));
+            return null;
+        });
+    }
+
+    // Like Immich polish: search rows lack tags/uploader; fill caption after paint.
+    function polishWallhaven(entry) {
+        if (!entry || !entry.key) return Promise.resolve(entry);
+        if (entry.source !== 'wallhaven' && String(entry.key).indexOf('wallhaven:') !== 0) {
+            return Promise.resolve(entry);
+        }
+        var id = String(entry.key).replace(/^wallhaven:/, '');
+        if (!id) return Promise.resolve(entry);
+        return fetchWallhavenDetail(id).then(function (full) {
+            if (!full) return entry;
+            var cap = wallhavenCaptionFields(full);
+            entry.title = cap.title;
+            entry.sub = cap.sub;
+            entry.credit = cap.credit;
+            entry.source = 'wallhaven';
+            rememberPick(entry, 'wallhaven');
+            // Keep Use-now snapshot in sync if this shot is frozen as Photo.
+            try {
+                var wp = Prefs.get().wallpaper;
+                if (wp.tempPhoto && wp.tempPhoto.key === entry.key) {
+                    wp.tempPhoto.title = entry.title;
+                    wp.tempPhoto.sub = entry.sub;
+                    wp.tempPhoto.credit = entry.credit;
+                    Prefs.save();
+                }
+            } catch (e) { /* ignore */ }
+            saveCache(provider());
+            return entry;
+        }, function () { return entry; });
+    }
+
+    function fetchWallhavenPage() {
+        var page = stream.wallhavenPage || 1;
+        var seed = stream.wallhavenSeed || '';
+        var path = wallhavenSearchPath(page, seed);
+        DevLog.log('Live wallpaper: Wallhaven ' + path.replace(/^\//, '') +
+            ' (want ' + wallhavenCategory + ')');
+        return xhrGet(wallhavenApi(path)).then(function (res) {
+            var list = (res && Array.isArray(res.data)) ? res.data : [];
+            var meta = (res && res.meta) || {};
+            if (meta.seed && !stream.wallhavenSeed) stream.wallhavenSeed = String(meta.seed);
+            var entries = list.map(parseWallhavenImage).filter(Boolean);
+            if (!entries.length) {
+                if (page <= 1) throw new Error('empty Wallhaven');
+                if (!stream.wallhavenWrapped) {
+                    stream.wallhavenWrapped = true;
+                    stream.wallhavenPage = 1;
+                    stream.wallhavenSeed = '';
+                    return { entries: [], wrapped: true };
+                }
+                return { entries: [], done: true };
+            }
+            stream.wallhavenPage = page + 1;
+            stream.wallhavenWrapped = false;
+            return { entries: entries };
         });
     }
 
@@ -1144,18 +1397,33 @@
         return mixEnabledMap()[key] !== false;
     }
 
+    function defaultMixEnabled() {
+        // Wallhaven defaults off so existing Mix rosters do not suddenly include it.
+        return {
+            bing: true,
+            nasa: true,
+            wikimedia: true,
+            wallhaven: false,
+            unsplash: true,
+            immich: true
+        };
+    }
+
     function ensureMixEnabledMap(p) {
+        var def = defaultMixEnabled();
         if (!p.mixEnabled || typeof p.mixEnabled !== 'object') {
-            p.mixEnabled = {
-                bing: true, nasa: true, wikimedia: true, unsplash: true, immich: true
-            };
+            p.mixEnabled = def;
+            return p.mixEnabled;
         }
+        Object.keys(def).forEach(function (k) {
+            if (p.mixEnabled[k] === undefined) p.mixEnabled[k] = def[k];
+        });
         return p.mixEnabled;
     }
 
     // Free providers shipped in-app (no key / share link).
     function freeSourceKeys() {
-        return ['bing', 'nasa', 'wikimedia'];
+        return ['bing', 'nasa', 'wikimedia', 'wallhaven'];
     }
 
     function sourceConfigured(key) {
@@ -1515,6 +1783,9 @@
                 if (!list[0]) throw new Error('empty Unsplash');
                 return { entries: [list[0]] };
             });
+        }
+        if (name === 'wallhaven') {
+            return fetchWallhavenPage();
         }
         if (name === 'immich') {
             return ensureImmichAlbum().then(function (album) {
@@ -1974,7 +2245,13 @@
     // so the screen saver can refresh the caption without delaying the photo swap.
     function showEntry(entry) {
         remember(entry);
-        polishImmich(entry).then(function () { notify(); });
+        Promise.resolve(entry)
+            .then(polishImmich)
+            .then(polishWallhaven)
+            .then(function () {
+                // Immediate — debounced notify can drop the polish update.
+                notify(true);
+            });
         return Promise.resolve(entry);
     }
 
@@ -2106,10 +2383,8 @@
     }
 
     function find(key) {
-        var hit = items.find(function (w) { return w.key === key; });
-        if (hit) return hit;
-        var visible = list();
-        return visible[0] || null;
+        if (!key) return null;
+        return items.find(function (w) { return w.key === key; }) || null;
     }
 
     // Choose as static (single providers only — Mix has no picker).
@@ -2227,6 +2502,9 @@
         // Keep today's Bing window across focus changes — only market/day invalidates it.
         stream.nasa = 0;
         stream.wiki = 0;
+        stream.wallhavenPage = 1;
+        stream.wallhavenSeed = '';
+        stream.wallhavenWrapped = false;
         stream.unsplash = 0;
         stream.immichPage = 1;
         stream.immichWrapped = false;
@@ -2256,6 +2534,7 @@
     }
 
     applyUnsplashStore();
+    applyWallhavenStore();
     immichLink = readImmichLink();
     migrateLiveMultiSelect();
     syncLiveProvider();
@@ -2294,6 +2573,10 @@
         provider: provider,
         providerLabel: function () { return providerMeta().label; },
         takeNext: takeNext,
+        showPick: function (entry) {
+            if (!entry || !entry.key || !entry.file) return null;
+            return showEntry(normalize(entry));
+        },
         upcoming: upcoming,
         planCount: planCount,
         mixSources: mixSourceLabels,
@@ -2333,6 +2616,13 @@
             var id = unsplashCollection;
             if (!id) return 'Popular photos';
             return id.length > 14 ? id.slice(0, 12) + '…' : id;
+        },
+        WALLHAVEN_CATEGORIES: WALLHAVEN_CATEGORIES,
+        wallhavenCategory: function () { return wallhavenCategory; },
+        setWallhavenCategory: setWallhavenCategory,
+        clearWallhavenSettings: clearWallhavenSettings,
+        wallhavenCategorySummary: function () {
+            return wallhavenCategoryMeta(wallhavenCategory).label;
         }
     };
 })();
