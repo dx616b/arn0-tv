@@ -687,10 +687,7 @@
         updateClock();
         updateWeather();
         setInterval(updateClock, 10000);
-        if (window.Weather) {
-            Weather.onUpdate(updateWeather);
-            Weather.refresh();
-        }
+        if (window.Weather) Weather.onUpdate(updateWeather);
         renderLab();
         var cached = readCache();
         if (cached && cached.length) setApps(cached);

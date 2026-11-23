@@ -11,20 +11,20 @@
  * Mix then walks that list round-robin (never a random source per slot). History, plan,
  * offsets, queues, and a seen-key ring persist in localStorage.
  *
- * NASA APOD: science.nasa.gov wp/v2/apod-basic (hdurl on assets.science.nasa.gov).
- * Legacy apod.nasa.gov image paths and api.nasa.gov planetary/apod retire Dec 2026.
+ * NASA APOD: science.nasa.gov WordPress image-article + media API (same path as v0.6.15).
+ * Legacy apod.nasa.gov HTML shells / api.nasa.gov DEMO_KEY are not used.
  *
  * Unsplash Access Key: Settings → Background (saved on the TV). liveWallpaper.unsplashAccessKey
  * in config.local.js is used as a fallback when nothing has been saved. Stored separately so
  * Advanced → Export does not dump it.
  *
  * Browser preview (`npm run preview`) routes API calls through /api/live/* so Chrome
- * CORS does not block fetches; on the TV the real endpoints are used directly.
+ * CORS does not block fetches; on the TV the real endpoints are used directly (as before).
  */
 (function () {
     'use strict';
 
-    var CACHE_KEY = 'arn0.liveWallpaper.v10';
+    var CACHE_KEY = 'arn0.liveWallpaper.v11';
     var IMMICH_STORE = 'arn0.immich.v1';
     var UNSPLASH_KEY_STORE = 'arn0.unsplash.v1';
     var TIMEOUT_MS = 15000;
@@ -43,9 +43,9 @@
         normal: { label: '20', ahead: 20, plan: 10, pick: 5 },
         large: { label: '40', ahead: 40, plan: 15, pick: 10 }
     };
-    // Mix: fill a small ahead first so the first frame wins; grow later.
-    var MIX_AHEAD_BOOT = 3;
-    var MIX_GROW_MS = 4000;
+    // Mix: fill one ahead first so the first frame wins; grow later.
+    var MIX_AHEAD_BOOT = 1;
+    var MIX_GROW_MS = 5000;
     var mixWarmPhase = 'boot'; // 'boot' | 'full'
     var mixGrowTimer = null;
 
@@ -76,8 +76,9 @@
         }
     }
     // Day/page cursors advance in order; span is only a soft upper bound for docs/wrap.
-    var SPAN_BING = 100;
-    var SPAN_NASA = 400;
+    // Bing’s public archive is ~8 days; NASA walks calendar days via image-article search.
+    var SPAN_BING = 16;
+    var SPAN_NASA = 60;
     var SPAN_WIKI = 400;
     var SPAN_UNSPLASH = 200;
     var SOURCE_MS = 12 * 1000;
@@ -352,6 +353,22 @@
         if (seen.length > SEEN_MAX) seen = seen.slice(seen.length - SEEN_MAX);
     }
 
+    // Free sources have tiny unique pools (Bing ~8, NASA ~25). Once every key is in
+    // `seen`, fill would refuse to queue anything — forget this batch so it can cycle.
+    function forgetSeenEntries(entries) {
+        if (!entries || !entries.length) return;
+        var dropKey = {};
+        var dropFile = {};
+        entries.forEach(function (e) {
+            if (!e) return;
+            if (e.key) dropKey[e.key] = true;
+            if (e.file) dropFile[e.file] = true;
+        });
+        seen = seen.filter(function (e) {
+            return !dropKey[e.key] && !(e.file && dropFile[e.file]);
+        });
+    }
+
     function loadOffsets(raw) {
         if (!raw || typeof raw !== 'object') return;
         ['bing', 'nasa', 'wiki', 'unsplash', 'sourceIndex'].forEach(function (k) {
@@ -384,7 +401,11 @@
         return w.source === name;
     }
 
+    // True when loadCache dropped mis-tagged / oversize entries — rewrite later, not on the boot path.
+    var cacheNeedsRewrite = false;
+
     function loadCache() {
+        cacheNeedsRewrite = false;
         try {
             var raw = JSON.parse(localStorage.getItem(CACHE_KEY));
             if (!raw || !Array.isArray(raw.items)) return;
@@ -393,10 +414,12 @@
             fetchedDay = raw.fetchedDay || '';
             cachedProvider = raw.provider;
             cachedMarket = raw.market || '';
+            var beforeItems = raw.items.length;
             items = raw.items.slice(-HISTORY_MAX).map(normalize).filter(function (w) {
                 if (cachedProvider === 'mix') return !!w.source;
                 return entryMatchesSource(w, cachedProvider);
             });
+            if (items.length !== Math.min(beforeItems, HISTORY_MAX)) cacheNeedsRewrite = true;
             seen = (Array.isArray(raw.seen) ? raw.seen : []).filter(function (e) {
                 return e && e.key;
             }).slice(-SEEN_MAX).map(function (e) {
@@ -405,6 +428,7 @@
             // Seed seen from history if this is an upgraded cache without a seen ring.
             if (!seen.length && items.length) {
                 items.forEach(markSeen);
+                cacheNeedsRewrite = true;
             }
             loadOffsets(raw.offsets);
             if (raw.immichPage != null) {
@@ -426,12 +450,16 @@
                 SOURCE_NAMES.forEach(function (name) {
                     var saved = raw.queues[name];
                     if (!saved || !Array.isArray(saved.buf)) return;
+                    var beforeQ = saved.buf.length;
                     sourceQueue(name).buf = saved.buf.map(normalize).filter(function (w) {
                         return entryMatchesSource(w, name);
                     }).map(function (w) {
                         w.source = name;
                         return w;
                     }).slice(0, sourceAhead());
+                    if (sourceQueue(name).buf.length !== Math.min(beforeQ, sourceAhead())) {
+                        cacheNeedsRewrite = true;
+                    }
                 });
             }
             // Do not restore `plan` — legacy caches may still hold randomly picked slots.
@@ -441,7 +469,10 @@
             if (Array.isArray(raw.picks)) {
                 raw.picks.forEach(function (w) {
                     if (!w || !w.key || !w.file || !w.source) return;
-                    if (!entryMatchesSource(w, w.source)) return;
+                    if (!entryMatchesSource(w, w.source)) {
+                        cacheNeedsRewrite = true;
+                        return;
+                    }
                     rememberPick(normalize(w), w.source);
                 });
             }
@@ -578,6 +609,7 @@
         pickList().forEach(preloadThumb);
     }
 
+    // Catalog only — do not decode thumbs here (boot / queue fill). Settings warm calls preloadPickThumbs.
     function rememberPick(entry, source) {
         if (!entry || !entry.key) return;
         var n = normalize(entry);
@@ -593,7 +625,6 @@
             }
         }
         pickCatalog[entry.key] = n;
-        preloadThumb(n);
     }
 
     function seedPickCatalog() {
@@ -700,69 +731,90 @@
     function bingArchiveUrl(idx, n) {
         var query = 'idx=' + idx + '&n=' + n + '&mkt=' + encodeURIComponent(cfg().market);
         if (preview()) return '/api/live/bing?' + query;
+        // Same TV URL as v0.6.15 — direct Bing (no CORS proxy).
         return BING + '/HPImageArchive.aspx?format=js&' + query;
     }
 
-    /* ---------- NASA APOD ---------- */
+    /* ---------- NASA APOD (v0.6.15 image-article + media; proven on TV) ---------- */
 
-    function nasaFileOk(file) {
-        if (!file || file.length < 12) return false;
-        // Must be a real asset URL — article pages and logos are not wallpapers.
-        if (!/^https?:\/\//i.test(file)) return false;
-        if (/\/image-article\//i.test(file)) return false;
-        return !/nasa-logo|favicon|themes\/nasa-child|editor-page-nasa-logo/i.test(file);
-    }
-
-    // Prefer a display-sized derivative when assets.science.nasa.gov supports ?w=.
-    function apodSized(url, width) {
-        if (!url) return '';
-        if (/assets\.science\.nasa\.gov/i.test(url)) {
-            var base = String(url).split('?')[0];
-            return base + '?w=' + width + '&fit=clip';
-        }
-        return url;
-    }
-
-    function apodPlainText(s) {
+    function decodeEntities(s) {
         return String(s || '')
-            .replace(/<[^>]+>/g, '')
             .replace(/&amp;/g, '&')
             .replace(/&quot;/g, '"')
             .replace(/&#8211;/g, '\u2013')
             .replace(/&#(\d+);/g, function (_, n) {
                 return String.fromCharCode(Number(n));
-            })
-            .trim();
+            });
     }
 
-    function apodFromBasic(item, ymd) {
-        if (!item || item.date !== ymd) return null;
-        if (item.media_type && item.media_type !== 'image') return null;
-        // New API: `url` is the article page; `hdurl` is the image file.
-        var file = item.hdurl || '';
-        if (!nasaFileOk(file)) return null;
-        var title = apodPlainText(item.title).replace(/\s*-\s*NASA Science\s*$/i, '').trim();
-        var credit = apodPlainText(item.credit || item.copyright) || 'NASA APOD';
+    function nasaFileOk(file) {
+        if (!file || file.length < 12) return false;
+        return !/nasa-logo|favicon|themes\/nasa-child|editor-page-nasa-logo/i.test(file);
+    }
+
+    var APOD_MONTHS = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    // WP titles look like "APOD: 2026 November 9 – Title" (no leading zero on the day).
+    function apodSearchQuery(ymd) {
+        var p = ymd.split('-');
+        return 'APOD: ' + p[0] + ' ' + APOD_MONTHS[Number(p[1]) - 1] + ' ' + String(Number(p[2]));
+    }
+
+    function apodTitleOk(rendered, ymd) {
+        var t = decodeEntities(String(rendered || '')).toLowerCase();
+        var want = apodSearchQuery(ymd).toLowerCase();
+        return t.indexOf(want) === 0;
+    }
+
+    function apodCleanTitle(rendered) {
+        var title = decodeEntities(String(rendered || ''));
+        title = title.replace(/^APOD:\s*/i, '')
+            .replace(/^\d{4} [A-Za-z]+ \d{1,2}\s*[–\-]\s*/, '')
+            .replace(/\s*-\s*NASA Science\s*$/i, '')
+            .trim();
+        return title || 'NASA APOD';
+    }
+
+    function apodImageFromMedia(media) {
+        var sizes = (media && media.media_details && media.media_details.sizes) || {};
+        var pick = sizes['2048x2048'] || sizes.large || sizes['1536x1536'] || sizes.medium_large;
+        var file = (pick && pick.source_url) || (media && media.source_url) || '';
+        var thumb = (sizes.medium && sizes.medium.source_url) ||
+            (sizes.thumbnail && sizes.thumbnail.source_url) || file;
+        return { file: file, thumb: thumb };
+    }
+
+    function apodFromWp(post, media, ymd) {
+        if (!post || !apodTitleOk(post.title && post.title.rendered, ymd)) return null;
+        var img = apodImageFromMedia(media);
+        if (!nasaFileOk(img.file)) return null;
         return normalize({
             key: 'nasa:' + ymd,
-            title: title || 'NASA APOD',
-            file: apodSized(file, panelDisplayWidth()),
-            thumb: apodSized(file, 480),
-            credit: credit,
+            title: apodCleanTitle(post.title && post.title.rendered),
+            file: img.file,
+            thumb: img.thumb || img.file,
+            credit: 'NASA APOD',
             source: 'nasa'
         });
     }
 
     function fetchNasaDayWp(ymd) {
-        // Official APOD WordPress endpoint (replaces image-article search + media).
-        var url = 'https://science.nasa.gov/wp-json/wp/v2/apod-basic/?date=' +
-            encodeURIComponent(ymd);
-        return xhrGet(url).then(function (data) {
-            var list = Array.isArray(data) ? data : (data ? [data] : []);
-            var item = list.find(function (x) { return x && x.date === ymd; }) || null;
-            var entry = apodFromBasic(item, ymd);
-            if (!entry) throw new Error('empty NASA');
-            return entry;
+        var search = 'https://science.nasa.gov/wp-json/wp/v2/image-article?search=' +
+            encodeURIComponent(apodSearchQuery(ymd)) + '&per_page=5';
+        return xhrGet(search).then(function (list) {
+            var post = (Array.isArray(list) ? list : []).find(function (p) {
+                return apodTitleOk(p.title && p.title.rendered, ymd);
+            });
+            if (!post || !post.featured_media) throw new Error('empty NASA');
+            return xhrGet('https://science.nasa.gov/wp-json/wp/v2/media/' + post.featured_media)
+                .then(function (media) {
+                    var entry = apodFromWp(post, media, ymd);
+                    if (!entry) throw new Error('empty NASA');
+                    return entry;
+                });
         });
     }
 
@@ -1152,12 +1204,52 @@
         return key;
     }
 
-    // Settings chip edits: 1 → that provider; 2+ → mix; 0 → bing.
+    function mixModeOn() {
+        return provider() === 'mix';
+    }
+
+    // Settings Mix toggle: On → liveProvider=mix (roster = mixEnabled).
+    // Off → one radio source; mixEnabled keeps the Mix roster for later.
+    function setMixMode(on) {
+        var p = window.Prefs && Prefs.get().wallpaper;
+        if (!p) return mixModeOn();
+        ensureMixEnabledMap(p);
+        var prev = p.liveProvider || 'bing';
+        if (on) {
+            if (!enabledSourceKeys().length) p.mixEnabled.bing = true;
+            p.liveProvider = 'mix';
+        } else {
+            var onKeys = enabledSourceKeys();
+            if (prev !== 'mix' && onKeys.indexOf(prev) >= 0) {
+                p.liveProvider = prev;
+            } else {
+                p.liveProvider = onKeys[0] || 'bing';
+                if (!onKeys.length) p.mixEnabled.bing = true;
+            }
+        }
+        Prefs.save();
+        return p.liveProvider === 'mix';
+    }
+
+    // Mix Off: pick the single source to browse / play (does not clear the Mix roster).
+    function setSoloProvider(key) {
+        var p = window.Prefs && Prefs.get().wallpaper;
+        if (!p || SOURCE_NAMES.indexOf(key) < 0) return provider();
+        ensureMixEnabledMap(p);
+        p.mixEnabled[key] = true;
+        p.liveProvider = key;
+        Prefs.save();
+        return key;
+    }
+
+    // Kept for tests / callers: what Settings would use if Mix were derived from chips.
     function deriveLiveProvider() {
         var on = enabledSourceKeys();
-        if (on.length >= 2) return 'mix';
+        if (mixModeOn()) return on.length ? 'mix' : 'bing';
         if (on.length === 1) return on[0];
-        return 'bing';
+        var cur = provider();
+        if (cur !== 'mix' && on.indexOf(cur) >= 0) return cur;
+        return on[0] || 'bing';
     }
 
     // One-shot: old prefs had liveProvider=single with mixEnabled all-true. Collapse
@@ -1177,8 +1269,8 @@
     }
 
     /*
-     * Soft coerce: fix empty/invalid; do not force Mix when 2+ chips are on —
-     * Screen saver may be focusing a single source while the roster stays put.
+     * Soft coerce only: empty roster → Bing; invalid solo → first enabled.
+     * Does not force Mix from chip count — Mix On/Off is an explicit Settings toggle.
      */
     function syncLiveProvider() {
         var p = window.Prefs && Prefs.get().wallpaper;
@@ -1189,19 +1281,20 @@
         var on = enabledSourceKeys();
         if (!on.length) {
             p.mixEnabled.bing = true;
-            p.liveProvider = 'bing';
-        } else if (on.length === 1) {
+            if (prev === 'mix') p.liveProvider = 'mix';
+            else p.liveProvider = 'bing';
+        } else if (prev === 'mix') {
+            // Mix On: keep mix even with one source.
+            p.liveProvider = 'mix';
+        } else if (SOURCE_NAMES.indexOf(prev) < 0 || on.indexOf(prev) < 0) {
             p.liveProvider = on[0];
-        } else {
-            var cur = p.liveProvider || 'mix';
-            if (cur !== 'mix' && on.indexOf(cur) < 0) p.liveProvider = 'mix';
         }
         var next = p.liveProvider || 'bing';
         if (next !== prev) Prefs.save();
         return next !== prev;
     }
 
-    // Toggle a source in the multi-select. Keeps at least one on. Returns the new on-state.
+    // Toggle a source in the Mix roster. Keeps at least one on. Returns the new on-state.
     function setMixSource(key, on) {
         var p = window.Prefs && Prefs.get().wallpaper;
         if (!p) return mixSourceOn(key);
@@ -1433,10 +1526,13 @@
                 if (reached()) return;
                 if (guard++ > 80) return;
                 return pullFresh(name).then(function (res) {
+                    var batch = res.entries || [];
                     var added = 0;
                     var cataloged = 0;
-                    (res.entries || []).forEach(function (entry) {
-                        if (!entry || isDuplicate(entry) || queueHas(q, entry)) return;
+
+                    function absorb(entry, force) {
+                        if (!entry || queueHas(q, entry)) return;
+                        if (!force && isDuplicate(entry)) return;
                         entry.source = name;
                         // Always remember for the picker; Immich pages are large — Load more
                         // can reveal catalogued thumbs without another round trip.
@@ -1447,7 +1543,16 @@
                         if (!limit && freshInQueue(q) >= cap) return;
                         q.buf.push(entry);
                         added++;
-                    });
+                    }
+
+                    batch.forEach(function (entry) { absorb(entry, false); });
+                    // Bing/NASA pools are tiny — once every photo is "seen", recycle the batch.
+                    if (!added && batch.length && batch.every(isDuplicate)) {
+                        forgetSeenEntries(batch);
+                        if (name === 'bing') stream.bingWrapped = false;
+                        batch.forEach(function (entry) { absorb(entry, true); });
+                        DevLog.log('Live wallpaper: ' + name + ' recycled ' + batch.length);
+                    }
                     if (added) {
                         dropStale(q, added);
                         // Keep fetch order in the queue.
@@ -1608,16 +1713,33 @@
         });
     }
 
+    function warmOne(name) {
+        return fillSourceQueue(name).catch(function (e) {
+            DevLog.log('Live wallpaper: ' + name + ' warm failed: ' +
+                (e && e.message ? e.message : e));
+        });
+    }
+
     function warmSources() {
         var keys = streamKeys();
         if (!keys.length) return Promise.resolve();
-        // fillSourceQueue with no limit uses effectiveAhead() (Mix boot = small).
-        return Promise.all(keys.map(function (name) {
-            return fillSourceQueue(name).catch(function (e) {
-                DevLog.log('Live wallpaper: ' + name + ' warm failed: ' +
-                    (e && e.message ? e.message : e));
+        // Mix boot: one source at a time (next slot first) so Home keeps the decoder free.
+        if (provider() === 'mix' && mixWarmPhase === 'boot') {
+            var ordered = orderedMixKeys();
+            var start = nextSlotStart(ordered);
+            var seq = [];
+            var i;
+            for (i = 0; i < ordered.length; i++) {
+                seq.push(ordered[(start + i) % ordered.length]);
+            }
+            var chain = Promise.resolve();
+            seq.forEach(function (name) {
+                chain = chain.then(function () { return warmOne(name); });
             });
-        }));
+            return chain;
+        }
+        // fillSourceQueue with no limit uses effectiveAhead().
+        return Promise.all(keys.map(warmOne));
     }
 
     // Top up queues + plan without blocking UI (after the first few are ready).
@@ -1808,7 +1930,7 @@
         function kickBackground() {
             fetchedDay = todayKey();
             // First wallpaper paints; queues + plan keep filling in the background.
-            setTimeout(backgroundFill, 800);
+            setTimeout(backgroundFill, 1600);
             return beforeKeys !== keys(items);
         }
 
@@ -1824,12 +1946,12 @@
         }
         return advanceOne(g, true).then(function (entry) {
             if (g !== generation || !entry) {
-                setTimeout(backgroundFill, 800);
+                setTimeout(backgroundFill, 1600);
                 return false;
             }
             return showEntry(entry).then(kickBackground);
         }, function () {
-            setTimeout(backgroundFill, 800);
+            setTimeout(backgroundFill, 1600);
             return false;
         });
     }
@@ -1857,13 +1979,21 @@
         var meta = providerMeta();
         if (needsSetup()) return Promise.resolve(false);
 
-        if (items.length && p === 'bing' && cachedMarket !== cfg().market) resetPool();
+        if (list().length && p === 'bing' && cachedMarket !== cfg().market) resetPool();
+
+        // New calendar day: let Bing restart from today.
+        if (fetchedDay && fetchedDay !== todayKey()) {
+            stream.bingWrapped = false;
+            stream.bing = 0;
+        }
 
         var g = generation;
-        var before = keys(items);
+        var before = keys(list());
 
-        if (items.length) {
-            backgroundFill();
+        // Solo focus: ignore Mix leftovers still sitting in `items`.
+        // Defer top-up so first Home paint / key presses are not fighting queue fills.
+        if (list().length) {
+            setTimeout(backgroundFill, 1600);
             return Promise.resolve(false);
         }
 
@@ -2003,6 +2133,15 @@
             q.filling = null;
             q.buf = [];
         });
+        // Fresh cursors so a stuck Bing idx / NASA wrap cannot starve the new focus.
+        stream.bing = 0;
+        stream.bingWrapped = false;
+        stream.nasa = 0;
+        stream.wiki = 0;
+        stream.unsplash = 0;
+        stream.immichPage = 1;
+        stream.immichWrapped = false;
+        stream.sourceIndex = 0;
         pickCatalog = {};
         pickOrderSig = '';
         pickOrderKeys = [];
@@ -2032,8 +2171,11 @@
     syncLiveProvider();
     loadCache();
     trim();
-    seedPickCatalog();
-    if (items.length) saveCache(cachedProvider, true);
+    // Picks already restored in loadCache; seed from queues/items only when the picker opens.
+    // Defer scrub rewrite so boot is not blocked on a large localStorage stringify.
+    if (cacheNeedsRewrite && items.length) {
+        setTimeout(function () { saveCache(cachedProvider || provider(), true); }, 2500);
+    }
     // Flush debounced cache if the page is leaving (TV app hide / preview refresh).
     window.addEventListener('pagehide', function () {
         if (saveTimer) {
@@ -2074,6 +2216,9 @@
         enabledSourceKeys: enabledSourceKeys,
         mixSourceOn: mixSourceOn,
         setMixSource: setMixSource,
+        setMixMode: setMixMode,
+        setSoloProvider: setSoloProvider,
+        mixModeOn: mixModeOn,
         deriveLiveProvider: deriveLiveProvider,
         syncLiveProvider: syncLiveProvider,
         status: status,

@@ -29,15 +29,15 @@ test('legacy single Bing + all mixEnabled migrates to Bing only', function () {
     assert.equal(wall(ctx).liveMultiSelect, true);
     assert.equal(ctx.LiveWallpaper.provider(), 'bing');
     assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys()), 'bing');
-    assert.equal(ctx.LiveWallpaper.deriveLiveProvider(), 'bing');
+    assert.equal(ctx.LiveWallpaper.mixModeOn(), false);
 });
 
-test('enabling a second source derives Mix', function () {
+test('Mix On keeps roster; toggling a second source stays Mix', function () {
     var ctx = createLauncherSandbox({
         prefs: {
             wallpaper: {
                 mode: 'live',
-                liveProvider: 'bing',
+                liveProvider: 'mix',
                 mixEnabled: {
                     bing: true, nasa: false, wikimedia: false, unsplash: false, immich: false
                 },
@@ -48,15 +48,14 @@ test('enabling a second source derives Mix', function () {
             }
         }
     });
+    assert.equal(ctx.LiveWallpaper.mixModeOn(), true);
     assert.equal(ctx.LiveWallpaper.setMixSource('nasa', true), true);
-    assert.equal(ctx.LiveWallpaper.deriveLiveProvider(), 'mix');
-    wall(ctx).liveProvider = 'mix';
-    ctx.Prefs.save();
+    assert.equal(ctx.LiveWallpaper.provider(), 'mix');
     assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys().slice().sort()), 'bing,nasa');
     assert.equal(keys(ctx.LiveWallpaper.mixSources()), 'Bing,NASA APOD');
 });
 
-test('dropping to one source derives that provider', function () {
+test('Mix Off radio picks one source without clearing Mix roster', function () {
     var ctx = createLauncherSandbox({
         prefs: {
             wallpaper: {
@@ -72,17 +71,20 @@ test('dropping to one source derives that provider', function () {
             }
         }
     });
-    assert.equal(ctx.LiveWallpaper.setMixSource('bing', false), false);
-    assert.equal(ctx.LiveWallpaper.deriveLiveProvider(), 'nasa');
-    assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys()), 'nasa');
+    assert.equal(ctx.LiveWallpaper.setMixMode(false), false);
+    assert.equal(ctx.LiveWallpaper.provider(), 'bing');
+    assert.equal(ctx.LiveWallpaper.setSoloProvider('nasa'), 'nasa');
+    assert.equal(ctx.LiveWallpaper.provider(), 'nasa');
+    // Roster still has both for when Mix turns back on.
+    assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys().slice().sort()), 'bing,nasa');
 });
 
-test('refuses to disable the last source', function () {
+test('refuses to disable the last Mix source', function () {
     var ctx = createLauncherSandbox({
         prefs: {
             wallpaper: {
                 mode: 'live',
-                liveProvider: 'nasa',
+                liveProvider: 'mix',
                 mixEnabled: {
                     bing: false, nasa: true, wikimedia: false, unsplash: false, immich: false
                 },
@@ -106,7 +108,7 @@ test('PROVIDERS still includes mix for runtime; UI filters it', function () {
     assert.ok(keyList.indexOf('bing') >= 0);
 });
 
-test('SS selectLiveProvider changes focus only; Settings chips stay', function () {
+test('SS selectLiveProvider changes focus only; Settings Mix roster stays', function () {
     var ctx = createLauncherSandbox({
         prefs: {
             wallpaper: {
@@ -133,7 +135,7 @@ test('SS selectLiveProvider changes focus only; Settings chips stay', function (
     assert.equal(keys(ctx.LiveWallpaper.readyMixKeys().slice().sort()), 'bing,nasa');
 });
 
-test('sync keeps solo focus when 2+ chips; Settings derive still yields mix', function () {
+test('sync does not force Mix from chip count when Mix is Off', function () {
     var ctx = createLauncherSandbox({
         prefs: {
             wallpaper: {
@@ -149,8 +151,9 @@ test('sync keeps solo focus when 2+ chips; Settings derive still yields mix', fu
             }
         }
     });
-    // Soft sync: bing is still a valid focus among enabled chips.
     assert.equal(wall(ctx).liveProvider, 'bing');
-    assert.equal(ctx.LiveWallpaper.deriveLiveProvider(), 'mix');
+    assert.equal(ctx.LiveWallpaper.mixModeOn(), false);
+    assert.equal(ctx.LiveWallpaper.syncLiveProvider(), false);
+    assert.equal(wall(ctx).liveProvider, 'bing');
     assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys().slice().sort()), 'bing,nasa');
 });

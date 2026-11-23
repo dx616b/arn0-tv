@@ -430,20 +430,45 @@
     // Legacy name used when switching to a bundled photo (does not wipe the pin shelf).
     function clearPinned() { /* no-op: pins are kept until Clear saved pins */ }
 
+    var pinsHydrating = null;
+
+    function hydrateOnePin(meta) {
+        if (!meta || !meta.key || blobUrls[meta.key]) return Promise.resolve();
+        return getPinBlob(meta.key).then(function (blob) {
+            if (!blob) return false;
+            setBlobUrl(meta.key, blob);
+            if (!(meta.bytes > 0) || meta.bytes !== blob.size) {
+                meta.bytes = blob.size || 0;
+                return true;
+            }
+            return false;
+        }, function () { return false; });
+    }
+
+    // Full shelf (Settings Photos). Boot only hydrates the pin currently on Home.
     function hydratePins() {
+        if (pinsHydrating) return pinsHydrating;
         var sizeChanged = false;
-        return Promise.all(pinsMeta().map(function (meta) {
-            return getPinBlob(meta.key).then(function (blob) {
-                if (!blob) return;
-                setBlobUrl(meta.key, blob);
-                if (!(meta.bytes > 0) || meta.bytes !== blob.size) {
-                    meta.bytes = blob.size || 0;
-                    sizeChanged = true;
-                }
-            }, function () {});
+        pinsHydrating = Promise.all(pinsMeta().map(function (meta) {
+            return hydrateOnePin(meta).then(function (changed) {
+                if (changed) sizeChanged = true;
+            });
         })).then(function () {
+            pinsHydrating = null;
             if (sizeChanged) Prefs.save();
             if (!isLive() && Prefs.get().wallpaper.mode === 'photo') apply();
+        }, function () { pinsHydrating = null; });
+        return pinsHydrating;
+    }
+
+    function hydrateCurrentPin() {
+        var p = Prefs.get().wallpaper;
+        if (p.mode === 'live' || p.mode === 'off') return Promise.resolve();
+        var meta = pinsMeta().find(function (x) { return x && x.key === p.photo; });
+        if (!meta) return Promise.resolve();
+        return hydrateOnePin(meta).then(function (changed) {
+            if (changed) Prefs.save();
+            apply();
         });
     }
 
@@ -709,10 +734,11 @@
 
     function ensureLive(thenApply) {
         if (!isLive() || !window.LiveWallpaper) return Promise.resolve(false);
-        // First paint / Settings apply: show the ring while the first photo is fetched.
-        if (thenApply) UI.busyShow();
+        // Busy only when there is nothing cached to show yet.
+        var needBusy = !!thenApply && !LiveWallpaper.list().length;
+        if (needBusy) UI.busyShow();
         return LiveWallpaper.ensureDaily().then(function (changed) {
-            if (thenApply) UI.busyHide();
+            if (needBusy) UI.busyHide();
             var p = Prefs.get().wallpaper;
             var l = LiveWallpaper.list();
             if (l.length && !LiveWallpaper.find(p.liveKey)) {
@@ -720,10 +746,10 @@
                 Prefs.save();
             }
             if (changed || thenApply) apply();
-            if (!l.length && thenApply) UI.toast('Live wallpaper unavailable');
+            if (!l.length && needBusy) UI.toast('Live wallpaper unavailable');
             return !!changed;
         }, function () {
-            if (thenApply) UI.busyHide();
+            if (needBusy) UI.busyHide();
             return false;
         });
     }
@@ -732,16 +758,24 @@
     function homeShown() {
         var p = Prefs.get().wallpaper;
         if (p.mode === 'live') {
-            ensureLive(false);
-            if (p.interval === 'open' || due()) next();
+            ensureLive(false).then(function () {
+                if (p.interval === 'open' || due()) next();
+            });
             return;
         }
         if (p.mode === 'rotate' && (p.interval === 'open' || due())) next();
     }
 
+    function afterPaint(fn) {
+        var run = function () { setTimeout(fn, 0); };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+        else setTimeout(fn, 40);
+    }
+
     function start() {
         apply();
-        hydratePins();
+        // Only the pin currently on Home — full shelf waits for Background settings.
+        hydrateCurrentPin();
         // Mix publishes each source as it lands; apply the liveKey it just selected.
         if (window.LiveWallpaper) {
             LiveWallpaper.onChange(function () {
@@ -761,9 +795,18 @@
                 apply();
             });
         }
-        if (isLive()) ensureLive(true);
-        homeShown();
-        preloadAhead();
+        // Live fetch / Mix warm after first paint so UI and remote stay responsive.
+        afterPaint(function () {
+            if (isLive()) {
+                ensureLive(true).then(function () {
+                    var p = Prefs.get().wallpaper;
+                    if (p.interval === 'open' || due()) next();
+                });
+            } else {
+                homeShown();
+            }
+            setTimeout(preloadAhead, 1400);
+        });
         // The screen saver has its own photo cycle and covers Home completely, so rotating
         // underneath it would only decode images nobody can see — and move the photo Home
         // comes back to.
@@ -802,6 +845,7 @@
         next: next,
         homeShown: homeShown,
         start: start,
+        hydratePins: hydratePins,
         isLive: isLive,
         preloadAhead: preloadAhead,
         ensureLive: function () { return ensureLive(true); }

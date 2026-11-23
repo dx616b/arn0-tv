@@ -455,10 +455,11 @@
         return 'Mix only: On shuffles provider order, then plays them in turn. Photos stay in fetch order.';
     }
 
-    // Shuffle matters for Rotate (photos) or Live Mix (2+ sources). Hide for solo Live.
+    // Shuffle matters for Rotate (photos) or Live Mix On with 2+ sources.
     function showShuffleBlock(p) {
         if (p.mode === 'rotate') return true;
         if (p.mode !== 'live' && !bgKeepLivePicker) return false;
+        if ((p.liveProvider || '') !== 'mix') return false;
         var n = window.LiveWallpaper ? LiveWallpaper.enabledSourceKeys().length : 0;
         return n >= 2;
     }
@@ -537,12 +538,25 @@
         });
         $('bg-interval-block').classList.toggle('hidden', !cycle);
 
-        // Multi-select: chips = mixEnabled; liveProvider is sole source or mix.
         if (browseLive && window.LiveWallpaper && LiveWallpaper.syncLiveProvider) {
             LiveWallpaper.syncLiveProvider();
             p = Prefs.get().wallpaper;
         }
         var prov = p.liveProvider || 'bing';
+        var mixOn = prov === 'mix';
+
+        var mixBlock = $('bg-live-mix-block');
+        if (mixBlock) {
+            mixBlock.classList.toggle('hidden', !browseLive);
+            var mixChips = $('bg-live-mix');
+            if (mixChips) {
+                mixChips.innerHTML = '';
+                [[false, 'Off'], [true, 'On']].forEach(function (o) {
+                    mixChips.appendChild(chip(o[1], mixOn === o[0], { kind: 'mixMode', value: o[0] }));
+                });
+            }
+        }
+
         var liveProvBlock = $('bg-live-provider-block');
         if (liveProvBlock) {
             liveProvBlock.classList.toggle('hidden', !browseLive);
@@ -551,18 +565,26 @@
             (window.LiveWallpaper ? LiveWallpaper.PROVIDERS : [{ key: 'bing', label: 'Bing' }])
                 .filter(function (x) { return x.key !== 'mix'; })
                 .forEach(function (x) {
-                    var on = window.LiveWallpaper
-                        ? LiveWallpaper.mixSourceOn(x.key)
+                    // Mix On: multi-select roster. Mix Off: single selected source.
+                    var on = mixOn
+                        ? (window.LiveWallpaper
+                            ? LiveWallpaper.mixSourceOn(x.key)
+                            : false)
                         : prov === x.key;
                     providers.appendChild(chip(x.label, on, { kind: 'provider', key: x.key }));
                 });
             var provNote = $('bg-live-provider-note');
-            if (provNote) provNote.classList.toggle('hidden', !browseLive);
+            if (provNote) {
+                provNote.classList.toggle('hidden', !browseLive);
+                provNote.textContent = mixOn
+                    ? 'Tap to include in Mix. At least one source must stay on.'
+                    : 'Tap one source to browse and use. Mix roster is kept for when Mix is On.';
+            }
         }
 
-        var unsplashOn = window.LiveWallpaper
-            ? LiveWallpaper.mixSourceOn('unsplash')
-            : (prov === 'unsplash' || prov === 'mix');
+        var unsplashOn = mixOn
+            ? (window.LiveWallpaper ? LiveWallpaper.mixSourceOn('unsplash') : false)
+            : prov === 'unsplash';
         var showUnsplash = browseLive && unsplashOn;
         var unsplashBlock = $('bg-live-unsplash-block');
         if (unsplashBlock) {
@@ -581,9 +603,9 @@
             ));
         }
 
-        var immichOn = window.LiveWallpaper
-            ? LiveWallpaper.mixSourceOn('immich')
-            : (prov === 'immich' || prov === 'mix');
+        var immichOn = mixOn
+            ? (window.LiveWallpaper ? LiveWallpaper.mixSourceOn('immich') : false)
+            : prov === 'immich';
         var showImmich = browseLive && immichOn;
         var immichBlock = $('bg-live-immich-block');
         if (immichBlock) {
@@ -856,24 +878,61 @@
             renderBackground();
             UI.refresh();
             return;
-        } else if (item.kind === 'provider') {
-            if (!window.LiveWallpaper || !LiveWallpaper.setMixSource) return;
-            if (item.key === 'mix') return;
-            var prevProv = p.liveProvider || 'bing';
-            var wantOn = !LiveWallpaper.mixSourceOn(item.key);
-            var nowOn = LiveWallpaper.setMixSource(item.key, wantOn);
-            if (!wantOn && nowOn) {
-                UI.toast('Keep at least one source on');
+        } else if (item.kind === 'mixMode') {
+            if (!window.LiveWallpaper || !LiveWallpaper.setMixMode) return;
+            var wantMix = !!item.value;
+            var prevMix = (p.liveProvider || '') === 'mix';
+            if (wantMix === prevMix) return;
+            LiveWallpaper.setMixMode(wantMix);
+            p = Prefs.get().wallpaper;
+            p.liveKey = '';
+            p.lastChange = Date.now();
+            bgPhotosGridMode = '';
+            bgPhotosKeys = {};
+            Prefs.save();
+            if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
+            if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) {
+                UI.toast(LiveWallpaper.status());
+            }
+            busyLiveProviderChange().then(function () {
                 renderBackground();
                 UI.refresh();
-                return;
-            }
-            var nextProv = LiveWallpaper.deriveLiveProvider
-                ? LiveWallpaper.deriveLiveProvider()
-                : item.key;
-            p.liveProvider = nextProv;
-            Prefs.save();
-            if (nextProv !== prevProv) {
+            }, function () {
+                renderBackground();
+                UI.refresh();
+            });
+            return;
+        } else if (item.kind === 'provider') {
+            if (!window.LiveWallpaper) return;
+            if (item.key === 'mix') return;
+            var prevProv = p.liveProvider || 'bing';
+            var nextProv = prevProv;
+            var mixNow = prevProv === 'mix';
+
+            if (mixNow) {
+                // Mix On: multi-select roster chips.
+                if (!LiveWallpaper.setMixSource) return;
+                var wantOn = !LiveWallpaper.mixSourceOn(item.key);
+                var nowOn = LiveWallpaper.setMixSource(item.key, wantOn);
+                if (!wantOn && nowOn) {
+                    UI.toast('Keep at least one source on');
+                    renderBackground();
+                    UI.refresh();
+                    return;
+                }
+                nextProv = 'mix';
+                p.liveProvider = 'mix';
+                Prefs.save();
+                if (LiveWallpaper.rebuildPlan) LiveWallpaper.rebuildPlan();
+            } else {
+                // Mix Off: radio — one source to browse / play.
+                if (prevProv === item.key) return;
+                if (LiveWallpaper.setSoloProvider) LiveWallpaper.setSoloProvider(item.key);
+                else {
+                    p.liveProvider = item.key;
+                    Prefs.save();
+                }
+                nextProv = item.key;
                 p.liveKey = '';
                 p.lastChange = Date.now();
                 bgPhotosGridMode = '';
@@ -881,9 +940,8 @@
                 Prefs.save();
                 if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
                 else if (LiveWallpaper.clearCache) LiveWallpaper.clearCache();
-            } else if (nextProv === 'mix' && LiveWallpaper.rebuildPlan) {
-                LiveWallpaper.rebuildPlan();
             }
+
             if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) {
                 UI.toast(LiveWallpaper.status());
                 renderBackground();
@@ -1887,6 +1945,7 @@
             el: $('bg-settings'),
             rows: function () { return chipRows($('bg-body')); },
             onShow: function () {
+                if (window.Wallpaper && Wallpaper.hydratePins) Wallpaper.hydratePins();
                 renderBackground();
                 var wp = Prefs.get().wallpaper;
                 if (wp.mode === 'live' && wp.liveProvider !== 'mix') warmBgPicker();
