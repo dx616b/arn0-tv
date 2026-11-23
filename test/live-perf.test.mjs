@@ -39,10 +39,17 @@ test('pickBatch is a function reflecting the current pool', function () {
         }
     });
     assert.equal(typeof ctx.LiveWallpaper.pickBatch, 'function');
-    assert.equal(ctx.LiveWallpaper.pickBatch(), 10);
+    // Solo Bing is capped to BING_WINDOW (8), even when livePool is large.
+    assert.equal(ctx.LiveWallpaper.pickBatch(), 8);
     ctx.Prefs.get().wallpaper.livePool = 'small';
     ctx.Prefs.save();
     assert.equal(ctx.LiveWallpaper.pickBatch(), 3);
+    // Non-Bing sources use the full pool pick size.
+    ctx.Prefs.get().wallpaper.liveProvider = 'nasa';
+    ctx.Prefs.get().wallpaper.mixEnabled.nasa = true;
+    ctx.Prefs.get().wallpaper.livePool = 'large';
+    ctx.Prefs.save();
+    assert.equal(ctx.LiveWallpaper.pickBatch(), 10);
 });
 
 test('Mix stream keys follow enabled sources only', function () {
