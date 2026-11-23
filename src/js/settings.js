@@ -1200,7 +1200,7 @@
         if (item.kind === 'preview') Sound.preview();
     }
 
-    // ---------- Music (Subsonic ambient)
+    // ---------- Music (Radio + Subsonic ambient)
 
     function maskSecret(value) {
         if (!value) return 'Set password';
@@ -1238,8 +1238,11 @@
         var srcBlock = el('div', 'setting-block');
         srcBlock.appendChild(el('h2', '', 'Source'));
         var srcChips = el('div', 'chips wrap');
+        var onRadio = p.source === 'radio';
         var onPlaylist = p.source === 'playlist' && !!p.playlistId;
-        srcChips.appendChild(chip('Random', !onPlaylist, { kind: 'source', value: 'random' }));
+        var onRandom = !onRadio && !onPlaylist;
+        srcChips.appendChild(chip('Radio', onRadio, { kind: 'source', value: 'radio' }));
+        srcChips.appendChild(chip('Random', onRandom, { kind: 'source', value: 'random' }));
         srcChips.appendChild(chip(
             onPlaylist ? (p.playlistName || 'Playlist') : 'Playlist…',
             onPlaylist,
@@ -1247,6 +1250,27 @@
         ));
         srcBlock.appendChild(srcChips);
         body.appendChild(srcBlock);
+
+        if (onRadio && window.Music && Music.STATIONS) {
+            var stationBlock = el('div', 'setting-block');
+            stationBlock.appendChild(el('h2', '', 'Station'));
+            var stationChips = el('div', 'chips wrap');
+            var stationLabel = 'Station…';
+            if (p.radioId === 'custom' && Music.customUrl && Music.customUrl()) {
+                var cu = Music.customUrl();
+                stationLabel = cu.length > 40 ? ('Custom · ' + cu.slice(0, 36) + '…') : ('Custom · ' + cu);
+            } else {
+                var curSt = Music.STATIONS.find(function (s) { return s.id === p.radioId; });
+                if (curSt) {
+                    stationLabel = curSt.genre ? (curSt.genre + ' · ' + curSt.title) : curSt.title;
+                }
+            }
+            stationChips.appendChild(chip(stationLabel, true, { kind: 'radioStation' }));
+            stationBlock.appendChild(stationChips);
+            body.appendChild(stationBlock);
+            body.appendChild(el('p', 'setting-note muted',
+                'House & dance first; mirrors on failure. Custom = HTTPS mp3/aac. Next switches station.'));
+        }
 
         var playBlock = el('div', 'setting-block');
         var heads = el('div', 'setting-inline-heads');
@@ -1266,7 +1290,8 @@
         body.appendChild(playBlock);
 
         body.appendChild(el('p', 'setting-note muted',
-            'Plays while this launcher is open. Pauses when you open another app. Saved on the TV — no rebuild needed.'));
+            'Radio works with no server. Random / Playlist need Navidrome or Subsonic. ' +
+            'Plays while this launcher is open; pauses when you open another app.'));
     }
 
     function pickMusicPlaylist() {
@@ -1299,6 +1324,66 @@
         }).catch(function (e) {
             UI.toast('Playlists failed: ' + ((e && e.message) || 'error'));
         });
+    }
+
+    function editRadioCustomUrl() {
+        var cur = (Music.customUrl && Music.customUrl()) || '';
+        rename(cur || 'https://', function (url) {
+            var u = String(url || '').trim();
+            if (!u || u === 'https://') {
+                UI.toast('Enter an HTTPS stream URL');
+                return;
+            }
+            Music.setCustomUrl(u);
+            renderMusic();
+            UI.refresh();
+            UI.toast('Radio: Custom');
+        }, { title: 'Stream URL', maxLength: 200 });
+    }
+
+    function pickMusicRadioStation() {
+        if (!window.Music || !Music.STATIONS) return;
+        var p = Prefs.get().music;
+        var options = Music.STATIONS.map(function (st) {
+            var label = st.genre ? (st.genre + ' · ' + st.title) : st.title;
+            return {
+                label: label,
+                checked: p.radioId === st.id,
+                run: function () {
+                    Music.setRadio(st.id);
+                    renderMusic();
+                    UI.refresh();
+                    UI.toast('Radio: ' + st.title);
+                }
+            };
+        });
+        var customLabel = 'Custom URL…';
+        if (Music.customUrl && Music.customUrl()) {
+            var cu = Music.customUrl();
+            customLabel = cu.length > 40 ? ('Custom · ' + cu.slice(0, 36) + '…') : ('Custom · ' + cu);
+        }
+        options.push({
+            label: customLabel,
+            checked: p.radioId === 'custom',
+            run: function () {
+                if (Music.customUrl && Music.customUrl()) {
+                    if (Prefs.get().music.radioId !== 'custom') {
+                        Music.setRadio('custom');
+                        renderMusic();
+                        UI.refresh();
+                        UI.toast('Radio: Custom');
+                    }
+                    return;
+                }
+                editRadioCustomUrl();
+            }
+        });
+        options.push({
+            label: 'Edit custom URL…',
+            run: function () { editRadioCustomUrl(); }
+        });
+        options.push({ label: 'Cancel' });
+        UI.menu('Station', options);
     }
 
     function activateMusic(item) {
@@ -1353,12 +1438,27 @@
             return;
         }
         if (item.kind === 'source') {
-            if (item.value === 'playlist') {
+            if (item.value === 'radio') {
+                Music.setSource('radio');
+                UI.toast('Music: Radio');
+            } else if (item.value === 'playlist') {
+                if (!Subsonic.configured()) {
+                    UI.toast('Set server, user and password first');
+                    return;
+                }
                 pickMusicPlaylist();
                 return;
+            } else {
+                if (!Subsonic.configured()) {
+                    UI.toast('Set server, user and password first');
+                    return;
+                }
+                Music.setSource('random');
+                UI.toast('Music: Random');
             }
-            Music.setSource('random');
-            UI.toast('Music: Random');
+        } else if (item.kind === 'radioStation') {
+            pickMusicRadioStation();
+            return;
         } else if (item.kind === 'enabled') {
             Music.setEnabled(item.value);
             if (!item.value) Music.pause();

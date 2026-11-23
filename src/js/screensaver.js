@@ -450,8 +450,14 @@
             back.style.opacity = '1';
             old.style.opacity = '0';
         };
+        // EXIF re-measure is a second full decode — only needed for Immich / local pins.
+        var needOrient = !w.remote || w.source === 'immich';
         var img = new Image();
         img.onload = function () {
+            if (!needOrient) {
+                swap(urls[ui], img.naturalWidth, img.naturalHeight);
+                return;
+            }
             orientedSize(urls[ui], img, function (ow, oh) {
                 swap(urls[ui], ow, oh);
             });
@@ -466,9 +472,13 @@
         };
         img.src = urls[0];
         if (img.complete && img.naturalWidth) {
-            orientedSize(urls[0], img, function (ow, oh) {
-                swap(urls[0], ow, oh);
-            });
+            if (!needOrient) {
+                swap(urls[0], img.naturalWidth, img.naturalHeight);
+            } else {
+                orientedSize(urls[0], img, function (ow, oh) {
+                    swap(urls[0], ow, oh);
+                });
+            }
         }
     }
 
@@ -584,7 +594,7 @@
     }
 
     function musicReady() {
-        return !!(window.Music && window.Subsonic && Subsonic.configured());
+        return !!(window.Music && Music.ready && Music.ready());
     }
 
     function renderMusic() {
@@ -749,8 +759,10 @@
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
-        // Decode the next few sharp + blur-thumb URLs while this photo is up.
-        if (Wallpaper.preloadAhead) Wallpaper.preloadAhead();
+        // After the crossfade — do not compete with the current decode on this SoC.
+        setTimeout(function () {
+            if (open && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
+        }, 800);
     }
 
     // Immich (and similar) polish place/title after paint; refresh only the caption in place.

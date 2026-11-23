@@ -65,12 +65,16 @@
                 label: null,            // display name when place === 'custom' / after auto detect
                 unit: 'celsius'         // 'celsius' | 'fahrenheit'
             },
-            // Subsonic ambient player (server/user/password live in Subsonic creds store).
+            // Ambient player: curated Radio and/or Subsonic (creds in Subsonic store).
             music: {
                 enabled: musicSeed.enabled != null ? !!musicSeed.enabled : false,
                 playing: false,
                 volume: musicSeed.volume || 'med',          // Music.VOLUMES key: low | med | high
-                source: musicSeed.source || 'random',       // 'random' | 'playlist'
+                source: musicSeed.source || 'random',       // 'radio' | 'random' | 'playlist'
+                radioId: musicSeed.radioId || 'beatblender', // Music.STATIONS id or 'custom'
+                radioCustomUrl: musicSeed.radioCustomUrl || '',
+                // Last ice host that played (e.g. https://ice2.somafm.com/) — tried first next time.
+                radioGoodHost: musicSeed.radioGoodHost || '',
                 playlistId: musicSeed.playlistId || null,
                 playlistName: musicSeed.playlistName || null
             },
