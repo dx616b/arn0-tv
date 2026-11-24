@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.7.0
+
+### Music
+- Music settings on one page: On/Off, then Navidrome or Radio, with that source's settings shown below
+- Navidrome fields show only whether each is set (no server or user preview)
+- Radio stations are SomaFM, Radio Record and Your list
+- SomaFM channels come from SomaFM's channel feed, browsed by genre, then channel (cached for a day, built-in fallback)
+- Radio Record stations come from Radio Record's station list, browsed by genre, then station (cached for a day, built-in six used only while no list is cached)
+- Your list: add a stream by its https address; it is named from the address; Left removes it
+- Favourites from any station, SomaFM channel or Your list entry; shown as "Favourites (n)" on the Radio page
+- Next goes through: All channels (Radio Record, SomaFM, then Your list), Favourites, or Your list
+- Menus: moving onto an entry plays it; OK plays or pauses it and keeps the list open; each row shows ☆ or ★; Right toggles a favourite; Left removes the entry from the list you are in; a tick marks the station only while it plays
+- Back from a channel list returns to its genre list
+- Next skips stations that do not play ("Not possible to play <name>"), one pass at most; a chosen station that fails stops with the same message
+- A stream that has not started after 5 seconds counts as failed
+- Radio failover tries each stream mirror in turn; a mirror no longer cancels the next one
+- The bar shows "Not possible to play <name>" after a failure; a long title no longer restarts its scroll on every redraw
+
+### Home
+- Home no longer falls back to the small preview image (Wallhaven's is 300px) when a full-size photo fails to load
+- Portrait photos show whole, with a blurred copy filling the sides (follows the Blur fill setting)
+
+### Screen saver
+- Exit freezes mid-pan and syncs the key onto Home; the same photo resumes drift from that pose
+- When a photo will not load, the next photo is shown instead of a black screen (after five failures in a row it stops)
+
+### Live wallpaper
+- Photos that will not load are remembered for the session and not queued or shown again, for every provider
+- Wallhaven: concurrent fills share one search request; after a failed detail request, detail requests pause for ten minutes
+- Immich display prefers fullsize→preview (not multi-MP /original) so Home and the screensaver stay responsive on TV
+
+### Lab
+- Radio checks: Radio Record and SomaFM lists, the Next list, Your list, favourites
+- Navidrome checks: show server (no password), test connection
+- Photo checks: list addresses that will not load, forget them and try again
+
+### Code structure
+- Radio decisions (Next order, skip budget, what a failed stream does next) in radio-plan.js
+- Radio Record and SomaFM feeds in their own modules (radiorecord.js, somafm.js)
+- Settings split into one file per page (`src/js/settings-*.js`) with shared helpers in `settings-core.js`
+- Live wallpaper split into focused modules; shared helpers `http.js`, `photo-util.js`, `live-core.js`, `live-parsers.js`, `pan-math.js`
+- Lab probes are excluded from release builds
+
+### Tooling
+- ESLint flat config, `npm run lint` and `npm run check`; CI runs lint and tests
+- Tests for radio decisions, SomaFM and Radio Record feeds, Your list and favourites preferences, Navidrome, photo providers and the photo fallback order, live parsers, HTTP helpers and pan maths
+- `.nvmrc`, `.editorconfig`, `engines.node >= 20`; `package.json` and `config.xml` versions match
+
+### Fixes
+- Consoles page could reference undefined logo and launch-method lists
+
 ## 0.6.20
 
 ### Music

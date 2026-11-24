@@ -241,17 +241,8 @@
     function useTemporary(entry) {
         if (!entry || !entry.key || !entry.file) return false;
         var w = Prefs.get().wallpaper;
-        w.tempPhoto = {
-            key: entry.key,
-            title: entry.title || 'Temporary',
-            sub: entry.sub || '',
-            file: entry.file,
-            fileFallback: entry.fileFallback || '',
-            fileFallbacks: entry.fileFallbacks || [],
-            thumb: entry.thumb || entry.file,
-            credit: entry.credit || '',
-            source: entry.source || ''
-        };
+        w.tempPhoto = PhotoUtil.entryFields(entry, entry.title || 'Temporary');
+        w.tempPhoto.source = entry.source || '';
         w.photo = entry.key;
         w.mode = 'photo';
         Prefs.save();
@@ -259,25 +250,7 @@
         return true;
     }
 
-    function fetchBlob(url) {
-        return new Promise(function (resolve, reject) {
-            if (!url) {
-                reject(new Error('no url'));
-                return;
-            }
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.responseType = 'blob';
-            xhr.timeout = 60000;
-            xhr.onload = function () {
-                if (xhr.status >= 200 && xhr.status < 300 && xhr.response) resolve(xhr.response);
-                else reject(new Error('HTTP ' + xhr.status));
-            };
-            xhr.onerror = function () { reject(new Error('network')); };
-            xhr.ontimeout = function () { reject(new Error('timeout')); };
-            xhr.send();
-        });
-    }
+    var fetchBlob = Http.getBlob;
 
     function pinUrls(entry) {
         var urls = [];
@@ -335,18 +308,9 @@
     function pinLive(entry) {
         if (!entry || !entry.key || !entry.file) return Promise.resolve(false);
         var existing = pinsMeta().find(function (x) { return x.key === entry.key; });
-        var meta = {
-            key: entry.key,
-            title: entry.title || 'Pinned',
-            sub: entry.sub || '',
-            file: entry.file,
-            fileFallback: entry.fileFallback || '',
-            fileFallbacks: entry.fileFallbacks || [],
-            thumb: entry.thumb || entry.file,
-            credit: entry.credit || '',
-            remote: true,
-            bytes: existing && existing.bytes > 0 ? existing.bytes : 0
-        };
+        var meta = PhotoUtil.entryFields(entry, entry.title || 'Pinned');
+        meta.remote = true;
+        meta.bytes = existing && existing.bytes > 0 ? existing.bytes : 0;
         if (blobUrls[entry.key] || existing) {
             if (blobUrls[entry.key]) {
                 activatePin(meta);
@@ -479,6 +443,14 @@
 
     function bg() { return document.getElementById('bg'); }
     function bgPhoto() { return document.getElementById('bg-photo'); }
+    function bgPhotoBlur() { return document.getElementById('bg-photo-blur'); }
+
+    function clearBlur(el) {
+        if (!el) return;
+        el.onerror = null;
+        el.classList.remove('on');
+        el.removeAttribute('src');
+    }
     function scrim() { return document.getElementById('bg-scrim'); }
 
     function setScrim(on) {
@@ -486,16 +458,8 @@
         if (el) el.classList.toggle('hidden', !on);
     }
 
-    function photoUrls(w) {
-        var list = [];
-        function add(u) {
-            if (u && list.indexOf(u) < 0) list.push(u);
-        }
-        add(w.file);
-        add(w.fileFallback);
-        (w.fileFallbacks || []).forEach(add);
-        return list;
-    }
+    var photoUrls = PhotoUtil.photoUrls;
+    var orientedSize = PhotoUtil.orientedSize;
 
     function preloadUrl(url) {
         if (!url) return;
@@ -554,52 +518,18 @@
         function add(u) {
             if (u && urls.indexOf(u) < 0) urls.push(u);
         }
-        // Best quality first (Immich original, Bing UHD, …); fall back if a URL fails to load.
+        // Display URL first (Immich fullsize / Bing HD / …); fall back if a URL fails to load. Never the
+        // thumb: it is a small preview (Wallhaven's is 300px), which looks soft when stretched to the TV.
         add(w.file);
         add(w.fileFallback);
         (w.fileFallbacks || []).forEach(add);
-        add(w.thumb);
         return urls.length ? urls : photoUrls(w);
-    }
-
-    /*
-     * naturalWidth/Height ignore EXIF rotation; many phone JPEGs store a landscape buffer that
-     * displays as portrait with image-orientation: from-image. Measure a hidden oriented <img>.
-     */
-    function orientedSize(url, fallback, done) {
-        var probe = document.createElement('img');
-        var settled = false;
-        var finish = function (w, h) {
-            if (settled) return;
-            settled = true;
-            if (probe.parentNode) probe.parentNode.removeChild(probe);
-            if (!w || !h) {
-                w = (fallback && fallback.naturalWidth) || 0;
-                h = (fallback && fallback.naturalHeight) || 0;
-            }
-            done(w, h);
-        };
-        probe.setAttribute('alt', '');
-        probe.style.cssText = 'position:fixed;left:0;top:0;margin:0;border:0;padding:0;' +
-            'width:auto;height:auto;max-width:none;max-height:none;' +
-            'opacity:0;pointer-events:none;image-orientation:from-image;z-index:-1';
-        probe.onload = function () {
-            document.body.appendChild(probe);
-            void probe.offsetWidth;
-            finish(probe.offsetWidth, probe.offsetHeight);
-        };
-        probe.onerror = function () { finish(0, 0); };
-        probe.src = url;
-        if (probe.complete && probe.naturalWidth) {
-            document.body.appendChild(probe);
-            void probe.offsetWidth;
-            finish(probe.offsetWidth, probe.offsetHeight);
-        }
     }
 
     function display(w) {
         var t = ++token;
         var photo = bgPhoto();
+        var blurEl = bgPhotoBlur();
         if (!w) {
             lastHomeUrl = '';
             bg().style.backgroundImage = '';
@@ -607,6 +537,7 @@
                 photo.removeAttribute('src');
                 photo.classList.remove('on', 'portrait');
             }
+            clearBlur(blurEl);
             setScrim(false);
             return;
         }
@@ -626,11 +557,22 @@
                 photo.classList.add('on');
                 photo.classList.toggle('portrait', portrait);
             }
+            if (portrait && blurEl && Prefs.get().screensaver.blur !== false) {
+                blurEl.onerror = function () {
+                    blurEl.onerror = null;
+                    if (blurEl.getAttribute('src') !== url) blurEl.src = url;
+                };
+                blurEl.src = w.thumb || url;
+                blurEl.classList.add('on');
+            } else {
+                clearBlur(blurEl);
+            }
             setScrim(!!w.remote);
         }
         function tryUrl() {
             if (i >= urls.length) {
                 DevLog.log('Wallpaper failed to load: ' + w.file);
+                LiveHistory.markFailed(w);
                 if (t === token && w.remote) setScrim(false);
                 return;
             }
@@ -646,6 +588,7 @@
                 });
             };
             probe.onerror = function () {
+                DevLog.log('Wallpaper failed to load: ' + urls[i]);
                 i++;
                 tryUrl();
             };
@@ -810,9 +753,8 @@
             }
             setTimeout(preloadAhead, 1400);
         });
-        // The screen saver has its own photo cycle and covers Home completely, so rotating
-        // underneath it would only decode images nobody can see — and move the photo Home
-        // comes back to.
+        // The screen saver owns the photo cycle while open; do not rotate Home underneath
+        // (wasted decode). close() syncs the shown key then applies Home.
         setInterval(function () {
             if (window.Screensaver && Screensaver.isOpen()) return;
             if (!document.hidden && due()) next();

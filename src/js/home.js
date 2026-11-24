@@ -417,6 +417,9 @@
         if (window.Weather) actions = actions.concat(Weather.actions());
         if (window.RenderProbe) actions = actions.concat(RenderProbe.actions());
         if (window.PlatformProbe) actions = actions.concat(PlatformProbe.actions());
+        if (window.Music) actions = actions.concat(Music.actions());
+        if (window.Subsonic) actions = actions.concat(Subsonic.actions());
+        if (window.LiveWallpaper) actions = actions.concat(LiveWallpaper.actions());
         inputs().forEach(function (input) {
             var item = { kind: 'input', hdmi: input.hdmi, label: input.label };
             var name = input.label + ' (HDMI ' + input.hdmi + ')';

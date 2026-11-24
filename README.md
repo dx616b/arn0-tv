@@ -72,6 +72,8 @@ npm run preview        # http://localhost:8080
 npm run build          # release .wgt (no local config / no devLogUrl)
 npm run build:local    # sideload .wgt with config.local.js + Lab → PC logs
 npm run devlog         # receive those logs on this machine (:8099)
+npm install            # once: dev tools (ESLint)
+npm run check          # lint + unit tests (same as CI)
 ```
 
 `build:local` sets `devLogUrl` to the Windows LAN IP when built from WSL. Run

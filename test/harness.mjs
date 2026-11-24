@@ -89,6 +89,26 @@ export function createLauncherSandbox(opts) {
     load('src/js/config.js');
     load('src/js/devlog.js');
     load('src/js/prefs.js');
+    load('src/js/http.js');
+    load('src/js/photo-util.js');
+    load('src/js/live-core.js');
+    load('src/js/live-parsers.js');
+    load('src/js/live-state.js');
+    load('src/js/live-events.js');
+    load('src/js/live-source-bing.js');
+    load('src/js/live-source-nasa.js');
+    load('src/js/live-source-wiki.js');
+    load('src/js/live-source-unsplash.js');
+    load('src/js/live-source-wallhaven.js');
+    load('src/js/live-source-immich.js');
+    load('src/js/live-cache.js');
+    load('src/js/live-picker.js');
+    load('src/js/live-stores.js');
+    load('src/js/live-roster.js');
+    load('src/js/live-pool.js');
+    load('src/js/live-history.js');
+    load('src/js/live-fill.js');
+    load('src/js/live-queue.js');
     load('src/js/live-wallpaper.js');
 
     return ctx;

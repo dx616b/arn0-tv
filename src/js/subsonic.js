@@ -115,25 +115,7 @@
     }
 
     function xhrGet(url) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.timeout = TIMEOUT_MS;
-            xhr.onload = function () {
-                if (xhr.status < 200 || xhr.status >= 300) {
-                    reject(new Error('HTTP ' + xhr.status));
-                    return;
-                }
-                try {
-                    resolve(JSON.parse(xhr.responseText));
-                } catch (e) {
-                    reject(e);
-                }
-            };
-            xhr.onerror = function () { reject(new Error('network')); };
-            xhr.ontimeout = function () { reject(new Error('timeout')); };
-            xhr.send();
-        });
+        return Http.xhrGet(url, null, false, TIMEOUT_MS);
     }
 
     function unwrap(data) {
@@ -240,6 +222,24 @@
         cfg: cfg,
         setCreds: setCreds,
         clearCreds: clearCreds,
-        summary: summary
+        summary: summary,
+        actions: function () {
+            return [
+                { label: 'Navidrome: show server (no password)', run: function () {
+                    DevLog.log('Navidrome: ' + summary() + ', configured: ' + configured());
+                } },
+                { label: 'Navidrome: test connection', run: function () {
+                    if (!configured()) {
+                        DevLog.log('Navidrome: not configured');
+                        return;
+                    }
+                    ping().then(function () {
+                        DevLog.log('Navidrome: connection ok');
+                    }, function (e) {
+                        DevLog.log('Navidrome: connection FAILED ' + (e && e.message ? e.message : e));
+                    });
+                } }
+            ];
+        }
     };
 })();
