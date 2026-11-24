@@ -207,6 +207,7 @@
     function fetchImmichNext(tries) {
         var st = LiveState.stream;
         if (tries > 2) return Promise.reject(new Error('empty Immich album'));
+        if (!(st.immichIndex >= 0)) st.immichIndex = 0;
         var batch = st.immichBatch;
         if (batch && st.immichIndex < batch.length) {
             var a = batch[st.immichIndex];
