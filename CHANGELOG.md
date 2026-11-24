@@ -4,6 +4,9 @@
 
 ### Live wallpaper
 - Wallhaven: changing category no longer shows photos from the previous category
+- Unsplash: photos come in order from the collection (or popular photos), not one per calendar day; the place is kept across restarts
+- Unsplash: a collection shorter than the place it is at starts again from its first page (previously it showed nothing)
+- Unsplash: each page's photo count and any error are written to the Lab log
 
 ## 0.7.0
 
