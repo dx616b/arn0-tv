@@ -71,6 +71,7 @@
     window.LiveSources = window.LiveSources || {};
     window.LiveSources.bing = {
         clearBingDay: clearBingDay,
+        parseBingImage: parseBingImage,
         ensureBingDayWindow: ensureBingDayWindow,
     };
 })();

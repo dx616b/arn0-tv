@@ -198,6 +198,7 @@
     window.LiveSources.wallhaven = {
         wallhavenCategoryAllowed: wallhavenCategoryAllowed,
         polishWallhaven: polishWallhaven,
+        parseWallhavenImage: parseWallhavenImage,
         fetchWallhavenPage: fetchWallhavenPage,
     };
 })();
