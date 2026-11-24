@@ -48,11 +48,19 @@
         });
         var pages = {};
         slots.forEach(function (s) { pages[s.page] = []; });
-        return Promise.all(Object.keys(pages).map(function (p) {
+        // A collection can be shorter than the day's page; an empty page falls back to the first one.
+        function pageOf(p) {
             return unsplashGet(unsplashPhotosPath(p)).then(function (data) {
-                pages[p] = parseUnsplashList(data);
-                DevLog.log('Live wallpaper: Unsplash page ' + p + ': ' + (Array.isArray(data) ? data.length : 0) +
-                    ' photos, ' + pages[p].length + ' usable' + (LiveState.unsplashCollection ? ' (collection ' + LiveState.unsplashCollection + ')' : ''));
+                var list = parseUnsplashList(data);
+                if (list.length || String(p) === '1') return list;
+                return unsplashGet(unsplashPhotosPath(1)).then(parseUnsplashList);
+            });
+        }
+        return Promise.all(Object.keys(pages).map(function (p) {
+            return pageOf(p).then(function (list) {
+                pages[p] = list;
+                DevLog.log('Live wallpaper: Unsplash page ' + p + ': ' + list.length + ' usable' +
+                    (LiveState.unsplashCollection ? ' (collection ' + LiveState.unsplashCollection + ')' : ''));
             }, function (e) {
                 DevLog.log('Live wallpaper: Unsplash page ' + p + ' failed: ' + DevLog.errorText(e));
                 throw e;

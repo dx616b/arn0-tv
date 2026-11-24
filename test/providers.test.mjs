@@ -168,3 +168,19 @@ test('Wallhaven: changing category drops the search still running for the old on
     assert.equal(calls.length, 2, 'the new category starts its own search');
     assert.ok(calls[1].includes('010'), 'the new search asks for Anime');
 });
+
+test('Unsplash: a collection shorter than the day\'s page falls back to its first page', async function () {
+    const c = createLauncherSandbox();
+    const calls = [];
+    const photo = { id: 'c1', width: 4000, height: 2500, urls: { raw: 'https://images.unsplash.com/photo-c1', small: 'https://images.unsplash.com/photo-c1?w=400' } };
+    c.window.LiveCore.xhrGet = function (url) {
+        calls.push(url);
+        return Promise.resolve(/page=1$/.test(url) ? [photo] : []);
+    };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-unsplash.js'), 'utf8'), c, { filename: 'live-source-unsplash.js' });
+    c.window.LiveState.unsplashCollection = 'c1';
+    const list = plain(await c.window.LiveSources.unsplash.fetchUnsplashDays([0]));
+    assert.equal(list.length, 1, 'the day still gets a photo');
+    assert.equal(list[0].key, 'c1');
+    assert.ok(calls.some(function (u) { return /\/collections\/c1\/photos/.test(u) && /page=1$/.test(u); }), 'page 1 was requested');
+});
