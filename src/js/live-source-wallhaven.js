@@ -186,10 +186,13 @@
     function fetchWallhavenPageNow() {
         var page = LiveState.stream.wallhavenPage || 1;
         var seed = LiveState.stream.wallhavenSeed || '';
+        var category = LiveState.wallhavenCategory;
         var path = wallhavenSearchPath(page, seed);
         DevLog.log('Live wallpaper: Wallhaven ' + path.replace(/^\//, '') +
-            ' (want ' + LiveState.wallhavenCategory + ')');
+            ' (want ' + category + ')');
         return xhrGet(wallhavenApi(path)).then(function (res) {
+            // The category changed while this search ran: its results belong to the old category.
+            if (category !== LiveState.wallhavenCategory) return { entries: [], stale: true };
             var list = (res && Array.isArray(res.data)) ? res.data : [];
             var meta = (res && res.meta) || {};
             if (meta.seed && !LiveState.stream.wallhavenSeed) LiveState.stream.wallhavenSeed = String(meta.seed);

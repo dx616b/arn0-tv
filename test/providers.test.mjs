@@ -154,3 +154,17 @@ test('Wallhaven: after a failed detail request, detail requests pause', async fu
     assert.equal(calls.length, 1, 'second detail waits for the pause');
     assert.ok(c.window.LiveState.wallhavenDetailDownUntil > Date.now());
 });
+
+test('Wallhaven: changing category drops the search still running for the old one', function () {
+    const c = createLauncherSandbox();
+    const calls = [];
+    c.window.LiveCore.xhrGet = function (url) { calls.push(url); return new Promise(function () {}); };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-wallhaven.js'), 'utf8'), c, { filename: 'live-source-wallhaven.js' });
+    const W = c.window.LiveSources.wallhaven;
+    W.fetchWallhavenPage();
+    assert.equal(calls.length, 1);
+    c.window.LiveStores.setWallhavenCategory('anime');
+    W.fetchWallhavenPage();
+    assert.equal(calls.length, 2, 'the new category starts its own search');
+    assert.ok(calls[1].includes('010'), 'the new search asks for Anime');
+});
