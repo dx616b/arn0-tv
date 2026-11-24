@@ -117,6 +117,8 @@
     function resetImmichState() {
         if (!LiveState.stream) return;
         LiveState.stream.immichPage = 1;
+        LiveState.stream.immichIndex = 0;
+        LiveState.stream.immichBatch = null;
         LiveState.stream.immichAlbum = null;
         LiveState.stream.immichWrapped = false;
         if (LiveState.stream.queues && LiveState.stream.queues.immich) {
