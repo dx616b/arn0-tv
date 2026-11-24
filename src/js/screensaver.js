@@ -66,8 +66,8 @@
      * smoothly. A translate leaves the raster alone. Drift distance is derived from each photo's
      * size vs the 1920×1080 stage; only speed is user-tunable.
      */
-    var VIEW_W = 1920;
-    var VIEW_H = 1080;
+    var VIEW_W = PanMath.VIEW_W;
+    var VIEW_H = PanMath.VIEW_H;
     var PAN_SPEEDS = [
         { key: 'slow', label: 'Slow', factor: 1.7 },
         { key: 'normal', label: 'Normal', factor: 1 },
@@ -78,16 +78,14 @@
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
-    var FALLBACK_DRIFT = {
-        coverX: 160, coverY: 90, zoom: 1.35,
-        containX: 0, containY: 40, padX: 160, padY: 90
-    };
+    var FALLBACK_DRIFT = PanMath.FALLBACK_DRIFT;
 
     var open = false;
     var returnTo = 'home';
     var lastInput = Date.now();
     var layers = [];
     var front = 0;              // which of the two photo layers is showing
+    var failStreak = 0;        // photos in a row that would not load; stops a run of bad ones
     var photoToken = 0;
     var photoIndex = 0;
     var openedAt = 0;
@@ -126,51 +124,7 @@
         return (layer && layer._drift) || FALLBACK_DRIFT;
     }
 
-    /*
-     * Pan/zoom budget from photo pixels vs the fixed TV stage. Landscape cover: move within the
-     * overflow after cover-fit (near-16:9 gets a little overscan so there is still room). Portrait
-     * contain: full stage height, side pillars; zoom toward full-bleed, nudge in leftover spill.
-     */
-    function computeDrift(ow, oh, portrait) {
-        if (!ow || !oh) return FALLBACK_DRIFT;
-        if (portrait) {
-            var fit = Math.min(VIEW_W / ow, VIEW_H / oh);
-            var fw = ow * fit;
-            var fh = oh * fit;
-            // 1 = contain (full height); fill = scale that would flush width too.
-            var fill = Math.max(VIEW_W / fw, VIEW_H / fh);
-            var zoom = Math.min(2.15, Math.max(1.15, 1 + (fill - 1) * 0.8));
-            var zW = fw * zoom;
-            var zH = fh * zoom;
-            var spillX = Math.max(0, (zW - VIEW_W) / 2);
-            var spillY = Math.max(0, (zH - VIEW_H) / 2);
-            return {
-                coverX: 0,
-                coverY: 0,
-                zoom: zoom,
-                containX: Math.round(Math.min(64, spillX * 0.45)),
-                containY: 0, // never nudge vertically — keeps top/bottom sealed
-                padX: 0,
-                padY: 0
-            };
-        }
-        var cover = Math.max(VIEW_W / ow, VIEW_H / oh);
-        var overflowX = Math.max(0, (ow * cover - VIEW_W) / 2);
-        var overflowY = Math.max(0, (oh * cover - VIEW_H) / 2);
-        // Fixed Ken Burns travel (matches .ss-photo CSS). Near-16:9 has almost no cover
-        // overflow, so invent the same overscan rather than a tiny adaptive nudge.
-        var MIN_X = 160;
-        var MIN_Y = 90;
-        if (overflowX < MIN_X || overflowY < MIN_Y) {
-            overflowX = Math.max(overflowX, MIN_X);
-            overflowY = Math.max(overflowY, MIN_Y);
-        }
-        var panX = Math.round(Math.min(220, Math.max(MIN_X, overflowX * 0.7)));
-        var panY = Math.round(Math.min(140, Math.max(MIN_Y, overflowY * 0.7)));
-        var padX = Math.max(panX, Math.ceil(overflowX));
-        var padY = Math.max(panY, Math.ceil(overflowY));
-        return { coverX: panX, coverY: panY, zoom: 1, padX: padX, padY: padY };
-    }
+    var computeDrift = PanMath.computeDrift;
 
     function applyLayerPad(layer, drift, contain) {
         if (contain) {
@@ -230,8 +184,9 @@
     }
 
     /*
-     * The photo follows the Background setting: Off shows no photo, Photo holds the chosen one,
-     * Rotate / Live cycle the lot. Prefs.wallpaper is read, never written.
+     * Shared picture stream (Background mode / liveKey / photo). Saver owns pan presentation.
+     * On exit the leg is frozen at its exact pose (see pose()/legU()) and kept for the same key;
+     * reopening that key continues the same leg with the remaining time.
      */
     function photoAt(i) {
         var p = Prefs.get().wallpaper;
@@ -259,28 +214,42 @@
         return Math.max(8 * 1000, Math.round(base * panSpeed().factor));
     }
 
-    function zoomLegMs() {
-        return Math.max(8 * 1000, Math.round(legMs() * ZOOM_LEG_FACTOR));
-    }
-
-    function corner(layer, sign) {
-        var d = driftOf(layer);
-        return 'translate(' + (sign * d.coverX) + 'px, ' + (sign * d.coverY) + 'px)';
-    }
-
-    // sign > 0 = zoomed out (full height); sign < 0 = focus-in.
-    // Never nudge vertically — that opened top/bottom gaps where blur leaked through.
-    function portraitTransform(layer, sign) {
-        var d = driftOf(layer);
-        var z = sign > 0 ? 1 : d.zoom;
-        var tx = 0;
-        if (z > 1) tx = (sign > 0 ? 1 : -1) * (d.containX || 0);
-        return 'translate(' + tx + 'px, 0) scale(' + z + ')';
+    /*
+     * Every pose is one number u in [-1, 1]: landscape moves from corner(-1) to corner(+1);
+     * portrait goes from focus-in (-1) to zoomed out (+1). The timing is linear, so a pose at
+     * any moment is a plain lerp and can be written back without reading computed styles.
+     * Portrait never nudges vertically — that opened top/bottom gaps where blur leaked through.
+     */
+    function pose(layer, u) {
+        return PanMath.poseTransform(driftOf(layer), layer.classList.contains('contain'), u);
     }
 
     function sharpEl(layer) {
         return layer.querySelector('.ss-photo-img');
     }
+
+    // Writes a pose with no transition. Landscape moves the layer, portrait moves the sharp img.
+    function applyPose(layer, u) {
+        var sharp = sharpEl(layer);
+        layer.style.transition = 'none';
+        if (layer.classList.contains('contain')) {
+            layer.style.transform = 'none';
+            if (sharp) {
+                sharp.style.transition = 'none';
+                sharp.style.transform = pose(layer, u);
+            }
+        } else {
+            if (sharp) {
+                sharp.style.transition = 'none';
+                sharp.style.transform = 'translate(0, 0)';
+            }
+            layer.style.transform = pose(layer, u);
+        }
+        void layer.offsetWidth;
+    }
+
+    // Where the layer is right now along its leg; the leg itself is the only source of truth.
+    var legU = PanMath.legU;
 
     /*
      * Place a layer at the start of its drift with no animation. The suppression has to be
@@ -290,6 +259,8 @@
      */
     function resetPan(layer, sign) {
         var sharp = sharpEl(layer);
+        layer._leg = null;
+        layer._frozen = null;
         if (!panOn()) {
             layer.style.transition = 'none';
             layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
@@ -302,25 +273,7 @@
             }
             return;
         }
-        if (layer.classList.contains('contain')) {
-            layer.style.transition = 'none';
-            layer.style.transform = 'none';
-            if (sharp) {
-                sharp.style.transition = 'none';
-                sharp.style.transform = portraitTransform(layer, sign);
-                void sharp.offsetWidth;
-            }
-            return;
-        }
-        if (sharp) {
-            sharp.style.transition = 'none';
-            sharp.style.transform = 'translate(0, 0)';
-        }
-        layer.style.transition = 'none';
-        layer.style.transform = corner(layer, sign);
-        // Reading a layout property flushes that, so the transition startPan restores runs from
-        // this corner instead of being collapsed into the move away from it.
-        void layer.offsetWidth;
+        applyPose(layer, sign);
     }
 
     /*
@@ -329,85 +282,106 @@
      * Drift speed. Drift Off parks the photo centred (no pan / portrait zoom).
      */
     function startPan() {
-        var layer = layers[front];
-        var sharp = sharpEl(layer);
         if (!panOn()) {
             nextPanAt = 0;
-            layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
-            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
-            if (sharp) {
-                sharp.style.transition = 'none';
-                sharp.style.transform = 'translate(0, 0)';
+            var layer0 = layers[front];
+            var sharp0 = sharpEl(layer0);
+            layer0.style.transition = 'opacity ' + FADE_MS + 'ms linear';
+            layer0.style.transform = layer0.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            if (sharp0) {
+                sharp0.style.transition = 'none';
+                sharp0.style.transform = 'translate(0, 0)';
             }
             return;
         }
+        var from = currentU();
         panSign = -panSign;
-        nextPanAt = Date.now() + legMs();
-        var move = 'transform ' + legMs() + 'ms linear';
-        if (layer.classList.contains('contain')) {
+        runPanLeg(legMs(), from);
+    }
+
+    // Where the front layer is now: mid-leg if a leg is running, otherwise the corner it rests at.
+    function currentU() {
+        var layer = layers[front];
+        if (layer && layer._leg) return legU(layer._leg, Date.now());
+        return panSign;
+    }
+
+    // Animate from fromU toward the corner/zoom for panSign. flipMs is when the next leg
+    // starts; animMs is how long this leg's transition runs (portrait zoom runs longer).
+    function runPanLeg(flipMs, fromU, animMs) {
+        var layer = layers[front];
+        var sharp = sharpEl(layer);
+        if (!panOn() || !layer) {
+            nextPanAt = 0;
+            return;
+        }
+        var now = Date.now();
+        var flip = Math.max(800, flipMs || legMs());
+        nextPanAt = now + flip;
+        var contain = layer.classList.contains('contain');
+        var anim = Math.max(800, animMs || (contain ? Math.round(flip * ZOOM_LEG_FACTOR) : flip));
+        layer._leg = { from: fromU, to: panSign, start: now, dur: anim };
+        if (contain) {
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
             if (sharp) {
-                sharp.style.transition = 'transform ' + zoomLegMs() + 'ms linear';
-                sharp.style.transform = portraitTransform(layer, panSign);
+                sharp.style.transition = 'transform ' + anim + 'ms linear';
+                sharp.style.transform = pose(layer, panSign);
             }
             return;
         }
-        layer.style.transition = 'opacity ' + FADE_MS + 'ms linear, ' + move;
-        layer.style.transform = corner(layer, panSign);
+        layer.style.transition = 'opacity ' + FADE_MS + 'ms linear, transform ' + anim + 'ms linear';
+        layer.style.transform = pose(layer, panSign);
     }
+
+    // Logical mid-leg pose for the current photo (same key → restore + continue).
+    var panResume = null;
+
+    function clearPanResume() { panResume = null; }
+
+    // After freezePan(): the frozen leg is already in animator terms, so just keep it.
+    function capturePanResume(key) {
+        clearPanResume();
+        if (!key || !panOn() || !layers || !layers.length) return;
+        var layer = layers[front];
+        var fz = layer && layer._frozen;
+        if (!fz) return;
+        panResume = {
+            key: key,
+            u: fz.u,
+            toU: fz.toU,
+            flipIn: fz.flipIn,
+            animIn: fz.animIn,
+            portrait: layer.classList.contains('contain')
+        };
+    }
+
+    // Lets a frozen leg carry on from where it stopped; a leg that already ended starts the next.
+    function continueFrozen(layer, fz) {
+        applyPose(layer, fz.u);
+        panSign = fz.toU;
+        if (fz.flipIn > 0) runPanLeg(fz.flipIn, fz.u, fz.animIn);
+        else startPan();
+    }
+
+    // Same photo after Home: continue the frozen leg rather than resetting to a corner.
+    function resumePanFromFreeze(resume) {
+        if (!resume || !panOn()) return false;
+        var layer = layers[front];
+        if (!layer) return false;
+        if (layer.classList.contains('contain') !== resume.portrait) return false;
+        continueFrozen(layer, resume);
+        return true;
+    }
+
 
     /*
      * The incoming photo is decoded on the hidden layer before anything fades, so a slow decode
      * cannot show as a flash of empty background. A token abandons a decode that finishes after
      * the next change, or after the screen saver has closed.
      */
-    function photoUrls(w) {
-        var list = [];
-        function add(u) {
-            if (u && list.indexOf(u) < 0) list.push(u);
-        }
-        add(w.file);
-        add(w.fileFallback);
-        (w.fileFallbacks || []).forEach(add);
-        return list;
-    }
-
-    /*
-     * naturalWidth/Height ignore EXIF rotation; Wikimedia (and many phone JPEGs) store a
-     * landscape buffer that displays as portrait with image-orientation: from-image. Measure
-     * a hidden oriented <img> so contain+blur matches what the viewer actually sees.
-     */
-    function orientedSize(url, fallback, done) {
-        var probe = document.createElement('img');
-        var settled = false;
-        var finish = function (w, h) {
-            if (settled) return;
-            settled = true;
-            if (probe.parentNode) probe.parentNode.removeChild(probe);
-            if (!w || !h) {
-                w = (fallback && fallback.naturalWidth) || 0;
-                h = (fallback && fallback.naturalHeight) || 0;
-            }
-            done(w, h);
-        };
-        probe.setAttribute('alt', '');
-        probe.style.cssText = 'position:fixed;left:0;top:0;margin:0;border:0;padding:0;' +
-            'width:auto;height:auto;max-width:none;max-height:none;' +
-            'opacity:0;pointer-events:none;image-orientation:from-image;z-index:-1';
-        probe.onload = function () {
-            document.body.appendChild(probe);
-            void probe.offsetWidth;
-            finish(probe.offsetWidth, probe.offsetHeight);
-        };
-        probe.onerror = function () { finish(0, 0); };
-        probe.src = url;
-        if (probe.complete && probe.naturalWidth) {
-            document.body.appendChild(probe);
-            void probe.offsetWidth;
-            finish(probe.offsetWidth, probe.offsetHeight);
-        }
-    }
+    var photoUrls = PhotoUtil.photoUrls;
+    var orientedSize = PhotoUtil.orientedSize;
 
     function showPhoto(w) {
         var token = ++photoToken;
@@ -424,6 +398,7 @@
         var swap = function (url, ow, oh) {
             if (swapped || token !== photoToken || !open) return;
             swapped = true;
+            failStreak = 0;
             var back = layers[1 - front];
             var old = layers[front];
             var imgEl = back.querySelector('.ss-photo-img');
@@ -434,6 +409,8 @@
             var contain = portrait;
             var wantBlur = contain && blurOn();
             back._drift = computeDrift(ow, oh, portrait);
+            back._leg = null;
+            back._frozen = null;
             applyLayerPad(back, back._drift, contain);
             back.classList.toggle('contain', contain);
             back.classList.toggle('portrait', portrait);
@@ -459,12 +436,16 @@
                     }
                 })(blurImgs[bi]);
             }
-            // Placed at the corner startPan is about to drift away from, animation suppressed.
-            resetPan(back, panSign);
+            var resume = (panResume && w.key && panResume.key === w.key) ? panResume : null;
+            if (resume) clearPanResume();
             front = 1 - front;
-            // Restores the transition before either property is given a new value, so the
-            // crossfade and the drift both animate instead of jumping.
-            startPan();
+            if (!(resume && resumePanFromFreeze(resume))) {
+                // Placed at the corner startPan is about to drift away from, animation suppressed.
+                resetPan(back, panSign);
+                // Restores the transition before either property is given a new value, so the
+                // crossfade and the drift both animate instead of jumping.
+                startPan();
+            }
             back.style.opacity = '1';
             old.style.opacity = '0';
         };
@@ -486,7 +467,10 @@
                 img.src = urls[ui];
                 return;
             }
-            DevLog.log('Screen saver photo failed: ' + w.file);
+            DevLog.log('Screen saver photo failed: ' + urls.join(' | '));
+            // Show the next photo rather than a black screen (give up after a run of failures).
+            failStreak++;
+            if (failStreak <= 5) advancePhoto(true);
         };
         img.src = urls[0];
         if (img.complete && img.naturalWidth) {
@@ -780,23 +764,35 @@
         lastChromeAt = Date.now();
     }
 
-    // Park drift under the black layer — ongoing CSS transforms fight the audio decoder on this SoC.
+    // Snap the motion now, at the exact pose the leg has reached — no computed-style reads.
     function freezePan() {
+        var now = Date.now();
+        var flipIn = nextPanAt ? Math.max(0, nextPanAt - now) : 0;
         nextPanAt = 0;
         if (!layers || !layers.length) return;
-        layers.forEach(function (layer) {
+        layers.forEach(function (layer, i) {
             if (!layer) return;
-            var sharp = sharpEl(layer);
-            var lt = window.getComputedStyle(layer).transform;
-            layer.style.transition = 'none';
-            if (lt && lt !== 'none') layer.style.transform = lt;
-            if (sharp) {
-                var st = window.getComputedStyle(sharp).transform;
-                sharp.style.transition = 'none';
-                if (st && st !== 'none') sharp.style.transform = st;
+            var leg = layer._leg;
+            if (leg) {
+                var u = legU(leg, now);
+                applyPose(layer, u);
+                if (i === front) {
+                    layer._frozen = {
+                        u: u,
+                        toU: leg.to,
+                        flipIn: flipIn,
+                        animIn: Math.max(0, leg.start + leg.dur - now)
+                    };
+                }
+                layer._leg = null;
+            } else {
+                layer.style.transition = 'none';
             }
+            // Visible layer stays up; the other stays hidden (no leftover crossfade).
+            layer.style.opacity = (i === front) ? '1' : '0';
         });
     }
+
 
     function goDark() {
         if (dark) return;
@@ -821,11 +817,12 @@
         var veil = $('ss-dark');
         if (veil) veil.style.opacity = '0';
         showChrome();
-        // Resume drift on the visible layer without fetching a new photo.
-        if (layers && layers[front]) {
-            resetPan(layers[front], panSign);
-            startPan();
-        }
+        // Already frozen mid-pose — continue the same leg from here (do not reset to a corner).
+        var layer = layers && layers[front];
+        var fz = layer && layer._frozen;
+        if (layer) layer._frozen = null;
+        if (fz) continueFrozen(layer, fz);
+        else if (layer) startPan();
         // Long dark stretches can stall ice streams without an Audio error — nudge recovery.
         if (window.Music && Music.kick) Music.kick();
         return true;
@@ -833,6 +830,8 @@
 
     function applyPhoto(w) {
         if (!open || !w) return;
+        // A different photo invalidates any frozen mid-leg pose from a prior session.
+        if (panResume && w.key && panResume.key !== w.key) clearPanResume();
         var list = playlist();
         var ni = list.findIndex(function (x) { return x.key === w.key; });
         photoIndex = ni < 0 ? photoIndex : ni;
@@ -905,12 +904,32 @@
         }
     }
 
+    // Write the last saver frame into the shared picture stream, then paint Home.
+    function syncHomeFromSaver(key) {
+        if (!key || !window.Prefs || !window.Wallpaper) return;
+        var p = Prefs.get().wallpaper;
+        if (p.mode === 'off') return;
+        var cur = p.mode === 'live' ? p.liveKey : p.photo;
+        if (key !== cur) {
+            if (p.mode === 'live') p.liveKey = key;
+            else if (p.mode === 'rotate' || p.mode === 'photo') p.photo = key;
+            p.lastChange = Date.now();
+            Prefs.save();
+        }
+        if (Wallpaper.apply) Wallpaper.apply();
+    }
+
     function close() {
         if (!open) return;
         open = false;
         advancing = false;
         chromeHidden = false;
         dark = false;
+        var keepKey = shownKey;
+        // Snap mid-leg matrix, then store pose for the next saver open on this key.
+        freezePan();
+        capturePanResume(keepKey);
+        syncHomeFromSaver(keepKey);
         shownKey = '';
         lastInput = Date.now();
         photoToken++;
@@ -932,6 +951,8 @@
             l.style.backgroundImage = '';
             l.classList.remove('contain', 'portrait', 'landscape', 'no-blur');
             l._drift = null;
+            l._leg = null;
+            l._frozen = null;
             applyLayerPad(l, FALLBACK_DRIFT, true);
             clearPortraitPillars(l);
             var imgEl = l.querySelector('.ss-photo-img');

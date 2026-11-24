@@ -1,0 +1,157 @@
+/*
+ * immich live wallpaper source: fetches and parses its pictures. Shared pool and queue state
+ * lives in live-state.js; calls back into live-wallpaper.js go through LiveHooks.
+ */
+(function () {
+    'use strict';
+
+    var xhrGet = LiveCore.xhrGet;
+    var preview = LiveCore.preview;
+    var IMMICH_XHR_MS = LiveCore.IMMICH_XHR_MS;
+    var parseImmichLink = LiveParsers.parseImmichLink;
+    var normalize = LiveParsers.normalize;
+
+
+    function immichApi(path) {
+        var s = parseImmichLink(LiveState.immichLink);
+        var url = s.origin + '/api' + path;
+        return preview() ? '/api/live/immich?url=' + encodeURIComponent(url) : url;
+    }
+
+    function fetchImmichLinkData() {
+        var s = parseImmichLink(LiveState.immichLink);
+        if (!s) return Promise.reject(new Error('Immich share link required'));
+        return xhrGet(immichApi('/shared-links/me?' + s.query), null, false, IMMICH_XHR_MS);
+    }
+
+    // Camera roll dumps (IMG_1234, PXL_…, DSC…) are not useful captions.
+    function isDumpFilename(name) {
+        return /^(IMG[_-]?|DSC[_N]?|DCIM|PXL_|MVIMG_|VID_|Screenshot|PHOTO[_-]?|PIC[_-]?|image[_-]?|WA\d)/i.test(name) ||
+            /^\d{8}[_-]\d{6}/.test(name);
+    }
+
+    function immichExif(a) {
+        return (a && a.exifInfo) || {};
+    }
+
+    // Immich reverse-geocode fields; countryCode is a fallback on older/partial EXIF.
+    function immichPlace(a) {
+        var x = immichExif(a);
+        return [x.city, x.state, x.country || x.countryCode].filter(Boolean).join(', ');
+    }
+
+    function immichTitle(a, album) {
+        var x = immichExif(a);
+        var desc = String(x.description || a.description || '').trim();
+        if (desc) return desc.length > 120 ? desc.slice(0, 117) + '…' : desc;
+        var place = immichPlace(a);
+        if (place) return place;
+        var name = String(a.originalFileName || '').split(/[/\\]/).pop() || '';
+        name = name.replace(/\.[a-z0-9]+$/i, '');
+        if (name && !isDumpFilename(name)) return name;
+        if (album) return album;
+        return 'Immich';
+    }
+
+    function immichDate(a) {
+        // localDateTime is the wall-clock time where the photo was taken; reading its date part
+        // avoids shifting the day through the TV's own timezone.
+        var x = immichExif(a);
+        var m = String(a.localDateTime || x.dateTimeOriginal || a.fileCreatedAt || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!m) return '';
+        var when = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        return when.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function immichEntry(a, origin, query, album) {
+        var base = origin + '/api/assets/' + encodeURIComponent(a.id);
+        var q = '&' + query;
+        var place = immichPlace(a);
+        var title = immichTitle(a, album);
+        var date = immichDate(a);
+        // Prefer place on the title line; keep date (+ album via credit) underneath.
+        var sub = date;
+        if (place && title !== place && title.indexOf(place) !== 0) {
+            sub = place + (date ? ' · ' + date : '');
+        }
+        var original = base + '/original?' + query;
+        var fullsize = base + '/thumbnail?size=fullsize' + q;
+        var preview = base + '/thumbnail?size=preview' + q;
+        // Smallest Immich derivative for the Settings grid (preview is too heavy per tile).
+        var thumb = base + '/thumbnail?size=thumbnail' + q;
+        return normalize({
+            key: 'immich:' + a.id,
+            title: title,
+            sub: sub,
+            // TV SoC stalls on multi-MP /original decode. Prefer Immich web derivatives
+            // sized for display; original is last resort (also often blocked without download).
+            file: fullsize,
+            fileFallback: preview,
+            fileFallbacks: [preview, original],
+            thumb: thumb,
+            credit: album ? 'Immich · ' + album : 'Immich',
+            source: 'immich'
+        });
+    }
+
+    function fetchImmichAsset(id) {
+        var s = parseImmichLink(LiveState.immichLink);
+        return xhrGet(immichApi('/assets/' + encodeURIComponent(id) + '?' + s.query), null, false, IMMICH_XHR_MS);
+    }
+
+    // Search hits often omit reverse-geocoded place; the asset endpoint usually has full EXIF.
+    function mergeImmichAsset(searchHit, full) {
+        if (!full) return searchHit;
+        var merged = {};
+        Object.keys(searchHit || {}).forEach(function (k) { merged[k] = searchHit[k]; });
+        Object.keys(full).forEach(function (k) { merged[k] = full[k]; });
+        merged.exifInfo = Object.assign({}, immichExif(searchHit), immichExif(full));
+        if (!merged.localDateTime && searchHit.localDateTime) merged.localDateTime = searchHit.localDateTime;
+        return merged;
+    }
+
+    function ensureImmichAlbum() {
+        if (LiveState.stream.immichAlbum) return Promise.resolve(LiveState.stream.immichAlbum);
+        return fetchImmichLinkData().then(function (link) {
+            var s = parseImmichLink(LiveState.immichLink);
+            if (!link.album || !link.album.id) throw new Error('Immich link is not an album');
+            LiveState.stream.immichAlbum = {
+                id: link.album.id,
+                name: (link.album && link.album.albumName) || '',
+                origin: s.origin,
+                query: s.query
+            };
+            return LiveState.stream.immichAlbum;
+        });
+    }
+
+    // Enrich place/title when showing; never block plan fill on /assets round-trips.
+    function polishImmich(entry) {
+        if (!entry || !entry.key || !LiveState.stream.immichAlbum) return Promise.resolve(entry);
+        if ((entry.credit || '').indexOf('Immich') !== 0) return Promise.resolve(entry);
+        var album = LiveState.stream.immichAlbum;
+        // Catalog keys are "immich:<uuid>"; the assets API wants the bare id.
+        var id = String(entry.key).replace(/^immich:/, '');
+        if (!id) return Promise.resolve(entry);
+        return fetchImmichAsset(id).then(function (full) {
+            if (!full) return entry;
+            var merged = mergeImmichAsset({ id: id, exifInfo: {} }, full);
+            var better = immichEntry(merged, album.origin, album.query, album.name);
+            entry.title = better.title;
+            entry.sub = better.sub;
+            entry.file = better.file;
+            entry.fileFallback = better.fileFallback;
+            entry.fileFallbacks = better.fileFallbacks;
+            entry.thumb = better.thumb;
+            return entry;
+        }, function () { return entry; });
+    }
+
+    window.LiveSources = window.LiveSources || {};
+    window.LiveSources.immich = {
+        immichApi: immichApi,
+        immichEntry: immichEntry,
+        ensureImmichAlbum: ensureImmichAlbum,
+        polishImmich: polishImmich,
+    };
+})();
