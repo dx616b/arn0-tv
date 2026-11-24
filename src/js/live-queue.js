@@ -367,6 +367,10 @@
     }
 
     function resetPool() {
+        if (LiveState.stream) {
+            LiveState.stream.unsplashPage = 1;
+            LiveState.stream.unsplashIndex = 0;
+        }
         LiveState.items = [];
         LiveState.seen = [];
         LiveState.pickCatalog = {};

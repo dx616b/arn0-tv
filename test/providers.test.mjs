@@ -169,7 +169,7 @@ test('Wallhaven: changing category drops the search still running for the old on
     assert.ok(calls[1].includes('010'), 'the new search asks for Anime');
 });
 
-test('Unsplash: a collection shorter than the day\'s page falls back to its first page', async function () {
+test('Unsplash: a position past a short collection falls back to its first page', async function () {
     const c = createLauncherSandbox();
     const calls = [];
     const photo = { id: 'c1', width: 4000, height: 2500, urls: { raw: 'https://images.unsplash.com/photo-c1', small: 'https://images.unsplash.com/photo-c1?w=400' } };
@@ -179,8 +179,24 @@ test('Unsplash: a collection shorter than the day\'s page falls back to its firs
     };
     vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-unsplash.js'), 'utf8'), c, { filename: 'live-source-unsplash.js' });
     c.window.LiveState.unsplashCollection = 'c1';
-    const list = plain(await c.window.LiveSources.unsplash.fetchUnsplashDays([0]));
-    assert.equal(list.length, 1, 'the day still gets a photo');
-    assert.equal(list[0].key, 'c1');
+    c.window.LiveState.stream.unsplashPage = 43;
+    const entry = plain(await c.window.LiveSources.unsplash.fetchUnsplashNext());
+    assert.equal(entry.key, 'c1', 'the next photo still comes through');
     assert.ok(calls.some(function (u) { return /\/collections\/c1\/photos/.test(u) && /page=1$/.test(u); }), 'page 1 was requested');
+});
+
+test('Unsplash: photos come in order, one after another', async function () {
+    const c = createLauncherSandbox();
+    const photos = ['a', 'b', 'c'].map(function (k) {
+        return { id: k, width: 4000, height: 2500, urls: { raw: 'https://images.unsplash.com/photo-' + k, small: 'https://images.unsplash.com/photo-' + k + '?w=400' } };
+    });
+    c.window.LiveCore.xhrGet = function (url) {
+        return Promise.resolve(/page=1$/.test(url) ? photos : []);
+    };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-unsplash.js'), 'utf8'), c, { filename: 'live-source-unsplash.js' });
+    c.window.LiveState.stream = { unsplashPage: 1, unsplashIndex: 0 };
+    const U = c.window.LiveSources.unsplash;
+    const got = [];
+    for (let i = 0; i < 4; i++) got.push((await U.fetchUnsplashNext()).key);
+    assert.deepEqual(got, ['a', 'b', 'c', 'a'], 'in order, then starts again');
 });

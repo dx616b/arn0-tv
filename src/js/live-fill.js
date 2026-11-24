@@ -9,7 +9,6 @@
     var BING_WINDOW = LiveCore.BING_WINDOW;
     var SPAN_NASA = LiveCore.SPAN_NASA;
     var SPAN_WIKI = LiveCore.SPAN_WIKI;
-    var SPAN_UNSPLASH = LiveCore.SPAN_UNSPLASH;
     var IMMICH_PAGE = LiveCore.IMMICH_PAGE;
     var IMMICH_XHR_MS = LiveCore.IMMICH_XHR_MS;
     var daysAgoKey = LiveCore.daysAgoKey;
@@ -37,7 +36,7 @@
     var immichApi = LiveSources.immich.immichApi;
     var immichEntry = LiveSources.immich.immichEntry;
     var fetchNasaDay = LiveSources.nasa.fetchNasaDay;
-    var fetchUnsplashDays = LiveSources.unsplash.fetchUnsplashDays;
+    var fetchUnsplashNext = LiveSources.unsplash.fetchUnsplashNext;
     var fetchWallhavenPage = LiveSources.wallhaven.fetchWallhavenPage;
     var fetchWikimediaDay = LiveSources.wiki.fetchWikimediaDay;
 
@@ -189,10 +188,9 @@
             });
         }
         if (name === 'unsplash') {
-            var off = nextOffset('unsplash', SPAN_UNSPLASH);
-            return fetchUnsplashDays([off]).then(function (list) {
-                if (!list[0]) throw new Error('empty Unsplash');
-                return { entries: [list[0]] };
+            return fetchUnsplashNext().then(function (entry) {
+                if (!entry) throw new Error('empty Unsplash');
+                return { entries: [entry] };
             });
         }
         if (name === 'wallhaven') {
