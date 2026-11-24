@@ -89,7 +89,10 @@
     }
 
     function resetWallhavenState() {
+        // A search still running is for the old category: forget it, so the new one starts fresh.
+        LiveState.wallhavenInflight = null;
         if (!LiveState.stream) return;
+        LiveState.stream.plan = LiveState.stream.plan.filter(function (w) { return w.source !== 'wallhaven'; });
         LiveState.stream.wallhavenPage = 1;
         LiveState.stream.wallhavenSeed = '';
         LiveState.stream.wallhavenWrapped = false;
