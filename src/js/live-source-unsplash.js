@@ -10,7 +10,6 @@
     var xhrGet = LiveCore.xhrGet;
     var preview = LiveCore.preview;
     var UNSPLASH = LiveCore.UNSPLASH;
-    var UNSPLASH_PAGES = LiveCore.UNSPLASH_PAGES;
     var UNSPLASH_PER_PAGE = LiveCore.UNSPLASH_PER_PAGE;
     var normalize = LiveParsers.normalize;
 
@@ -23,13 +22,6 @@
         return xhrGet(unsplashApi(path), { Authorization: 'Client-ID ' + LiveState.unsplashKey });
     }
 
-    // Unsplash has no photo-of-the-day endpoint. Each local calendar day maps to a fixed
-    // slot in a fixed ordering (a collection, or popular photos), so a day always shows the
-    // same photo, also after a restart. Pages cycle after UNSPLASH_PAGES to stay in range.
-    function dayNumber(d) {
-        return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
-    }
-
     function unsplashPhotosPath(page) {
         var c = LiveState.unsplashCollection;
         var query = 'per_page=' + UNSPLASH_PER_PAGE + '&page=' + page;
@@ -37,27 +29,40 @@
         return '/photos?order_by=popular&' + query;
     }
 
-    function fetchUnsplashDays(offsets) {
-        var today = dayNumber(new Date());
-        var slots = offsets.map(function (o) {
-            var g = today - o;
-            return {
-                page: Math.floor(g / UNSPLASH_PER_PAGE) % UNSPLASH_PAGES + 1,
-                index: g % UNSPLASH_PER_PAGE
-            };
-        });
-        var pages = {};
-        slots.forEach(function (s) { pages[s.page] = []; });
-        return Promise.all(Object.keys(pages).map(function (p) {
-            return unsplashGet(unsplashPhotosPath(p)).then(function (data) {
-                pages[p] = parseUnsplashList(data);
+    // The next photo in order from the collection (or the popular feed). The position is kept in
+    // LiveState.stream until the collection or key changes. When the list runs out, it starts again.
+    function fetchUnsplashNext() {
+        var st = LiveState.stream;
+        function step(tries) {
+            if (tries > 3) return Promise.resolve(null);
+            var page = st.unsplashPage || 1;
+            return unsplashGet(unsplashPhotosPath(page)).then(function (data) {
+                var list = parseUnsplashList(data);
+                if (!list.length) {
+                    st.unsplashPage = 1;
+                    st.unsplashIndex = 0;
+                    return page === 1 ? null : step(tries + 1);
+                }
+                var i = st.unsplashIndex || 0;
+                if (i >= list.length) {
+                    st.unsplashPage = page + 1;
+                    st.unsplashIndex = 0;
+                    return step(tries + 1);
+                }
+                st.unsplashIndex = i + 1;
+                if (st.unsplashIndex >= list.length) {
+                    st.unsplashPage = page + 1;
+                    st.unsplashIndex = 0;
+                }
+                DevLog.log('Live wallpaper: Unsplash page ' + page + ' photo ' + (i + 1) + ' of ' + list.length +
+                    (LiveState.unsplashCollection ? ' (collection ' + LiveState.unsplashCollection + ')' : ''));
+                return list[i];
+            }, function (e) {
+                DevLog.log('Live wallpaper: Unsplash page ' + page + ' failed: ' + DevLog.errorText(e));
+                throw e;
             });
-        })).then(function () {
-            return slots.map(function (s) {
-                var list = pages[s.page];
-                return list.length ? list[s.index % list.length] : null;
-            }).filter(Boolean);
-        });
+        }
+        return step(0);
     }
 
     function parseUnsplashImage(img) {
@@ -102,7 +107,7 @@
 
     window.LiveSources = window.LiveSources || {};
     window.LiveSources.unsplash = {
-        fetchUnsplashDays: fetchUnsplashDays,
+        fetchUnsplashNext: fetchUnsplashNext,
         trackUnsplash: trackUnsplash,
         parseUnsplashImage: parseUnsplashImage,
     };
