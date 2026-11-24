@@ -51,6 +51,11 @@
         return Promise.all(Object.keys(pages).map(function (p) {
             return unsplashGet(unsplashPhotosPath(p)).then(function (data) {
                 pages[p] = parseUnsplashList(data);
+                DevLog.log('Live wallpaper: Unsplash page ' + p + ': ' + (Array.isArray(data) ? data.length : 0) +
+                    ' photos, ' + pages[p].length + ' usable' + (LiveState.unsplashCollection ? ' (collection ' + LiveState.unsplashCollection + ')' : ''));
+            }, function (e) {
+                DevLog.log('Live wallpaper: Unsplash page ' + p + ' failed: ' + DevLog.errorText(e));
+                throw e;
             });
         })).then(function () {
             return slots.map(function (s) {
