@@ -197,38 +197,59 @@
             return fetchWallhavenPage();
         }
         if (name === 'immich') {
-            return ensureImmichAlbum().then(function (album) {
-                var pageNum = LiveState.stream.immichPage || 1;
-                return xhrPostJson(immichApi('/search/metadata?' + album.query), {
-                    albumIds: [album.id],
-                    type: 'IMAGE',
-                    size: IMMICH_PAGE,
-                    page: pageNum,
-                    withExif: false
-                }, IMMICH_XHR_MS).then(function (res) {
-                    var batch = ((res.assets && res.assets.items) || []).filter(function (a) {
-                        return a && a.type === 'IMAGE' && a.id;
-                    });
-                    if (!batch.length) {
-                        if (pageNum <= 1) throw new Error('empty Immich album');
-                        if (!LiveState.stream.immichWrapped) {
-                            LiveState.stream.immichWrapped = true;
-                            LiveState.stream.immichPage = 1;
-                            return { entries: [], wrapped: true };
-                        }
-                        return { entries: [], done: true };
-                    }
-                    LiveState.stream.immichPage = pageNum + 1;
-                    LiveState.stream.immichWrapped = false;
-                    return {
-                        entries: batch.map(function (a) {
-                            return immichEntry(a, album.origin, album.query, album.name);
-                        })
-                    };
-                });
-            });
+            return fetchImmichNext(0);
         }
         return Promise.reject(new Error('unknown source'));
+    }
+
+    // The next Immich photo in album order. The page is fetched once; its photos are handed out one
+    // at a time. The page and the position in it are kept in LiveState.stream, so a restart carries on.
+    function fetchImmichNext(tries) {
+        var st = LiveState.stream;
+        if (tries > 2) return Promise.reject(new Error('empty Immich album'));
+        var batch = st.immichBatch;
+        if (batch && st.immichIndex < batch.length) {
+            var a = batch[st.immichIndex];
+            st.immichIndex++;
+            if (st.immichIndex >= batch.length) {
+                st.immichPage = (st.immichPage || 1) + 1;
+                st.immichIndex = 0;
+                st.immichBatch = null;
+            }
+            return Promise.resolve({ entries: [immichEntry(a, st.immichAlbumOrigin, st.immichAlbumQuery, st.immichAlbumName)] });
+        }
+        return ensureImmichAlbum().then(function (album) {
+            var pageNum = st.immichPage || 1;
+            st.immichAlbumOrigin = album.origin;
+            st.immichAlbumQuery = album.query;
+            st.immichAlbumName = album.name;
+            return xhrPostJson(immichApi('/search/metadata?' + album.query), {
+                albumIds: [album.id],
+                type: 'IMAGE',
+                size: IMMICH_PAGE,
+                page: pageNum,
+                withExif: false
+            }, IMMICH_XHR_MS).then(function (res) {
+                var list = ((res.assets && res.assets.items) || []).filter(function (a) {
+                    return a && a.type === 'IMAGE' && a.id;
+                });
+                if (!list.length) {
+                    if (pageNum <= 1) throw new Error('empty Immich album');
+                    st.immichPage = 1;
+                    st.immichIndex = 0;
+                    st.immichBatch = null;
+                    return fetchImmichNext(tries + 1);
+                }
+                st.immichBatch = list;
+                if (st.immichIndex >= list.length) {
+                    st.immichPage = pageNum + 1;
+                    st.immichIndex = 0;
+                    st.immichBatch = null;
+                    return fetchImmichNext(tries + 1);
+                }
+                return fetchImmichNext(tries + 1);
+            });
+        });
     }
 
     // Keep the queue topped up. `limit` caps how far to fill (picker uses pickBatch);

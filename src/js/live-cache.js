@@ -73,6 +73,10 @@
                 var ui = Math.floor(Number(raw.unsplashIndex));
                 if (ui >= 0 && isFinite(ui)) LiveState.stream.unsplashIndex = ui;
             }
+            if (raw.immichIndex != null) {
+                var ii = Math.floor(Number(raw.immichIndex));
+                if (ii >= 0 && isFinite(ii)) LiveState.stream.immichIndex = ii;
+            }
             if (raw.immichPage != null) {
                 var ip = Math.floor(Number(raw.immichPage));
                 if (ip >= 1 && isFinite(ip)) LiveState.stream.immichPage = ip;
@@ -139,6 +143,7 @@
                 unsplashPage: LiveState.stream.unsplashPage || 1,
                 unsplashIndex: LiveState.stream.unsplashIndex || 0,
                 immichPage: LiveState.stream.immichPage || 1,
+                immichIndex: LiveState.stream.immichIndex || 0,
                 immichAlbum: LiveState.stream.immichAlbum ? {
                     id: LiveState.stream.immichAlbum.id,
                     name: LiveState.stream.immichAlbum.name || ''

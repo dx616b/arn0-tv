@@ -7,6 +7,7 @@
 - Unsplash: photos come in order from the collection (or popular photos), not one per calendar day; the place is kept across restarts
 - Unsplash: a collection shorter than the place it is at starts again from its first page (previously it showed nothing)
 - Unsplash: each page's photo count and any error are written to the Lab log
+- Immich: the album position (page and place in it) is kept across restarts, so photos are not shown again from the start of a page
 
 ## 0.7.0
 
