@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+### Home
+- The screensaver shows the next photo when one will not load, instead of a black screen (after five failures in a row it stops)
+- Home no longer falls back to the small preview image (Wallhaven's is 300px) when a full-size photo fails to load; it moves on to the next photo instead, and logs the failed address
+
+### Music
+- Radio Record stations come from Radio Record's own station list (cached for a day), grouped by genre like SomaFM; the built-in six are used only while no list is cached
+- Music settings: Source chooses Navidrome or Radio; the chosen source's settings show on the same page
+- Music: a station that can't play shows "Can't play <name>" until something plays
+- Radio: stations are SomaFM, Radio Record and Your list; Your list holds streams you add by URL
+- Moving onto any station, SomaFM channel, or Your list entry plays it (or says "Not possible to play"); OK plays or pauses the entry and keeps the list open; each row shows ☆ or ★; Right toggles the favourite; Left removes it from the list you are in
+- Next goes through: All channels, Favourites, or Your list
+- Favourites: save stations and SomaFM channels from the station menu; they appear at the top of the menu
+- Next goes through all channels (Radio Record, then SomaFM) or only your favourites; choose in the Music settings
+- The curated list now holds only Radio Record stations; SomaFM comes from the SomaFM channel list
+- SomaFM channels are listed from SomaFM's own channel feed (cached for a day, offline fallback): pick a genre, then a channel; long menus scroll and rows stay on one line
+- Radio failover tries each stream mirror in turn; a mirror no longer cancels the next one
+- Next skips stations that do not play ("Not possible to play <name>") until one plays, one pass at most; a chosen station that fails stops with the same message
+- A stream that has not started after 5 seconds counts as failed
+
+### Code structure
+- Radio decisions (Next order, skip budget, what a failed stream does next) moved out of music.js into radio-plan.js, with tests
+- Settings split into one file per page (`src/js/settings-*.js`) with shared helpers in `settings-core.js`
+- Shared helpers: `http.js` (requests), `photo-util.js` (photo fields and orientation), `live-core.js`, `live-parsers.js`, `pan-math.js`
+- Lab probes are excluded from release builds
+
+### Tooling
+- ESLint flat config (`eslint.config.mjs`), `npm run lint` and `npm run check`; CI runs lint and tests
+- Unit tests for pan maths, live parsers, HTTP helpers and wallpaper field mapping
+- `.nvmrc`, `.editorconfig`, `engines.node >= 20`; `package.json` version matches `config.xml`
+
+### Fixes
+- Consoles page could reference undefined logo and launch-method lists
+
+### Home
+- Portrait photos show whole (no zoomed crop), with a blurred copy filling the sides (follows the Blur fill setting)
+
+### Screen saver
+- Exit freezes mid-pan (logical landscape/portrait progress) and syncs the key onto Home; same photo resumes drift from that pose
+
+### Live wallpaper
+- Immich display prefers fullsize→preview (not multi-MP /original) so Home/saver stay responsive on TV
+
 ## 0.6.20
 
 ### Music
