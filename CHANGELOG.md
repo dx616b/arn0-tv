@@ -8,6 +8,7 @@
 - Unsplash: a collection shorter than the place it is at starts again from its first page (previously it showed nothing)
 - Unsplash: each page's photo count and any error are written to the Lab log
 - Immich: the album position (page and place in it) is kept across restarts, so photos are not shown again from the start of a page
+- Live wallpaper: every queued photo is kept across restarts, not only part of the queue
 
 ## 0.7.0
 
