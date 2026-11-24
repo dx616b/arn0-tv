@@ -221,7 +221,8 @@
     function queuesSnapshot() {
         var out = {};
         SOURCE_NAMES.forEach(function (name) {
-            out[name] = { buf: sourceQueue(name).buf.slice(0, sourceAhead()) };
+            // Every queued photo is saved: the source position already moved past them.
+            out[name] = { buf: sourceQueue(name).buf.slice() };
         });
         return out;
     }
@@ -251,7 +252,7 @@
                 }).map(function (w) {
                     w.source = name;
                     return w;
-                }).slice(0, sourceAhead());
+                });
                 if (sourceQueue(name).buf.length !== Math.min(beforeQ, sourceAhead())) {
                     LiveState.cacheNeedsRewrite = true;
                 }
