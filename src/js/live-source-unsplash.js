@@ -104,5 +104,6 @@
     window.LiveSources.unsplash = {
         fetchUnsplashDays: fetchUnsplashDays,
         trackUnsplash: trackUnsplash,
+        parseUnsplashImage: parseUnsplashImage,
     };
 })();

@@ -107,3 +107,15 @@ test('Radio Record: the feed replaces the built-in list once cached', function (
     const names = vm.runInContext(`Music.radioStations().map(function (s) { return s.id; })`, ctx);
     assert.deepEqual(plain(names), ['rr:record']);
 });
+
+test('Lab: the radio checks are listed for the Lab screen', function () {
+    const ctx = radioSandbox();
+    const labels = plain(vm.runInContext(`Music.actions().map(function (a) { return a.label; })`, ctx));
+    assert.deepEqual(labels, [
+        'Radio: check Radio Record list',
+        'Radio: check SomaFM list',
+        'Radio: show Next list',
+        'Radio: show Your list',
+        'Radio: show favourites'
+    ]);
+});

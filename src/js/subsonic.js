@@ -222,6 +222,24 @@
         cfg: cfg,
         setCreds: setCreds,
         clearCreds: clearCreds,
-        summary: summary
+        summary: summary,
+        actions: function () {
+            return [
+                { label: 'Navidrome: show server (no password)', run: function () {
+                    DevLog.log('Navidrome: ' + summary() + ', configured: ' + configured());
+                } },
+                { label: 'Navidrome: test connection', run: function () {
+                    if (!configured()) {
+                        DevLog.log('Navidrome: not configured');
+                        return;
+                    }
+                    ping().then(function () {
+                        DevLog.log('Navidrome: connection ok');
+                    }, function (e) {
+                        DevLog.log('Navidrome: connection FAILED ' + (e && e.message ? e.message : e));
+                    });
+                } }
+            ];
+        }
     };
 })();

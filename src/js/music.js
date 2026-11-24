@@ -964,6 +964,38 @@
         return !!(audio && !audio.paused && !audio.ended && current);
     }
 
+    // Lab checks for the radio: feeds, Your list, favourites and what Next will play.
+    function labActions() {
+        return [
+            { label: 'Radio: check Radio Record list', run: function () {
+                if (!window.RadioRecord) return;
+                RadioRecord.refresh().then(function (list) {
+                    DevLog.log('Radio: Radio Record list: ' + list.length + ' stations' + (list.length ? '' : ' (unavailable)'));
+                });
+            } },
+            { label: 'Radio: check SomaFM list', run: function () {
+                if (!window.SomaFM) return;
+                SomaFM.refresh().then(function (list) {
+                    DevLog.log('Radio: SomaFM list: ' + list.length + ' channels' + (list.length ? '' : ' (unavailable)'));
+                });
+            } },
+            { label: 'Radio: show Next list', run: function () {
+                var items = navItems();
+                DevLog.log('Radio: Next (' + prefs().radioNav + ') has ' + items.length + ' stations; playing ' + prefs().radioId);
+                items.slice(0, 12).forEach(function (it) { DevLog.log('  ' + it.key); });
+            } },
+            { label: 'Radio: show Your list', run: function () {
+                DevLog.log('Radio: Your list has ' + customList().length + ' streams');
+                customList().forEach(function (c) { DevLog.log('  ' + c.title + ' ' + c.url); });
+            } },
+            { label: 'Radio: show favourites', run: function () {
+                var favs = Array.isArray(prefs().favourites) ? prefs().favourites : [];
+                DevLog.log('Radio: ' + favs.length + ' favourites');
+                favs.forEach(function (f) { DevLog.log('  ' + f.type + ' ' + f.id + ' ' + (f.title || '')); });
+            } }
+        ];
+    }
+
     function summary() {
         if (!ready()) return 'Radio or server';
         var p = prefs();
@@ -1031,6 +1063,7 @@
         current: function () { return current; },
         statusText: statusText,
         summary: summary,
+        actions: labActions,
         renderBar: renderBar,
         showFull: showFull,
         fillMarquee: fillMarquee,

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 import { createLauncherSandbox } from './harness.mjs';
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Photo providers: what each one gives the screensaver and Home as the full picture and as a preview.
 const ctx = createLauncherSandbox();
@@ -90,4 +96,61 @@ test('a failed photo is reported as already queued, so no provider adds it back'
     const queue = { buf: [] };
     assert.equal(c.window.LivePool.queueHas(queue, { key: 'nasa:y', file: bad.file }), true);
     assert.equal(c.window.LivePool.queueHas(queue, { key: 'nasa:z', file: 'https://apod.example/z.jpg' }), false);
+});
+
+test('Lab: the photo checks are listed for the Lab screen', function () {
+    const c = createLauncherSandbox();
+    const labels = plain(c.window.LiveWallpaper.actions().map(function (a) { return a.label; }));
+    assert.deepEqual(labels, ['Photos: list addresses that will not load', 'Photos: forget them and try again']);
+});
+
+test('Unsplash: the picture is sized to 1080p, the preview is separate, portraits are left out', function () {
+    const c = createLauncherSandbox();
+    const U = c.window.LiveSources.unsplash;
+    const entry = plain(c.window.LiveParsers.normalize(U.parseUnsplashImage({
+        id: 'u1', width: 4000, height: 2500, alt_description: 'Hills',
+        urls: { raw: 'https://images.unsplash.com/photo-1?ixid=x', small: 'https://images.unsplash.com/photo-1?w=400' },
+        user: { name: 'Ann' }, links: { download_location: 'https://api.unsplash.com/photos/u1/download' }
+    })));
+    assert.ok(entry.file.includes('w=1920') && entry.file.includes('h=1080'), 'file is sized to 1080p');
+    assert.equal(entry.thumb, 'https://images.unsplash.com/photo-1?w=400');
+    assert.equal(entry.credit, 'Ann on Unsplash');
+    assert.equal(entry.source, 'unsplash');
+    assert.equal(U.parseUnsplashImage({ id: 'p', width: 1000, height: 2000, urls: { raw: 'https://x.example/p' } }), null);
+    assert.equal(U.parseUnsplashImage({ id: 'n', urls: {} }), null);
+});
+
+test('Immich: the picture is the fullsize derivative, the preview is the thumbnail, the original is last', function () {
+    const c = createLauncherSandbox();
+    const I = c.window.LiveSources.immich;
+    const entry = plain(I.immichEntry({ id: 'a1', fileCreatedAt: '2025-01-02T10:00:00Z', exifInfo: { city: 'Tirana' } }, 'https://photos.example', 'key=K', 'Trip'));
+    assert.equal(entry.key, 'immich:a1');
+    assert.ok(entry.file.endsWith('/thumbnail?size=fullsize&key=K'), 'file is fullsize');
+    assert.ok(entry.thumb.includes('size=thumbnail'), 'thumb is the small derivative');
+    assert.ok(entry.fileFallbacks.some(function (u) { return u.includes('/original?'); }), 'original is a fallback');
+    assert.equal(entry.fileFallbacks[entry.fileFallbacks.length - 1].includes('/original?'), true, 'original comes last');
+});
+
+test('Wallhaven: concurrent fills share one search request', async function () {
+    const c = createLauncherSandbox();
+    const calls = [];
+    c.window.LiveCore.xhrGet = function (url) { calls.push(url); return new Promise(function () {}); };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-wallhaven.js'), 'utf8'), c, { filename: 'live-source-wallhaven.js' });
+    const W = c.window.LiveSources.wallhaven;
+    W.fetchWallhavenPage();
+    W.fetchWallhavenPage();
+    W.fetchWallhavenPage();
+    assert.equal(calls.length, 1, 'one request for three callers');
+});
+
+test('Wallhaven: after a failed detail request, detail requests pause', async function () {
+    const c = createLauncherSandbox();
+    const calls = [];
+    c.window.LiveCore.xhrGet = function (url) { calls.push(url); return Promise.reject(new Error('network')); };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-wallhaven.js'), 'utf8'), c, { filename: 'live-source-wallhaven.js' });
+    const W = c.window.LiveSources.wallhaven;
+    assert.equal(await W.fetchWallhavenDetail('a'), null);
+    assert.equal(await W.fetchWallhavenDetail('b'), null);
+    assert.equal(calls.length, 1, 'second detail waits for the pause');
+    assert.ok(c.window.LiveState.wallhavenDetailDownUntil > Date.now());
 });

@@ -101,3 +101,9 @@ test('Navidrome: a single playlist is still a list', async function () {
     const lists = plain(await vm.runInContext(`Subsonic.getPlaylists()`, ctx));
     assert.deepEqual(lists, [{ id: 'p1', name: 'Mix', songCount: 3 }]);
 });
+
+test('Lab: the Navidrome checks are listed for the Lab screen', function () {
+    const ctx = navidromeSandbox();
+    const labels = plain(vm.runInContext(`Subsonic.actions().map(function (a) { return a.label; })`, ctx));
+    assert.deepEqual(labels, ['Navidrome: show server (no password)', 'Navidrome: test connection']);
+});

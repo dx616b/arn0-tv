@@ -241,8 +241,25 @@
         }
     });
 
+    // Lab checks for photos: the addresses that would not load, and clearing them to try again.
+    function photoActions() {
+        return [
+            { label: 'Photos: list addresses that will not load', run: function () {
+                var keys = Object.keys(LiveState.failedFiles);
+                DevLog.log('Photos: ' + keys.length + ' addresses will not load');
+                keys.forEach(function (k) { DevLog.log('  ' + k); });
+            } },
+            { label: 'Photos: forget them and try again', run: function () {
+                var n = Object.keys(LiveState.failedFiles).length;
+                LiveState.failedFiles = {};
+                DevLog.log('Photos: forgot ' + n + ' addresses');
+            } }
+        ];
+    }
+
     window.LiveWallpaper = {
         PROVIDERS: PROVIDERS,
+        actions: photoActions,
         list: list,
         pickList: pickList,
         warmForPicker: warmForPicker,

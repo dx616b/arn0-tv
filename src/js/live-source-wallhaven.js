@@ -215,6 +215,7 @@
         wallhavenCategoryAllowed: wallhavenCategoryAllowed,
         polishWallhaven: polishWallhaven,
         parseWallhavenImage: parseWallhavenImage,
+        fetchWallhavenDetail: fetchWallhavenDetail,
         fetchWallhavenPage: fetchWallhavenPage,
     };
 })();
