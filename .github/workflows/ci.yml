@@ -19,13 +19,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
 
-      - name: Syntax-check JavaScript
-        run: |
-          set -eu
-          find src/js scripts test -type f \( -name '*.js' -o -name '*.mjs' \) \
-            ! -name 'config.local.js' \
-            -print0 | sort -z | xargs -0 -n1 node --check
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Unit tests
         run: npm test

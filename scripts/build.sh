@@ -44,6 +44,9 @@ else
     # Never ship a developer's Immich/Subsonic/devLog overrides in CI or release wgts.
     printf '%s\n' '/* No local overrides. See config.local.example.js. */' \
         > "$STAGE/js/config.local.js"
+    # Lab diagnostics (render/platform probes) are for local TV testing only.
+    rm -f "$STAGE/js/render-probe.js" "$STAGE/js/platform-probe.js"
+    sed -i '/js\/render-probe.js\|js\/platform-probe.js/d' "$STAGE/index.html"
 fi
 
 # index.html always loads config.local.js — stage always has a file.

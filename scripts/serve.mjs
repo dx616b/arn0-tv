@@ -108,7 +108,7 @@ createServer(async (req, res) => {
                 .replace(/&#8211;/g, '–')
                 .replace(/&amp;/g, '&')
                 .replace(/^APOD:\s*/i, '')
-                .replace(/^\d{4} [A-Za-z]+ \d{1,2}\s*[–\-]\s*/, '')
+                .replace(/^\d{4} [A-Za-z]+ \d{1,2}\s*[–-]\s*/, '')
                 .replace(/\s*-\s*NASA Science\s*$/i, '')
                 .trim() || 'NASA APOD';
             res.writeHead(200, {
@@ -241,6 +241,11 @@ createServer(async (req, res) => {
             return;
         }
         await proxyJson(res, target.toString(), { Authorization: auth });
+        return;
+    }
+
+    if (path === '/api/live/radiorecord') {
+        await proxyJson(res, 'https://www.radiorecord.ru/api/stations/');
         return;
     }
 

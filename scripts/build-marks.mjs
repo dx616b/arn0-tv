@@ -16,6 +16,9 @@ for (const brand of sandbox.window.BRANDS) {
         .replace(/<title>.*?<\/title>/, '')
         .replace(/\sfill="[^"]*"/g, '')
         .replace(/<svg\b/, `<svg fill="${brand.fg}"`);
-    await writeFile(resolve(src, 'img/tiles', brand.key + '.svg'), coloured);
+    const out = resolve(src, 'img/tiles', brand.key + '.svg');
+    let prev = null;
+    try { prev = await readFile(out, 'utf8'); } catch { /* first build */ }
+    if (prev !== coloured) await writeFile(out, coloured);
 }
-console.log('Wrote coloured marks to src/img/tiles/');
+console.log('Coloured marks up to date in src/img/tiles/');
