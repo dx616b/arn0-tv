@@ -311,6 +311,7 @@
 
     window.Sound = {
         play: play,
+        defaults: function () { return JSON.parse(JSON.stringify(DEFAULTS)); },
         preview: function () { play('move', true); },
         enabled: enabled,
         presetOptions: presetOptions,
