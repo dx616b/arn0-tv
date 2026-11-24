@@ -509,32 +509,6 @@
         }).catch(function () {});
     }
 
-    function nextWallpaper() {
-        Wallpaper.next(function (w) {
-            if (w) UI.toast(w.title + (w.credit ? ' · ' + w.credit : ''));
-            else UI.toast('Could not change wallpaper');
-        });
-    }
-
-    // Colour keys are hidden shortcuts; everything is also reachable from Settings.
-    function colourKey(k, view) {
-        if (k === KEY.RED || k === KEY.R) {
-            UI.show(view === 'all' ? 'home' : 'all');
-        } else if (k === KEY.GREEN || k === KEY.G) {
-            if (view === 'home') nextWallpaper();
-        } else if (k === KEY.BLUE || k === KEY.B) {
-            UI.show(view === 'lab' ? 'home' : 'lab');
-        } else if (k === KEY.YELLOW || k === KEY.Y) {
-            if (view === 'all') {
-                state.showEverything = !state.showEverything;
-                UI.show('all', { back: true });
-            } else return false;
-        } else {
-            return false;
-        }
-        return true;
-    }
-
     // ---------- Clock, data, lifecycle
 
     function updateClock() {
@@ -711,7 +685,6 @@
     function init() {
         registerKeys();
         registerViews();
-        UI.setColourKey(colourKey);
         UI.setKeyHook(function (k) {
             if (state.tvMode) {
                 if (k === KEY.BACK || k === KEY.ESC || k === KEY.BACKSPACE) exitTvMode();

@@ -41,6 +41,16 @@
         return isLive() ? LiveWallpaper.list() : bundledVisible();
     }
 
+    // Saved photos source: your kept pictures first, then the bundled ones that are not hidden.
+    function savedPool() {
+        var seen = {};
+        return pinsList().concat(bundledVisible()).filter(function (w) {
+            if (!w || !w.key || seen[w.key]) return false;
+            seen[w.key] = true;
+            return true;
+        });
+    }
+
     // First usable Photo key after a remove/hide (temp, pins, then visible shipped).
     function fallbackPhotoKey(exceptKey) {
         var temp = tempMeta();
@@ -305,15 +315,17 @@
 
     // Save up to PIN_MAX favorites with image bytes (IndexedDB), then apply as Photo.
     // Returns a Promise<boolean> — true when bytes were stored locally.
-    function pinLive(entry) {
+    // saveOnly: keep the picture in the saved list without showing it as the Photo.
+    function pinLive(entry, saveOnly) {
         if (!entry || !entry.key || !entry.file) return Promise.resolve(false);
+        var finish = saveOnly ? function (m) { rememberPinMeta(m); Prefs.save(); } : activatePin;
         var existing = pinsMeta().find(function (x) { return x.key === entry.key; });
         var meta = PhotoUtil.entryFields(entry, entry.title || 'Pinned');
         meta.remote = true;
         meta.bytes = existing && existing.bytes > 0 ? existing.bytes : 0;
         if (blobUrls[entry.key] || existing) {
             if (blobUrls[entry.key]) {
-                activatePin(meta);
+                finish(meta);
                 return Promise.resolve(true);
             }
         }
@@ -321,13 +333,13 @@
             return putPinBlob(entry.key, blob).then(function () {
                 setBlobUrl(entry.key, blob);
                 meta.bytes = blob && blob.size ? blob.size : 0;
-                activatePin(meta);
+                finish(meta);
                 return true;
             });
         }, function (e) {
             DevLog.log('Pin save failed: ' + (e && e.message ? e.message : e));
             // Still remember + apply via URL while online.
-            activatePin(meta);
+            finish(meta);
             return false;
         });
     }
@@ -768,6 +780,7 @@
         list: list,
         bundled: bundled,
         bundledVisible: bundledVisible,
+        savedPool: savedPool,
         find: find,
         pinnedEntry: pinnedEntry,
         pinsList: pinsList,

@@ -70,6 +70,7 @@
         { key: 'wallhaven', label: 'Wallhaven', needsKey: false },
         { key: 'unsplash', label: 'Unsplash', needsKey: true },
         { key: 'immich', label: 'Immich album', needsKey: true },
+        { key: 'photos', label: 'Saved photos', needsKey: false },
         { key: 'mix', label: 'Mix', needsKey: false }
     ];
 
@@ -94,7 +95,7 @@
     window.LiveHooks = {};
 
     var CACHE_KEY = 'arn0.liveWallpaper.v11';
-    var SOURCE_NAMES = ['bing', 'nasa', 'wikimedia', 'wallhaven', 'unsplash', 'immich'];
+    var SOURCE_NAMES = ['bing', 'nasa', 'wikimedia', 'wallhaven', 'unsplash', 'immich', 'photos'];
     var PICK_CATALOG_MAX = (typeof tizen !== 'undefined') ? 80 : 120;
     var IMMICH_STORE = 'arn0.immich.v1';
     var UNSPLASH_KEY_STORE = 'arn0.unsplash.v1';

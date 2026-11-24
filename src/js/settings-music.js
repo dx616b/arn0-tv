@@ -66,9 +66,9 @@
         var nextBlock = el('div', 'setting-block');
         nextBlock.appendChild(el('h2', '', 'Next goes through'));
         var navChips = el('div', 'chips');
-        navChips.appendChild(chip('All channels', p.radioNav !== 'favourites' && p.radioNav !== 'list', { kind: 'radioNav', value: 'all' }));
-        navChips.appendChild(chip('Favourites', p.radioNav === 'favourites', { kind: 'radioNav', value: 'favourites' }));
-        navChips.appendChild(chip('Your list', p.radioNav === 'list', { kind: 'radioNav', value: 'list' }));
+        Music.radioNavOptions().forEach(function (o) {
+            navChips.appendChild(chip(o.label, (p.radioNav || 'all') === o.nav, { kind: 'radioNav', value: o.nav }));
+        });
         nextBlock.appendChild(navChips);
         var root = el('div', '');
         root.appendChild(wrap);
@@ -198,7 +198,8 @@
             UI.toast('Music: Random');
         } else if (item.kind === 'radioNav') {
             Music.setRadioNav(item.value);
-            UI.toast(item.value === 'favourites' ? 'Next: favourites' : item.value === 'list' ? 'Next: your list' : 'Next: all channels');
+            var picked = Music.radioNavOptions().filter(function (o) { return o.nav === item.value; })[0];
+            UI.toast('Next: ' + (picked ? picked.label : item.value));
         } else if (item.kind === 'enabled') {
             Music.setEnabled(item.value);
             if (!item.value) Music.pause();

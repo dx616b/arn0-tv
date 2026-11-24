@@ -96,7 +96,7 @@
             DevLog.log('Live wallpaper: plan ' + k + (warm ? ' (warm)' : ''));
             return withTimeout(fetchOne(k, reuse), ms).then(function (entry) {
                 if (!entry || LiveHistory.isFailed(entry)) return attempt();
-                if (isDuplicate(entry)) {
+                if (k !== 'photos' && isDuplicate(entry)) {
                     entry.source = k;
                     sourceQueue(k).buf.push(entry);
                     rememberPick(entry, k);
@@ -111,6 +111,8 @@
                 return entry;
             }, function (e) {
                 DevLog.log('Live wallpaper: skip ' + k + ': ' + (e && e.message ? e.message : e));
+                // Saved photos are a fixed list: when nothing is left to plan, stop at once.
+                if (k === 'photos') return Promise.reject(e);
                 return attempt();
             });
         }

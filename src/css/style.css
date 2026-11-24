@@ -887,6 +887,16 @@ h1, h2 {
     margin-bottom: 0;
 }
 
+#bg-live-provider {
+    flex-wrap: nowrap;
+}
+
+#bg-live-provider .chip {
+    padding: 12px 18px;
+    margin-right: 10px;
+    font-size: 20px;
+}
+
 .chip {
     padding: 16px 32px;
     margin-right: 16px;
@@ -1492,6 +1502,30 @@ html.preview, html.preview body {
 }
 
 
+.ss-menu {
+    display: none;
+    position: absolute;
+    top: 160px;
+    right: 36px;
+    min-width: 360px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(10, 12, 18, 0.25);
+    z-index: 50;
+}
+
+.ss-menu-row {
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 26px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.ss-menu-row.is-focus {
+    background: rgba(255, 255, 255, 0.18);
+}
+
 .ss-scrim {
     position: absolute;
     left: 0;
@@ -1504,9 +1538,9 @@ html.preview, html.preview body {
 .ss-caption {
     position: absolute;
     left: var(--edge);
-    bottom: 72px;
-    width: 640px;
-    max-width: 34vw;
+    bottom: 96px;
+    width: 42vw;
+    max-width: 42vw;
     transition: transform 1200ms ease-out, opacity 900ms linear;
 }
 
@@ -1524,22 +1558,27 @@ html.preview, html.preview body {
 #screensaver.chrome-off .ss-music,
 #screensaver.chrome-off .ss-clock,
 #screensaver.chrome-off .ss-legend,
+#screensaver.chrome-off .ss-shortcuts,
+#screensaver.chrome-off .ss-weather-top,
 #screensaver.chrome-off .ss-provider {
     opacity: 0;
     pointer-events: none;
 }
 
 .ss-title {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 600;
-    letter-spacing: 0.12em;
-    color: rgba(220, 224, 232, 0.75);
+    line-height: 1.2;
+    text-align: left;
+    color: rgba(243, 244, 246, 0.92);
 }
 
 .ss-sub {
-    margin-top: 8px;
-    font-size: 22px;
+    margin-top: 6px;
+    font-size: 28px;
     font-weight: 500;
+    line-height: 1.2;
+    text-align: left;
     color: rgba(220, 224, 232, 0.6);
 }
 
@@ -1568,7 +1607,7 @@ html.preview, html.preview body {
 .ss-music {
     position: absolute;
     left: var(--edge);
-    bottom: 190px;
+    top: 28px;
     width: 640px;
     max-width: 34vw;
     transition: transform 1200ms ease-out, opacity 900ms linear;
@@ -1589,11 +1628,52 @@ html.preview, html.preview body {
     box-sizing: border-box;
     font-size: 18px;
     font-weight: 500;
-    color: rgba(220, 224, 232, 0.55);
+    color: rgba(220, 224, 232, 0.75);
     pointer-events: none;
 }
 
 .ss-legend.hidden { display: none; }
+
+.ss-shortcuts {
+    position: absolute;
+    top: 28px;
+    right: var(--edge);
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 8px 14px;
+    font-size: 18px;
+    transition: opacity 900ms linear;
+}
+
+.ss-weather-top {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(243, 244, 246, 0.98);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+    white-space: nowrap;
+    transition: opacity 900ms linear;
+}
+
+.ss-weather-top.hidden { display: none; }
+
+.ss-weather-top .ss-wx-top-icon svg {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+}
+
+.ss-shortcut-label {
+    text-align: left;
+    white-space: nowrap;
+}
 
 .ss-legend-item {
     display: flex;
@@ -1666,15 +1746,10 @@ html.preview, html.preview body {
 }
 
 .ss-clock-main {
-    text-align: right;
+    text-align: center;
 }
 
 /* Only drawn when there is a reading to divide it from. */
-.ss-clock.with-weather .ss-clock-main {
-    border-left: 1px solid rgba(220, 224, 232, 0.22);
-    padding-left: 36px;
-}
-
 .ss-time {
     font-size: 72px;
     font-weight: 300;

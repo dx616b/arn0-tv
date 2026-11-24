@@ -57,6 +57,8 @@
 
     var audio = null;
     var queue = [];
+    var songHistory = [];
+    var HISTORY_SAVE_MAX = 50;
     var current = null;
     var fetching = false;
     var lastError = '';
@@ -224,6 +226,8 @@
 
     function clearQueue() {
         queue = [];
+        songHistory = [];
+        prefs().songHistory = [];
         playlistCache = { id: null, songs: [], cursor: 0 };
     }
 
@@ -583,7 +587,8 @@
     }
 
     function setRadioNav(mode) {
-        prefs().radioNav = mode === 'favourites' || mode === 'list' ? mode : 'all';
+        var modes = ['favourites', 'list', 'radio', 'somafm'];
+        prefs().radioNav = modes.indexOf(mode) >= 0 ? mode : 'all';
         Prefs.save();
         notify();
     }
@@ -742,6 +747,12 @@
     }
 
     function playSong(song, announce) {
+        if (current && current !== song) {
+            songHistory.push(current);
+            if (songHistory.length > HISTORY_SAVE_MAX) songHistory.shift();
+            prefs().songHistory = songHistory.slice();
+            Prefs.save();
+        }
         current = song;
         var a = ensureAudio();
         a.preload = 'auto';
@@ -790,6 +801,24 @@
             return;
         }
         playSong(queue.shift(), !auto);
+    }
+
+    // Navidrome: back to the track played before this one; the current one goes back in the queue.
+    function prevSong() {
+        var p = prefs();
+        if (!songHistory.length) {
+            UI.toast('No earlier track');
+            return;
+        }
+        var song = songHistory.pop();
+        prefs().songHistory = songHistory.slice();
+        var cur = current;
+        current = null;
+        if (cur) queue.unshift(cur);
+        p.enabled = true;
+        p.playing = true;
+        Prefs.save();
+        playSong(song, true);
     }
 
     function play() {
@@ -1019,14 +1048,19 @@
     }
 
     function init() {
+        songHistory = Array.isArray(prefs().songHistory) ? prefs().songHistory.slice(-HISTORY_SAVE_MAX) : [];
         document.addEventListener('visibilitychange', onVisibility);
         migrateCustomUrl();
         if (window.SomaFM) SomaFM.refresh();
         applyVolume();
-        // Do not auto-start: needs a remote gesture (Play on the dock or in Settings).
+        // Resume the station that was playing when the app closed. If the TV refuses audio until a
+        // key is pressed, playback stops and shows Play (see the play() error handler).
         if (prefs().playing && prefs().enabled) {
-            prefs().playing = false;
-            Prefs.save();
+            setTimeout(function () {
+                if (!(prefs().playing && prefs().enabled)) return;
+                if (prefs().source === 'radio') playStation(findStation(prefs().radioId), false);
+                else next(true);
+            }, 1500);
         }
         var playBtn = document.getElementById('music-btn-play');
         var nextBtn = document.getElementById('music-btn-next');
@@ -1034,6 +1068,136 @@
         if (nextBtn) nextBtn._item = { kind: 'music', action: 'next' };
         listeners.push(renderBar);
         renderBar();
+    }
+
+    // Quick menu and remote: previous radio station, favourite the current one, next provider.
+    function prev() {
+        if (!ready()) return;
+        if (!isRadio()) {
+            prevSong();
+            return;
+        }
+        var list = navItems();
+        if (!list.length) return;
+        var i = RadioPlan.indexOf(list, prefs().radioId);
+        playNavItem(list[(i - 1 + list.length) % list.length]);
+    }
+
+    // Plays one entry of the radio list (a station, or a SomaFM channel that needs its streams).
+    function playNavItem(item) {
+        if (item.station) {
+            var p = prefs();
+            p.radioId = item.station.id;
+            p.enabled = true;
+            p.playing = true;
+            Prefs.save();
+            radioMirror = 0;
+            resetProgressClock();
+            playStation(item.station, true);
+            return;
+        }
+        var token = ++navSeq;
+        if (!window.SomaFM) return;
+        SomaFM.resolve(item.soma).then(function (urls) {
+            if (token !== navSeq) return;
+            if (!urls.length) {
+                UI.toast('Not possible to play ' + item.soma.title);
+                return;
+            }
+            setSomaChannel({ id: item.soma.id, title: item.soma.title, genres: item.soma.genres }, urls, true);
+        });
+    }
+
+    // The current station as a favourite entry, or null when it cannot be saved.
+    function currentFavouriteEntry() {
+        if (!isRadio()) return null;
+        var p = prefs();
+        if (String(p.radioId || '').indexOf('somafm:') === 0) {
+            var sel = p.somaSelected;
+            if (!sel || !sel.urls || !sel.urls.length) return null;
+            return { type: 'soma', id: sel.id, title: sel.title, genre: sel.genre || '', urls: sel.urls.slice() };
+        }
+        var st = findStation(p.radioId);
+        if (!st || !st.id) return null;
+        var type = st.custom ? 'custom' : 'station';
+        return { type: type, id: st.id, title: st.title, genre: st.genre || (st.custom ? 'Your list' : '') };
+    }
+
+    function favouriteIndex(list, entry) {
+        return list.findIndex(function (x) { return x.type === entry.type && x.id === entry.id; });
+    }
+
+    function isCurrentFavourite() {
+        var entry = currentFavouriteEntry();
+        if (!entry) return false;
+        return favouriteIndex(Array.isArray(prefs().favourites) ? prefs().favourites : [], entry) >= 0;
+    }
+
+    // Toggles the current station in favourites. Returns true when added, false when removed,
+    // null when there is no station to save.
+    function favouriteCurrent() {
+        var entry = currentFavouriteEntry();
+        if (!entry) return null;
+        var p = prefs();
+        var list = Array.isArray(p.favourites) ? p.favourites : [];
+        var i = favouriteIndex(list, entry);
+        if (i >= 0) list.splice(i, 1);
+        else list.push(entry);
+        p.favourites = list;
+        Prefs.save();
+        return i < 0;
+    }
+
+    function providerOf(id) {
+        id = String(id || '');
+        if (id.indexOf('somafm:') === 0) return 'somafm';
+        if (id.indexOf('custom:') === 0) return 'custom';
+        return 'radio';
+    }
+
+    var RADIO_PROVIDER_LABEL = { radio: 'Radio Record', somafm: 'SomaFM', custom: 'Your list', favourites: 'Favourites' };
+
+    // Radio entries for the Settings-style lists: Radio Record, SomaFM, Your list, Favourites.
+    // Only entries that have something to play are listed.
+    function radioProviderList() {
+        var out = [];
+        var radio = radioStations().filter(function (st) { return providerOf(st.id) === 'radio'; })[0];
+        if (radio) out.push({ key: 'radio', label: RADIO_PROVIDER_LABEL.radio });
+        if (window.SomaFM && SomaFM.current().length) out.push({ key: 'somafm', label: RADIO_PROVIDER_LABEL.somafm });
+        if (customStations().length) out.push({ key: 'custom', label: RADIO_PROVIDER_LABEL.custom });
+        if (favouriteEntries().length) out.push({ key: 'favourites', label: RADIO_PROVIDER_LABEL.favourites });
+        return out;
+    }
+
+    // Saved favourites (stations, your streams and SomaFM channels), in the order they were saved.
+    function favouriteEntries() {
+        var list = Array.isArray(prefs().favourites) ? prefs().favourites : [];
+        return list.filter(function (f) { return f && (f.type === 'station' || f.type === 'custom' || f.type === 'soma'); });
+    }
+
+    // The radio list choices, shared by Settings and the screen saver menu: All channels, then each
+    // provider that has something to play. Each one has the nav mode the radio plan uses.
+    function navForProvider(key) {
+        return key === 'custom' ? 'list' : key;
+    }
+
+    function radioNavOptions() {
+        return [{ nav: 'all', label: 'All channels' }].concat(radioProviderList().map(function (x) {
+            return { nav: navForProvider(x.key), label: x.label };
+        }));
+    }
+
+    function currentRadioNav() {
+        return prefs().radioNav || 'all';
+    }
+
+    // Sets the list Next and Previous use, and starts its first entry.
+    function selectRadioNav(nav) {
+        setRadioNav(nav);
+        var list = navItems();
+        if (!list.length) return false;
+        playNavItem(list[0]);
+        return true;
     }
 
     window.Music = {
@@ -1047,6 +1211,14 @@
         toggle: toggle,
         stop: stop,
         next: function () { next(false, true); },
+        prev: prev,
+        favouriteCurrent: favouriteCurrent,
+        isCurrentFavourite: isCurrentFavourite,
+        radioProviderList: radioProviderList,
+        radioNavOptions: radioNavOptions,
+        currentRadioNav: currentRadioNav,
+        selectRadioNav: selectRadioNav,
+        isRadio: isRadio,
         setEnabled: setEnabled,
         setVolume: setVolume,
         setSource: setSource,

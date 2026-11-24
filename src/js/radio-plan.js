@@ -9,7 +9,7 @@
     var SKIP_MIRRORS = 2;
 
     // The list Next steps through, from plain inputs:
-    //   mode       'all' | 'favourites' | 'list'
+    //   mode       'all' | 'radio' | 'somafm' | 'favourites' | 'list'
     //   stations   radio stations ({ id, ... })
     //   customs    Your list stations ({ id: 'custom:…', ... })
     //   somaGroups SomaFM groups ({ genre, channels: [{ id, genres, pls, ... }] })
@@ -33,6 +33,16 @@
                 } else if (f.type === 'soma' && f.pls) {
                     items.push({ key: 'somafm:' + f.id, soma: { id: f.id, title: f.title, genres: [f.genre], pls: f.pls } });
                 }
+            });
+            return items;
+        }
+        if (input.mode === 'radio') {
+            stations.forEach(function (st) { items.push({ key: st.id, station: st }); });
+            return items;
+        }
+        if (input.mode === 'somafm') {
+            (input.somaGroups || []).forEach(function (g) {
+                g.channels.forEach(function (c) { items.push({ key: 'somafm:' + c.id, soma: c }); });
             });
             return items;
         }

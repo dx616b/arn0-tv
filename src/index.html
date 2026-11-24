@@ -113,6 +113,11 @@
                     <div id="bg-live-provider" class="chips wrap"></div>
                     <p id="bg-live-provider-note" class="setting-note muted"></p>
                 </div>
+                <div id="bg-photos-rotate-block" class="setting-block hidden">
+                    <h2>Saved photos: rotate</h2>
+                    <div id="bg-photos-rotate" class="chips"></div>
+                    <p class="setting-note muted">On: the timer moves through the photos. Off: Left and Right move them.</p>
+                </div>
                 <div id="bg-live-unsplash-block" class="setting-block hidden">
                     <h2>Unsplash</h2>
                     <div id="bg-live-unsplash-key" class="chips"></div>
@@ -136,7 +141,6 @@
                 <div id="bg-live-pool-block" class="setting-block hidden">
                     <h2>Queue size</h2>
                     <div id="bg-live-pool" class="chips"></div>
-                    <p class="setting-note muted">Photos buffered ahead per source. Bing keeps older days locally past its live archive.</p>
                 </div>
                 <div id="bg-live-status-block" class="setting-block hidden">
                     <p id="bg-live-status" class="setting-note"></p>
@@ -231,19 +235,14 @@
                 <div id="ss-music-artist" class="ss-music-artist marquee"></div>
             </div>
             <div id="ss-clock" class="ss-clock">
-                <div id="ss-weather" class="ss-weather hidden">
-                    <div class="ss-wx-now">
-                        <span id="ss-wx-icon" class="ss-wx-icon"></span>
-                        <span id="ss-wx-temp" class="ss-wx-temp"></span>
-                    </div>
-                    <div id="ss-wx-detail" class="ss-wx-detail"></div>
-                </div>
                 <div class="ss-clock-main">
                     <div id="ss-time" class="ss-time"></div>
                     <div id="ss-date" class="ss-date"></div>
                 </div>
             </div>
             <div id="ss-legend" class="ss-legend" aria-hidden="true"></div>
+            <div id="ss-shortcuts" class="ss-shortcuts" aria-hidden="true"></div>
+            <div id="ss-weather-top" class="ss-weather-top hidden" aria-hidden="true"></div>
             <div id="ss-provider" class="ss-provider" aria-hidden="true"></div>
             <div id="ss-dark" class="ss-dark"></div>
         </section>

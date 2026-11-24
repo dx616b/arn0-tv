@@ -97,12 +97,12 @@
         var p = Prefs.get().wallpaper;
         var live = p.mode === 'live';
         var browseLive = live || bgState.keepLivePicker;
-        var cycle = p.mode === 'rotate' || live;
+        var cycle = live;
         bgState.softSig = bgLiveSoftSig(p);
 
         var modes = $('bg-mode');
         modes.innerHTML = '';
-        [['off', 'Off'], ['photo', 'Photo'], ['rotate', 'Rotate'], ['live', 'Live']].forEach(function (m) {
+        [['off', 'Off'], ['photo', 'Photo'], ['live', 'Live']].forEach(function (m) {
             modes.appendChild(chip(m[1], p.mode === m[0], { kind: 'mode', key: m[0] }));
         });
 
@@ -128,6 +128,19 @@
                 mixChips.innerHTML = '';
                 [[false, 'Off'], [true, 'On']].forEach(function (o) {
                     mixChips.appendChild(chip(o[1], mixOn === o[0], { kind: 'mixMode', value: o[0] }));
+                });
+            }
+        }
+
+        var rotateBlock = $('bg-photos-rotate-block');
+        if (rotateBlock) {
+            rotateBlock.classList.toggle('hidden', !(browseLive && prov === 'photos'));
+            var rotateChips = $('bg-photos-rotate');
+            if (rotateChips) {
+                rotateChips.innerHTML = '';
+                var rotateOn = p.rotateOn !== false;
+                [[true, 'On'], [false, 'Off']].forEach(function (o) {
+                    rotateChips.appendChild(chip(o[1], rotateOn === o[0], { kind: 'photosRotate', value: o[0] }));
                 });
             }
         }
@@ -234,6 +247,16 @@
             poolBlock.classList.toggle('hidden', !browseLive);
             var poolChips = $('bg-live-pool');
             poolChips.innerHTML = '';
+            var poolTitle = poolBlock.querySelector('h2');
+            if (browseLive && prov === 'photos') {
+                // Saved photos are all on the device: show the count only, nothing to choose.
+                var count = (window.Wallpaper && Wallpaper.savedPool) ? Wallpaper.savedPool().length : 0;
+                var shown = document.createElement('span');
+                shown.className = 'chip disabled';
+                shown.textContent = count + ' photos';
+                poolChips.appendChild(shown);
+                if (poolTitle) poolTitle.textContent = 'Saved photos';
+            } else {
             var pools = (window.LiveWallpaper && LiveWallpaper.LIVE_POOLS) || {
                 small: { label: '8' },
                 normal: { label: '20' },
@@ -255,8 +278,8 @@
                 if (locked) c.classList.add('disabled');
                 poolChips.appendChild(c);
             });
-            var poolTitle = poolBlock.querySelector('h2');
             if (poolTitle) poolTitle.textContent = 'Queue size';
+            }
         }
 
         renderLiveStatus(p, live, browseLive);
@@ -291,9 +314,8 @@
 
         if (showLiveThumbs) {
             if (photosTitle) {
-                photosTitle.textContent = pinSum
-                    ? 'Save (' + pinSum + ')'
-                    : 'Save (up to ' + pinMax + ')';
+                photosTitle.textContent = prov === 'photos' ? 'Saved photos'
+                    : (pinSum ? 'Save (' + pinSum + ')' : 'Save (up to ' + pinMax + ')');
             }
             if (storageEl) {
                 var liveNote = (pinCount
@@ -306,7 +328,10 @@
                 storageEl.textContent = liveNote;
                 storageEl.classList.remove('hidden');
             }
-            var pool = (window.LiveWallpaper && LiveWallpaper.pickList)
+            if (prov === 'photos' && storageEl) storageEl.classList.add('hidden');
+            var pool = (prov === 'photos' && window.Wallpaper && Wallpaper.savedPool)
+                ? Wallpaper.savedPool()
+                : (window.LiveWallpaper && LiveWallpaper.pickList)
                 ? LiveWallpaper.pickList()
                 : ((window.LiveWallpaper && LiveWallpaper.list()) || []);
             var usingKey = (!live && p.photo) ? p.photo : '';
@@ -320,16 +345,16 @@
                 pool.forEach(function (w) {
                     if (bgState.photosKeys[w.key]) return;
                     bgState.photosKeys[w.key] = true;
-                    addThumb(w, 'pinLive', !!(usingKey && w.key === usingKey));
+                    addThumb(w, prov === 'photos' ? 'readonly' : 'pinLive', !!(usingKey && w.key === usingKey));
                 });
                 // Thumbs load lazily via <img loading=lazy>; rememberPick already warms a few.
             }
             var moreBlock = $('bg-photos-more');
             if (moreBlock) {
-                // Always offer Load more while browsing Live (even before the first batch).
-                moreBlock.classList.remove('hidden');
+                // Always offer Load more while browsing Live (even before the first batch); not for Saved photos.
+                moreBlock.classList.toggle('hidden', prov === 'photos');
                 moreBlock.innerHTML = '';
-                moreBlock.appendChild(chip('Load more', false, { kind: 'pickMore' }));
+                if (prov !== 'photos') moreBlock.appendChild(chip('Load more', false, { kind: 'pickMore' }));
             }
         } else if (showPhotoThumbs) {
             if (photosTitle) photosTitle.textContent = 'Photo';
@@ -455,6 +480,9 @@
         } else if (item.kind === 'interval') {
             p.interval = item.key;
             p.lastChange = Date.now();
+        } else if (item.kind === 'photosRotate') {
+            p.rotateOn = !!item.value;
+            p.lastChange = Date.now();
         } else if (item.kind === 'random') {
             p.random = !!item.value;
             // Rebuild plan; Shuffle On reshuffles Mix provider order.
@@ -577,6 +605,8 @@
             }, function () {
                 UI.toast('Could not load more');
             });
+            return;
+        } else if (item.kind === 'readonly') {
             return;
         } else if (item.kind === 'pinLive') {
             livePhotoMenu(item.entry ||
