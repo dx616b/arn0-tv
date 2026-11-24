@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 ### Home
 - The screensaver shows the next photo when one will not load, instead of a black screen (after five failures in a row it stops)
