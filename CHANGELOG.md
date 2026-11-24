@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+### Live wallpaper
+- Wallhaven: changing category no longer shows photos from the previous category
+
 ## 0.7.0
 
 ### Music
