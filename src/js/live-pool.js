@@ -84,7 +84,9 @@
         return LiveState.stream.plan.some(function (w) { return w.file === entry.file; });
     }
 
+    // A photo that failed to load is never queued again (reported as present).
     function queueHas(q, entry) {
+        if (LiveHistory.isFailed(entry)) return true;
         return q.buf.some(function (w) {
             return w.key === entry.key || (entry.file && w.file === entry.file);
         });

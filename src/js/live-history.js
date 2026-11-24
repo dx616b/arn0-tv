@@ -96,7 +96,34 @@
         return entry;
     }
 
+    // A photo whose address will not load: forget it everywhere, so no provider queues it again.
+    function markFailed(entry) {
+        if (!entry || !entry.file) return;
+        var f = entry.file;
+        if (LiveState.failedFiles[f]) return;
+        LiveState.failedFiles[f] = true;
+        Object.keys(LiveState.pickCatalog).forEach(function (k) {
+            if (LiveState.pickCatalog[k] && LiveState.pickCatalog[k].file === f) delete LiveState.pickCatalog[k];
+        });
+        LiveState.items = LiveState.items.filter(function (w) { return w.file !== f; });
+        if (LiveState.stream) {
+            LiveState.stream.plan = LiveState.stream.plan.filter(function (w) { return w.file !== f; });
+            Object.keys(LiveState.stream.queues || {}).forEach(function (name) {
+                var q = LiveState.stream.queues[name];
+                q.buf = q.buf.filter(function (w) { return w.file !== f; });
+            });
+        }
+        DevLog.log('Live wallpaper: will not load, skipping from now on: ' + f);
+    }
+
+    function isFailed(entry) {
+        return !!(entry && entry.file && LiveState.failedFiles[entry.file]);
+    }
+
+    // Drop Mix orphans / mis-tagged cache rows (e.g. Bing URL saved as Immich).
     window.LiveHistory = {
+        markFailed: markFailed,
+        isFailed: isFailed,
         markSeen: markSeen,
         forgetSeenEntries: forgetSeenEntries,
         remember: remember,

@@ -95,7 +95,7 @@
                 : (warm ? SOURCE_MS_WARM : SOURCE_MS);
             DevLog.log('Live wallpaper: plan ' + k + (warm ? ' (warm)' : ''));
             return withTimeout(fetchOne(k, reuse), ms).then(function (entry) {
-                if (!entry) return attempt();
+                if (!entry || LiveHistory.isFailed(entry)) return attempt();
                 if (isDuplicate(entry)) {
                     entry.source = k;
                     sourceQueue(k).buf.push(entry);
@@ -190,6 +190,7 @@
         // Solo focus: only that source (never blank-tagged Mix leftovers).
         while (LiveState.stream.plan.length) {
             var ready = LiveState.stream.plan.shift();
+            if (LiveHistory.isFailed(ready)) continue;
             if (want === 'mix' || (ready && ready.source === want)) {
                 // Slot freed — unique pool may have room again.
                 LiveState.planUniqueExhausted = false;

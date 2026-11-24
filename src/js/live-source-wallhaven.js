@@ -125,12 +125,14 @@
         return entry;
     }
 
+    // After one failed detail request, stop asking for ten minutes; the photo still shows without its caption.
     function fetchWallhavenDetail(id) {
-        if (!id) return Promise.resolve(null);
+        if (!id || LiveState.wallhavenDetailDownUntil > Date.now()) return Promise.resolve(null);
         return xhrGet(wallhavenApi('/w/' + encodeURIComponent(id))).then(function (res) {
             return (res && res.data) || null;
         }, function (e) {
-            DevLog.log('Live wallpaper: Wallhaven detail failed: ' +
+            LiveState.wallhavenDetailDownUntil = Date.now() + 10 * 60 * 1000;
+            DevLog.log('Live wallpaper: Wallhaven detail failed (paused 10 min): ' +
                 (e && e.message ? e.message : e));
             return null;
         });
@@ -167,7 +169,21 @@
         }, function () { return entry; });
     }
 
+    // Several fills can ask for the same page at once; they share one request.
     function fetchWallhavenPage() {
+        if (LiveState.wallhavenInflight) return LiveState.wallhavenInflight;
+        var p = fetchWallhavenPageNow().then(function (r) {
+            LiveState.wallhavenInflight = null;
+            return r;
+        }, function (e) {
+            LiveState.wallhavenInflight = null;
+            throw e;
+        });
+        LiveState.wallhavenInflight = p;
+        return p;
+    }
+
+    function fetchWallhavenPageNow() {
         var page = LiveState.stream.wallhavenPage || 1;
         var seed = LiveState.stream.wallhavenSeed || '';
         var path = wallhavenSearchPath(page, seed);

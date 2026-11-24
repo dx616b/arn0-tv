@@ -48,7 +48,7 @@
     function takeFromQueue(name, allowReuse) {
         var q = sourceQueue(name);
         // Drop mis-tagged leftovers before serving (legacy cache / Mix bleed).
-        q.buf = q.buf.filter(function (w) { return entryMatchesSource(w, name); });
+        q.buf = q.buf.filter(function (w) { return entryMatchesSource(w, name) && !LiveHistory.isFailed(w); });
         if (!q.buf.length) reseedQueueFromCatalog(name);
         if (!q.buf.length) return null;
         var i;

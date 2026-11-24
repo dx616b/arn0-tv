@@ -35,5 +35,10 @@
         pickCatalog: {},
         pickTarget: {},
         thumbWarm: {},
+        // Full-size addresses that would not load on the TV, for the rest of the session. Shared by
+        // every provider: such a photo is never queued, planned or shown again.
+        failedFiles: {},
+        wallhavenInflight: null,
+        wallhavenDetailDownUntil: 0,
     };
 })();

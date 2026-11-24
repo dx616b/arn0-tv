@@ -63,3 +63,31 @@ test('Screensaver and Home try the full picture, then its fallbacks, and never t
     assert.deepEqual(urls, ['full.jpg', 'fallback.jpg', 'second.jpg']);
     assert.ok(!urls.includes('preview.jpg'));
 });
+
+test('a photo that will not load is removed from the catalogue, plan and queues, for every provider', function () {
+    const c = createLauncherSandbox();
+    const H = c.window.LiveHistory;
+    const S = c.window.LiveState;
+    const bad = { key: 'wallhaven:bad', file: 'https://w.wallhaven.cc/full/b/bad.png', source: 'wallhaven' };
+    const good = { key: 'bing:ok', file: 'https://www.bing.com/th?id=OK_1920x1080.jpg', source: 'bing' };
+    S.pickCatalog[bad.key] = bad;
+    S.pickCatalog[good.key] = good;
+    S.stream = { plan: [bad, good], queues: { wallhaven: { buf: [bad] }, bing: { buf: [good] } } };
+    H.markFailed(bad);
+    assert.equal(H.isFailed(bad), true);
+    assert.equal(H.isFailed(good), false);
+    assert.equal(S.pickCatalog[bad.key], undefined);
+    assert.deepEqual(plain(S.stream.plan.map(function (w) { return w.key; })), ['bing:ok']);
+    assert.deepEqual(plain(S.stream.queues.wallhaven.buf), []);
+    assert.deepEqual(plain(S.stream.queues.bing.buf.map(function (w) { return w.key; })), ['bing:ok']);
+});
+
+test('a failed photo is reported as already queued, so no provider adds it back', function () {
+    const c = createLauncherSandbox();
+    const H = c.window.LiveHistory;
+    const bad = { key: 'nasa:x', file: 'https://apod.example/x.jpg', source: 'nasa' };
+    H.markFailed(bad);
+    const queue = { buf: [] };
+    assert.equal(c.window.LivePool.queueHas(queue, { key: 'nasa:y', file: bad.file }), true);
+    assert.equal(c.window.LivePool.queueHas(queue, { key: 'nasa:z', file: 'https://apod.example/z.jpg' }), false);
+});

@@ -468,6 +468,7 @@
                 return;
             }
             DevLog.log('Screen saver photo failed: ' + urls.join(' | '));
+            if (window.LiveHistory) LiveHistory.markFailed(w);
             // Show the next photo rather than a black screen (give up after a run of failures).
             failStreak++;
             if (failStreak <= 5) advancePhoto(true);

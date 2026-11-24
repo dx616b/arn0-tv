@@ -572,6 +572,7 @@
         function tryUrl() {
             if (i >= urls.length) {
                 DevLog.log('Wallpaper failed to load: ' + w.file);
+                LiveHistory.markFailed(w);
                 if (t === token && w.remote) setScrim(false);
                 return;
             }
