@@ -73,10 +73,15 @@
                 playing: false,
                 volume: musicSeed.volume || 'med',          // Music.VOLUMES key: low | med | high
                 source: musicSeed.source || 'random',       // 'radio' | 'random' | 'playlist'
-                radioId: musicSeed.radioId || 'beatblender', // Music.STATIONS id or 'custom'
+                radioId: musicSeed.radioId || 'rrdeep', // Music.STATIONS id, 'custom:<id>' (Your list) or 'somafm:<id>'
                 radioCustomUrl: musicSeed.radioCustomUrl || '',
                 // Last ice host that played (e.g. https://ice2.somafm.com/) — tried first next time.
                 radioGoodHost: musicSeed.radioGoodHost || '',
+                // Chosen SomaFM channel { id, title, genre, urls } and saved favourites (see settings-music-pickers).
+                somaSelected: null,
+                customList: [],    // Your list: [{ id, title, url }]
+                radioNav: 'all',   // Next steps through: 'all' channels | 'favourites'
+                favourites: [],
                 playlistId: musicSeed.playlistId || null,
                 playlistName: musicSeed.playlistName || null
             },
@@ -160,9 +165,9 @@
         // One legacy `pinned` object → pins[] (bytes are re-fetched on next pin if missing).
         if (!Array.isArray(prefs.wallpaper.pins)) prefs.wallpaper.pins = [];
         if (prefs.wallpaper.pinned && prefs.wallpaper.pinned.key) {
-            var legacy = prefs.wallpaper.pinned;
-            if (!prefs.wallpaper.pins.some(function (x) { return x.key === legacy.key; })) {
-                prefs.wallpaper.pins.unshift(legacy);
+            var oldPin = prefs.wallpaper.pinned;
+            if (!prefs.wallpaper.pins.some(function (x) { return x.key === oldPin.key; })) {
+                prefs.wallpaper.pins.unshift(oldPin);
             }
             prefs.wallpaper.pinned = null;
         }

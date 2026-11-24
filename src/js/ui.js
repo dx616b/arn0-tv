@@ -320,11 +320,16 @@
     }
 
     // options: [{ label, run, checked }]
-    function menu(title, options) {
+    // opts.onBack: what Back does from this menu, when it should return to a menu that was closed
+    // to open this one (instead of the screen underneath).
+    var menuBack = null;
+
+    function menu(title, options, opts) {
+        menuBack = (opts && opts.onBack) || null;
         menuOpts = options || [];
         menuFocus = 0;
         for (var i = 0; i < menuOpts.length; i++) {
-            if (menuOpts[i].checked) {
+            if (menuOpts[i].checked || menuOpts[i].current) {
                 menuFocus = i;
                 break;
             }
@@ -334,6 +339,14 @@
         $('menu-title').textContent = title;
         renderMenuList();
         show('menu');
+        if (menuOpts[menuFocus] && menuOpts[menuFocus].focus) menuOpts[menuFocus].focus();
+    }
+
+    // Redraw the open menu after its rows changed (labels, hints); keeps the focused row.
+    function refreshMenu() {
+        renderMenuList();
+        renderHints(views.menu);
+        refresh();
     }
 
     function menuMove(delta) {
@@ -347,7 +360,9 @@
         if (menuFocus < menuStart) menuStart = menuFocus;
         if (menuFocus >= menuStart + MENU_PAGE) menuStart = menuFocus - MENU_PAGE + 1;
         renderMenuList();
+        renderHints(views.menu);
         refresh();
+        if (menuOpts[menuFocus] && menuOpts[menuFocus].focus) menuOpts[menuFocus].focus();
         if (window.Sound) Sound.play('move');
         return true;
     }
@@ -356,19 +371,37 @@
         register('menu', {
             el: $('menu'),
             overlay: true,
+            onBack: function () {
+                if (!menuBack) return false;
+                var back = menuBack;
+                menuBack = null;
+                show(views.menu.from, { back: true });
+                back();
+                return true;
+            },
             hints: function () {
-                if (menuOpts.length > MENU_PAGE) {
-                    return [['▲ ▼', 'Scroll'], ['OK', 'Select'], ['Back', 'Close']];
-                }
-                return [['OK', 'Select'], ['Back', 'Close']];
+                var cur = menuOpts[menuFocus] || {};
+                var keys = menuOpts.length > MENU_PAGE ? [['▲ ▼', 'Scroll']] : [];
+                keys.push(cur.keep ? ['OK', 'Play / pause'] : ['OK', 'Select']);
+                if (cur.alt) keys.push(['Right', cur.altLabel || 'More']);
+                if (cur.alt2) keys.push(['Left', cur.alt2Label || 'More']);
+                keys.push(['Back', 'Close']);
+                return keys;
             },
             rows: function () { return children($('menu-list')).map(function (li) { return [li]; }); },
             onKey: function (k) {
                 if (k === KEY.UP) return menuMove(-1);
                 if (k === KEY.DOWN) return menuMove(1);
+                var cur = menuOpts[menuFocus];
+                if (cur && cur.alt && k === KEY.RIGHT) { cur.alt(); return true; }
+                if (cur && cur.alt2 && k === KEY.LEFT) { cur.alt2(); return true; }
                 return false;
             },
             activate: function (o) {
+                if (o.keep) {
+                    if (o.run) o.run();
+                    return;
+                }
                 show(views.menu.from, { back: true });
                 if (o.run) o.run();
             }
@@ -400,6 +433,7 @@
         init: init,
         current: function () { return current; },
         isVisible: function (name) { return current === name; },
+        refreshMenu: refreshMenu,
         setKeyHook: function (fn) { keyHook = fn; },
         setColourKey: function (fn) { colourKey = fn; }
     };

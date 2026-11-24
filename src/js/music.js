@@ -14,7 +14,7 @@
         { key: 'high', label: 'High', value: 0.55 }
     ];
 
-    // Curated streams. SomaFM paths try SOMA_HOSTS (+ aac). `urls` = fixed HTTPS list.
+    // Curated streams (Radio Record). SomaFM channels come from the SomaFM feed. `urls` = fixed HTTPS list.
     var SOMA_HOSTS = [
         'https://ice2.somafm.com/',
         'https://ice1.somafm.com/',
@@ -23,10 +23,6 @@
     ];
     var STATIONS = [
         // House / dance first (distinct channels — no near-duplicate chill pairs).
-        { id: 'beatblender', title: 'Beat Blender', genre: 'Deep house', credit: 'SomaFM',
-            path: 'beatblender-128-mp3', alt: ['beatblender-128-aac'] },
-        { id: 'thetrip', title: 'The Trip', genre: 'Prog house', credit: 'SomaFM',
-            path: 'thetrip-128-mp3', alt: ['thetrip-128-aac'] },
         { id: 'rrdeep', title: 'Deep', genre: 'Deep house', credit: 'Radio Record',
             urls: [
                 'https://radiorecord.hostingradio.ru/deep96.aacp',
@@ -42,16 +38,6 @@
                 'https://radiorecord.hostingradio.ru/techno96.aacp',
                 'https://radiorecord.hostingradio.ru/techno64.aacp'
             ] },
-        { id: 'poptron', title: 'PopTron', genre: 'Electropop', credit: 'SomaFM',
-            path: 'poptron-128-mp3', alt: ['poptron-128-aac'] },
-        { id: 'defcon', title: 'DEF CON Radio', genre: 'Electronic', credit: 'SomaFM',
-            path: 'defcon-128-mp3', alt: ['defcon-128-aac'] },
-        { id: 'dubstep', title: 'Dub Step Beyond', genre: 'Bass', credit: 'SomaFM',
-            path: 'dubstep-128-mp3', alt: ['dubstep-128-aac'] },
-        { id: 'fluid', title: 'Fluid', genre: 'Trip-hop', credit: 'SomaFM',
-            path: 'fluid-128-mp3', alt: ['fluid-128-aac'] },
-        { id: 'groovesalad', title: 'Groove Salad', genre: 'Downtempo', credit: 'SomaFM',
-            path: 'groovesalad-128-mp3', alt: ['groovesalad-128-aac'] },
         { id: 'rrhiphop', title: 'Hip-Hop', genre: 'Hip-hop', credit: 'Radio Record',
             urls: [
                 'https://radiorecord.hostingradio.ru/rap96.aacp',
@@ -66,25 +52,7 @@
             urls: [
                 'https://radiorecord.hostingradio.ru/drumhits96.aacp',
                 'https://radiorecord.hostingradio.ru/drumhits64.aacp'
-            ] },
-        { id: 'indiepop', title: 'Indie Pop Rocks', genre: 'Indie pop', credit: 'SomaFM',
-            path: 'indiepop-128-mp3', alt: ['indiepop-128-aac'] },
-        { id: 'u80s', title: 'Underground 80s', genre: '80s', credit: 'SomaFM',
-            path: 'u80s-128-mp3', alt: ['u80s-128-aac'] },
-        { id: 'digitalis', title: 'Digitalis', genre: 'Synth', credit: 'SomaFM',
-            path: 'digitalis-128-mp3', alt: ['digitalis-128-aac'] },
-        { id: 'reggae', title: 'Heavyweight Reggae', genre: 'Reggae', credit: 'SomaFM',
-            path: 'reggae-128-mp3', alt: ['reggae-128-aac'] },
-        { id: 'illstreet', title: 'Illinois Street Lounge', genre: 'Lounge', credit: 'SomaFM',
-            path: 'illstreet-128-mp3', alt: ['illstreet-128-aac'] },
-        { id: 'goa', title: 'Suburbs of Goa', genre: 'World', credit: 'SomaFM',
-            path: 'suburbsofgoa-128-mp3', alt: ['suburbsofgoa-128-aac'] },
-        { id: 'sonicuniverse', title: 'Sonic Universe', genre: 'Jazz', credit: 'SomaFM',
-            path: 'sonicuniverse-128-mp3', alt: ['sonicuniverse-128-aac'] },
-        { id: 'seveninch', title: 'Seven Inch Soul', genre: 'Soul', credit: 'SomaFM',
-            path: 'seveninch-128-mp3', alt: ['seveninch-128-aac'] },
-        { id: 'dronezone', title: 'Drone Zone', genre: 'Ambient', credit: 'SomaFM',
-            path: 'dronezone-128-mp3', alt: ['dronezone-128-aac'] }
+            ] }
     ];
 
     var audio = null;
@@ -92,23 +60,26 @@
     var current = null;
     var fetching = false;
     var lastError = '';
+    var stationFailed = '';    // shown until audio plays or another station is chosen
+    var autoSkipLeft = 0;      // Next may move past failing stations this many more times
+    var connectTimer = null;   // gives up on a stream that never starts playing
+    var CONNECT_MS = 5000;
     var toastSkip = false;
-    var radioFailStreak = 0;
     var radioMirror = 0;       // index into urlsFor(current station)
     var radioPlayGen = 0;      // ignore stale Audio error after a src change
+    var navSeq = 0;            // latest Next request; a slow SomaFM resolve for an older one is dropped
+    var radioUrlNow = '';      // the stream URL currently set on the element
     var listeners = [];
     // Cached playlist entries for source === 'playlist' (shuffled, cursor walks through).
     var playlistCache = { id: null, songs: [], cursor: 0 };
     // Silent stall recovery (ice streams often die without firing `error`).
     var WATCH_MS = 5000;
     var STALL_MS = 14000;
-    var RETRY_ALL_MS = 45000;
     var watchTimer = null;
     var lastProgressAt = 0;
     var lastProgressTime = -1;
     var softRestartUsed = false;
     var healing = false;
-    var retryAllTimer = null;
 
     function prefs() {
         return Prefs.get().music;
@@ -123,44 +94,92 @@
         return isRadio() || !!(window.Subsonic && Subsonic.configured());
     }
 
-    function customUrl() {
-        return String(prefs().radioCustomUrl || '').trim();
+    // Your list: streams the user added. Each one is a station with id 'custom:<id>'.
+    function customList() {
+        var list = prefs().customList;
+        return Array.isArray(list) ? list : [];
     }
 
-    function customStation() {
-        var url = customUrl();
-        return {
-            id: 'custom',
-            title: 'Custom',
-            genre: 'URL',
-            url: url,
-            custom: true
-        };
+    function customStations() {
+        return customList().map(function (c) {
+            return { id: 'custom:' + c.id, title: c.title, genre: 'Your list', url: c.url, custom: true, credit: 'Your list' };
+        });
+    }
+
+    function customStation(id) {
+        return customStations().find(function (s) { return s.id === id; }) || null;
+    }
+
+    // The station name comes from the address, e.g. https://ice2.somafm.com/x -> ice2.somafm.com
+    function titleFromUrl(url) {
+        var m = String(url).match(/^https?:\/\/([^/?#]+)/i);
+        return m ? m[1] : url;
+    }
+
+    function addCustomUrl(url) {
+        var u = String(url || '').trim();
+        if (!/^https:\/\/\S+$/i.test(u)) return null;
+        var p = prefs();
+        var id = String(Date.now());
+        while (customList().some(function (c) { return c.id === id; })) id = String(Number(id) + 1);
+        var entry = { id: id, title: titleFromUrl(u), url: u };
+        p.customList = customList().concat([entry]);
+        Prefs.save();
+        notify();
+        return entry;
+    }
+
+    function removeCustomUrl(id) {
+        var p = prefs();
+        var key = 'custom:' + id;
+        p.customList = customList().filter(function (c) { return c.id !== id; });
+        if (p.radioId === key) p.radioId = radioStations()[0].id;
+        Prefs.save();
+        notify();
+    }
+
+    // Before Your list existed, one custom URL was kept in radioCustomUrl. Move it into the list once.
+    function migrateCustomUrl() {
+        var p = prefs();
+        var legacy = String(p.radioCustomUrl || '').trim();
+        if (!legacy) return;
+        var entry = addCustomUrl(legacy);
+        p.radioCustomUrl = '';
+        if (entry && p.radioId === 'custom') p.radioId = 'custom:' + entry.id;
+        Prefs.save();
+    }
+
+    // A SomaFM channel chosen from the catalogue: its stream mirrors are stored with the choice.
+    function somaStation(id) {
+        var sel = prefs().somaSelected;
+        if (!sel || !sel.urls || !sel.urls.length || 'somafm:' + sel.id !== id) return null;
+        return { id: id, title: sel.title, genre: sel.genre || '', credit: 'SomaFM', urls: sel.urls.slice() };
+    }
+
+    // Radio Record stations: from its feed once fetched; the built-in list only while no feed is cached.
+    function radioStations() {
+        var feed = window.RadioRecord ? RadioRecord.current() : [];
+        return feed.length ? feed : STATIONS;
     }
 
     function findStation(id) {
-        if (id === 'custom') return customStation();
-        var hit = STATIONS.find(function (s) { return s.id === id; });
-        return hit || STATIONS[0];
+        if (String(id || '').indexOf('custom:') === 0) {
+            var cs = customStation(id);
+            if (cs) return cs;
+        }
+        if (String(id || '').indexOf('somafm:') === 0) {
+            var soma = somaStation(id);
+            if (soma) return soma;
+        }
+        var hit = radioStations().find(function (s) { return s.id === id; });
+        return hit || radioStations()[0];
     }
 
     // Curated list, plus Custom when a URL is saved (for Next wrap).
-    function playableStations() {
-        var list = STATIONS.slice();
-        if (customUrl()) list.push(customStation());
-        return list;
-    }
-
-    function stationIndex(id) {
-        var list = playableStations();
-        var i = list.findIndex(function (s) { return s.id === id; });
-        return i < 0 ? 0 : i;
-    }
-
     // Ordered candidate URLs for a station (good host first, then mirrors / aac).
     function urlsFor(st) {
         if (!st) return [];
-        if (st.custom || st.id === 'custom') {
+        if (st.custom) {
             return st.url ? [st.url] : [];
         }
         if (st.urls && st.urls.length) return st.urls.slice();
@@ -211,11 +230,6 @@
     function sourceLabel() {
         var p = prefs();
         if (p.source === 'radio') {
-            if (p.radioId === 'custom') {
-                var u = customUrl();
-                if (!u) return 'Custom';
-                return u.length > 28 ? ('Custom · ' + u.slice(0, 24) + '…') : ('Custom · ' + u);
-            }
             var st = findStation(p.radioId);
             return st ? st.title : 'Radio';
         }
@@ -234,6 +248,7 @@
         if (!ready()) {
             return 'Pick Radio, or set a Subsonic server';
         }
+        if (stationFailed) return stationFailed;
         if (lastError) return lastError;
         if (current) {
             return current.title + (current.artist ? ' · ' + current.artist : '');
@@ -252,6 +267,7 @@
         var t = audio.currentTime;
         if (t !== lastProgressTime) {
             lastProgressTime = t;
+            stationFailed = '';
             lastProgressAt = Date.now();
             softRestartUsed = false;
         } else if (!lastProgressAt) {
@@ -268,10 +284,6 @@
         if (watchTimer) {
             clearInterval(watchTimer);
             watchTimer = null;
-        }
-        if (retryAllTimer) {
-            clearTimeout(retryAllTimer);
-            retryAllTimer = null;
         }
     }
 
@@ -301,7 +313,7 @@
         healing = false;
         lastProgressAt = Date.now();
         softRestartUsed = false;
-        onAudioError();
+        onAudioError(radioUrlNow);
     }
 
     function watchTick() {
@@ -338,7 +350,7 @@
         watchTick();
     }
 
-    function onAudioError() {
+    function onAudioError(failedUrl) {
         var gen = radioPlayGen;
         lastError = 'Stream failed';
         DevLog.log('Music: stream error');
@@ -352,23 +364,54 @@
         }
         // Stale error from a previous src — ignore.
         if (gen !== radioPlayGen) return;
+        // A failure for a URL we already moved past (an old play() or error event) — ignore.
+        if (failedUrl !== radioUrlNow) {
+            DevLog.log('Music: ignored stale stream failure');
+            return;
+        }
+        // This URL has failed now. Its other error events (play() rejection, error) must not count again.
+        radioUrlNow = '';
         var st = findStation(prefs().radioId);
         var urls = urlsFor(st);
         radioMirror++;
-        if (radioMirror < urls.length) {
-            DevLog.log('Music: radio try mirror ' + radioMirror + '/' + urls.length +
-                ' for ' + st.id);
+        var title = st.title || 'this station';
+        var action = RadioPlan.afterFailure({ mirrorIndex: radioMirror, mirrorCount: urls.length, skipLeft: autoSkipLeft });
+        if (action === 'mirror') {
+            DevLog.log('Music: radio try mirror ' + radioMirror + '/' + urls.length + ' for ' + st.id);
             resetProgressClock();
             playRadioUrl(st, urls[radioMirror], false, gen);
             return;
         }
-        // All mirrors for this station failed — advance station.
-        if (!toastSkip) {
-            toastSkip = true;
-            UI.toast('Station failed — trying next');
-        }
+        // All mirrors for this station failed.
         radioMirror = 0;
-        next(true);
+        if (action === 'skip') {
+            autoSkipLeft--;
+            stationFailed = 'Not possible to play ' + title;
+            UI.toast(stationFailed + ' — trying next');
+            nextRadio(true);
+            return;
+        }
+        stopRadio('Not possible to play ' + title);
+    }
+
+    function clearConnect() {
+        if (connectTimer) {
+            clearTimeout(connectTimer);
+            connectTimer = null;
+        }
+    }
+
+    function stopRadio(message) {
+        stopWatch();
+        clearConnect();
+        autoSkipLeft = 0;
+        dropCurrentAudio();
+        var p = prefs();
+        p.playing = false;
+        Prefs.save();
+        stationFailed = message;
+        UI.toast(message);
+        notify();
     }
 
     function ensureAudio() {
@@ -376,14 +419,18 @@
         audio = new Audio();
         // Download ahead of the playhead while playing (engine-managed progressive buffer).
         audio.preload = 'auto';
-        audio.addEventListener('ended', function () { next(true); });
-        audio.addEventListener('error', onAudioError);
+        audio.addEventListener('ended', function () {
+            if (isRadio()) stopRadio('Stream ended');
+            else next(true);
+        });
+        audio.addEventListener('error', function () { onAudioError(audio.src); });
         audio.addEventListener('timeupdate', markProgress);
         audio.addEventListener('playing', function () {
             if (!audio || !audio.src) return;
             resetProgressClock();
             if (!isRadio()) return;
-            radioFailStreak = 0;
+            clearConnect();
+            autoSkipLeft = 0;
             lastError = '';
             rememberGoodUrl(audio.src);
             startWatch();
@@ -478,10 +525,12 @@
         var p = prefs();
         if (source === 'radio') {
             p.source = 'radio';
-            if (p.radioId === 'custom') {
-                if (!customUrl()) p.radioId = STATIONS[0].id;
-            } else if (!p.radioId || !STATIONS.some(function (s) { return s.id === p.radioId; })) {
-                p.radioId = STATIONS[0].id;
+            if (String(p.radioId || '').indexOf('custom:') === 0 && customStation(p.radioId)) {
+                // A saved stream of Your list stays selected.
+            } else if (String(p.radioId || '').indexOf('somafm:') === 0 && somaStation(p.radioId)) {
+                // A chosen SomaFM channel stays selected.
+            } else if (!p.radioId || !radioStations().some(function (s) { return s.id === p.radioId; })) {
+                p.radioId = radioStations()[0].id;
             }
         } else if (source === 'playlist' && playlist && playlist.id != null) {
             p.source = 'playlist';
@@ -495,7 +544,6 @@
         Prefs.save();
         clearQueue();
         lastError = '';
-        radioFailStreak = 0;
         radioMirror = 0;
         dropCurrentAudio();
         if (p.playing && p.enabled) {
@@ -505,37 +553,39 @@
         notify();
     }
 
-    function setRadio(id) {
+    // play: start this station now (the station menu's Play). Otherwise it is only selected.
+    function setRadio(id, play) {
+        stationFailed = '';
+        autoSkipLeft = 0;
         var st = findStation(id);
         var p = prefs();
         p.source = 'radio';
         p.radioId = st.id;
+        if (play) {
+            p.enabled = true;
+            p.playing = true;
+        }
         Prefs.save();
         clearQueue();
         lastError = '';
-        radioFailStreak = 0;
         radioMirror = 0;
         dropCurrentAudio();
+        if (play) startWatch();
         if (p.playing && p.enabled) playStation(st, false);
         notify();
         return st;
     }
 
-    function setCustomUrl(url) {
-        var p = prefs();
-        p.radioCustomUrl = String(url || '').trim();
-        p.source = 'radio';
-        p.radioId = p.radioCustomUrl ? 'custom' : (STATIONS[0] && STATIONS[0].id);
+    // Pick a SomaFM channel from the catalogue. urls are its stream mirrors (from its .pls playlist).
+    function setSomaChannel(channel, urls, play) {
+        storeSoma(channel, urls);
+        return setRadio(prefs().radioId, play);
+    }
+
+    function setRadioNav(mode) {
+        prefs().radioNav = mode === 'favourites' || mode === 'list' ? mode : 'all';
         Prefs.save();
-        clearQueue();
-        lastError = '';
-        radioFailStreak = 0;
-        radioMirror = 0;
-        dropCurrentAudio();
-        var st = findStation(p.radioId);
-        if (p.playing && p.enabled && p.radioCustomUrl) playStation(st, false);
         notify();
-        return st;
     }
 
     function playRadioUrl(st, url, announce, gen) {
@@ -559,14 +609,25 @@
             a.removeAttribute('src');
             a.load();
         } catch (e) { /* ignore */ }
+        radioUrlNow = url;
         a.src = url;
         applyVolume();
         resetProgressClock();
         startWatch();
+        clearConnect();
+        connectTimer = setTimeout(function () {
+            connectTimer = null;
+            if (gen != null && gen !== radioPlayGen) return;
+            if (!isRadio() || !wantPlaying()) return;
+            DevLog.log('Music: no audio after ' + (CONNECT_MS / 1000) + 's');
+            onAudioError(url);
+        }, CONNECT_MS);
         var playPromise = a.play();
         if (playPromise && playPromise.catch) {
             playPromise.catch(function (e) {
                 if (gen != null && gen !== radioPlayGen) return;
+                // AbortError is our own pause() or src change, not a stream failure.
+                if (e && e.name === 'AbortError') return;
                 var msg = (e && e.message) ? e.message : String(e || '');
                 DevLog.log('Music: play() failed: ' + msg);
                 // Gesture / autoplay block — do not burn through mirrors.
@@ -579,7 +640,7 @@
                     return;
                 }
                 // Network / decode — try next mirror or station.
-                onAudioError();
+                onAudioError(url);
             });
         }
         if (announce && !barVisible()) {
@@ -592,7 +653,7 @@
         if (!st) return;
         var urls = urlsFor(st);
         if (!urls.length) {
-            lastError = st.id === 'custom' ? 'Set a stream URL' : 'No stream URL';
+            lastError = st.custom ? 'Set a stream URL' : 'No stream URL';
             UI.toast(lastError);
             prefs().playing = false;
             Prefs.save();
@@ -602,11 +663,34 @@
         }
         radioPlayGen++;
         radioMirror = 0;
-        // Keep radioFailStreak — cleared on successful `playing` or user Play.
         playRadioUrl(st, urls[0], announce, radioPlayGen);
     }
 
-    function nextRadio(auto) {
+    // What Next steps through: 'all' = curated stations, custom URL, then every SomaFM channel
+    // grouped by genre; 'favourites' = only the saved favourites, in the order they were added.
+    function navItems() {
+        var p = prefs();
+        return RadioPlan.navList({
+            mode: p.radioNav,
+            stations: radioStations(),
+            customs: customStations(),
+            somaGroups: window.SomaFM ? SomaFM.groupByGenre(SomaFM.current()) : [],
+            favourites: Array.isArray(p.favourites) ? p.favourites : []
+        });
+    }
+
+    // Save a SomaFM choice (channel plus resolved mirrors) without starting playback.
+    function storeSoma(channel, urls) {
+        var p = prefs();
+        p.somaSelected = { id: channel.id, title: channel.title, genre: (channel.genres || [])[0] || '', urls: (urls || []).slice() };
+        p.radioId = 'somafm:' + channel.id;
+        p.source = 'radio';
+        Prefs.save();
+    }
+
+    function nextRadio(auto, user, skips) {
+        if (!auto) stationFailed = '';
+        if (user) autoSkipLeft = RadioPlan.skipBudget(navItems().length, true);
         var p = prefs();
         if (!p.enabled) {
             p.enabled = true;
@@ -614,46 +698,47 @@
         p.playing = true;
         Prefs.save();
 
-        var list = playableStations();
+        var list = navItems();
         if (!list.length) {
-            lastError = 'No stations';
+            lastError = p.radioNav === 'favourites' ? 'No favourites yet' : 'No stations';
             p.playing = false;
             Prefs.save();
             notify();
             return;
         }
-        var i = stationIndex(p.radioId);
-        // First Play: keep the selected station. Next / stream error: advance (wrap).
-        var advance = auto || !!(current && current.radio);
-        if (advance) {
-            if (auto) {
-                radioFailStreak++;
-                if (radioFailStreak > list.length) {
-                    // Keep intent to play — retry after a cooldown instead of giving up.
-                    lastError = 'All stations failed — retrying…';
-                    DevLog.log('Music: all stations failed; retry in ' + (RETRY_ALL_MS / 1000) + 's');
-                    dropCurrentAudio();
+        // Play keeps the selected station. Only Next (or skipping a channel with no streams) moves on.
+        var item = list[(auto || user) ? RadioPlan.nextIndex(list, p.radioId) : RadioPlan.indexOf(list, p.radioId)];
+        var token = ++navSeq;
+        if (item.station) {
+            p.radioId = item.station.id;
+            Prefs.save();
+            radioMirror = 0;
+            resetProgressClock();
+            playStation(item.station, !auto);
+            return;
+        }
+        // SomaFM channel: its stream mirrors come from the .pls playlist, so resolve them first.
+        var tries = skips || 0;
+        if (!window.SomaFM) return;
+        SomaFM.resolve(item.soma).then(function (urls) {
+            if (token !== navSeq) return;
+            if (!urls.length) {
+                DevLog.log('Music: no streams for ' + item.soma.title + '; skipping');
+                if (tries >= list.length) {
+                    lastError = 'No streams available';
                     notify();
-                    if (retryAllTimer) clearTimeout(retryAllTimer);
-                    retryAllTimer = setTimeout(function () {
-                        retryAllTimer = null;
-                        if (!wantPlaying() || !isRadio()) return;
-                        radioFailStreak = 0;
-                        radioMirror = 0;
-                        toastSkip = false;
-                        playStation(findStation(prefs().radioId), false);
-                    }, RETRY_ALL_MS);
                     return;
                 }
+                p.radioId = item.key;
+                Prefs.save();
+                nextRadio(auto, user, tries + 1);
+                return;
             }
-            i = (i + 1) % list.length;
-        }
-        var st = list[i];
-        p.radioId = st.id;
-        Prefs.save();
-        radioMirror = 0;
-        resetProgressClock();
-        playStation(st, !auto);
+            storeSoma(item.soma, urls);
+            radioMirror = 0;
+            resetProgressClock();
+            playStation(findStation(item.key), !auto);
+        });
     }
 
     function playSong(song, announce) {
@@ -681,10 +766,10 @@
         if (queue.length < REFILL_AT) refill();
     }
 
-    function next(auto) {
+    function next(auto, user) {
         if (!ready()) return;
         if (isRadio()) {
-            nextRadio(auto);
+            nextRadio(auto, user);
             return;
         }
         if (!Subsonic.configured()) return;
@@ -722,11 +807,6 @@
         Prefs.save();
         toastSkip = false;
         lastError = '';
-        radioFailStreak = 0;
-        if (retryAllTimer) {
-            clearTimeout(retryAllTimer);
-            retryAllTimer = null;
-        }
         startWatch();
         if (current && audio && audio.src && audio.paused && !audio.ended) {
             applyVolume();
@@ -761,13 +841,21 @@
      * Long title/artist: scroll a few times, then freeze (ellipsis). Infinite animation was
      * a large idle-CPU cost on this SoC (~40%).
      */
+    // Scrolls a long line once through, then holds it. A re-draw with the same text keeps the scroll
+    // where it is; only a new text starts it again.
     function fillMarquee(el, text, animate) {
         if (!el) return;
+        var key = (animate ? 'scroll|' : 'static|') + (text || '');
+        if (el.getAttribute('data-marquee') === key) return;
         el.classList.remove('scroll');
         el.innerHTML = '';
-        if (!text) return;
+        if (!text) {
+            el.setAttribute('data-marquee', key);
+            return;
+        }
         if (!animate) {
             el.textContent = text;
+            el.setAttribute('data-marquee', key);
             return;
         }
         var track = document.createElement('div');
@@ -782,6 +870,7 @@
                 if (!el.contains(track)) return;
                 if (track.scrollWidth <= el.clientWidth + 1) {
                     el.textContent = text;
+                    el.setAttribute('data-marquee', key);
                     return;
                 }
                 var copy = span.cloneNode(true);
@@ -795,6 +884,7 @@
                 }
                 track.addEventListener('animationend', freeze);
                 el.classList.add('scroll');
+                el.setAttribute('data-marquee', key);
             });
         });
     }
@@ -824,7 +914,10 @@
         var pauseIcon = bar.querySelector('.music-icon-pause');
         var playing = isPlaying();
         // Scroll on track change / when a song is shown; stops after 3 loops.
-        if (current) {
+        if (stationFailed) {
+            fillMarquee(title, stationFailed, false);
+            fillMarquee(artist, '', false);
+        } else if (current) {
             fillMarquee(title, current.title, true);
             fillMarquee(artist, current.artist || current.album || '', true);
         } else if (lastError) {
@@ -895,6 +988,8 @@
 
     function init() {
         document.addEventListener('visibilitychange', onVisibility);
+        migrateCustomUrl();
+        if (window.SomaFM) SomaFM.refresh();
         applyVolume();
         // Do not auto-start: needs a remote gesture (Play on the dock or in Settings).
         if (prefs().playing && prefs().enabled) {
@@ -912,19 +1007,24 @@
     window.Music = {
         VOLUMES: VOLUMES,
         STATIONS: STATIONS,
+        radioStations: radioStations,
         init: init,
         ready: ready,
         play: play,
         pause: pause,
         toggle: toggle,
         stop: stop,
-        next: function () { next(false); },
+        next: function () { next(false, true); },
         setEnabled: setEnabled,
         setVolume: setVolume,
         setSource: setSource,
         setRadio: setRadio,
-        setCustomUrl: setCustomUrl,
-        customUrl: customUrl,
+        setSomaChannel: setSomaChannel,
+        setRadioNav: setRadioNav,
+        customList: customList,
+        customStations: customStations,
+        addCustomUrl: addCustomUrl,
+        removeCustomUrl: removeCustomUrl,
         sourceLabel: sourceLabel,
         clearQueue: clearQueue,
         isPlaying: isPlaying,
