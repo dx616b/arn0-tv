@@ -65,6 +65,14 @@
                 if (whp >= 1 && isFinite(whp)) LiveState.stream.wallhavenPage = whp;
             }
             if (typeof raw.wallhavenSeed === 'string') LiveState.stream.wallhavenSeed = raw.wallhavenSeed;
+            if (raw.unsplashPage != null) {
+                var up = Math.floor(Number(raw.unsplashPage));
+                if (up >= 1 && isFinite(up)) LiveState.stream.unsplashPage = up;
+            }
+            if (raw.unsplashIndex != null) {
+                var ui = Math.floor(Number(raw.unsplashIndex));
+                if (ui >= 0 && isFinite(ui)) LiveState.stream.unsplashIndex = ui;
+            }
             if (raw.immichPage != null) {
                 var ip = Math.floor(Number(raw.immichPage));
                 if (ip >= 1 && isFinite(ip)) LiveState.stream.immichPage = ip;
@@ -128,6 +136,8 @@
                     : null,
                 wallhavenPage: LiveState.stream.wallhavenPage || 1,
                 wallhavenSeed: LiveState.stream.wallhavenSeed || '',
+                unsplashPage: LiveState.stream.unsplashPage || 1,
+                unsplashIndex: LiveState.stream.unsplashIndex || 0,
                 immichPage: LiveState.stream.immichPage || 1,
                 immichAlbum: LiveState.stream.immichAlbum ? {
                     id: LiveState.stream.immichAlbum.id,
@@ -138,9 +148,7 @@
                     nasa: LiveState.stream.nasa || 0,
                     wiki: LiveState.stream.wiki || 0,
                     unsplash: LiveState.stream.unsplash || 0,
-                    sourceIndex: LiveState.stream.sourceIndex || 0,
-                    wallhavenPage: LiveState.stream.wallhavenPage || 1,
-                    wallhavenSeed: LiveState.stream.wallhavenSeed || ''
+                    sourceIndex: LiveState.stream.sourceIndex || 0
                 },
                 mixOrder: queue.mixOrder
             }));

@@ -392,11 +392,6 @@
             var n = Number(raw[k]);
             if (n >= 0 && isFinite(n)) LiveState.stream[k] = Math.floor(n);
         });
-        if (raw.wallhavenPage != null) {
-            var wp = Math.floor(Number(raw.wallhavenPage));
-            if (wp >= 1 && isFinite(wp)) LiveState.stream.wallhavenPage = wp;
-        }
-        if (typeof raw.wallhavenSeed === 'string') LiveState.stream.wallhavenSeed = raw.wallhavenSeed;
     }
 
     function upcoming() {
