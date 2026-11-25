@@ -138,6 +138,8 @@
                 if (g !== LiveState.generation || !entry) return;
                 LiveState.stream.plan.push(entry);
                 LiveState.planUniqueExhausted = false;
+                // Prefetch Immich captions while the photo waits in the plan (not after show).
+                if ((entry.credit || '').indexOf('Immich') === 0) polishImmich(entry);
                 saveCache(provider());
                 // Only warm the next decode when the plan was empty / just started.
                 if (LiveState.stream.plan.length <= 2 && window.Wallpaper && Wallpaper.preloadAhead) {

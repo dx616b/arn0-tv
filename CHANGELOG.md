@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Live wallpaper
+- Immich: descriptions/captions come from search EXIF and are polished while the photo is still queued (not after it appears)
+
 ## 0.7.2
 
 ### Screen saver
