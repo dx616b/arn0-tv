@@ -8,17 +8,18 @@
 
     var bgState = SettingsCore.bgState;
 
-    function renderBackground() { return SettingsBackground.render.apply(null, arguments); }
+    function redrawBackground() {
+        if (SettingsBackground.redraw) SettingsBackground.redraw();
+        else SettingsBackground.render();
+    }
 
     function warmBgPicker() {
         if (!window.LiveWallpaper || !LiveWallpaper.warmForPicker) return;
         if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) return;
         UI.busy(LiveWallpaper.warmForPicker()).then(function () {
-            renderBackground();
-            UI.refresh();
+            redrawBackground();
         }, function () {
-            renderBackground();
-            UI.refresh();
+            redrawBackground();
         });
     }
 
@@ -102,9 +103,9 @@
 
     function shuffleNoteFor(p) {
         if (p.mode === 'rotate') {
-            return 'On: random photo from the rotate set. Off: play in order.';
+            return 'On: random order. Off: play in sequence.';
         }
-        return 'Mix only: On shuffles provider order, then plays them in turn. Photos stay in fetch order.';
+        return 'Mix: On shuffles source order. Off: fixed order.';
     }
 
     // Shuffle matters for Rotate (photos) or Live Mix On with 2+ sources.

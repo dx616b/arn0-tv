@@ -50,29 +50,30 @@
         body.appendChild(previewBlock);
     }
 
+    function redrawSound() {
+        SettingsCore.withFocusRestore($('sound-body'), renderSound);
+    }
+
     function activateSound(item) {
         var p = Prefs.get().sound;
         if (item.kind === 'enabled') {
             p.enabled = item.value;
             Prefs.save();
-            renderSound();
-            UI.refresh();
+            redrawSound();
             if (p.enabled) Sound.preview();
             return;
         }
         if (item.kind === 'preset') {
             p.preset = item.value;
             Prefs.save();
-            renderSound();
-            UI.refresh();
+            redrawSound();
             Sound.preview();
             return;
         }
         if (item.kind === 'volume') {
             p.volume = item.value;
             Prefs.save();
-            renderSound();
-            UI.refresh();
+            redrawSound();
             Sound.preview();
             return;
         }

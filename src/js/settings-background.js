@@ -32,6 +32,10 @@
     // Page state shared with the other settings-background-*.js files (see SettingsCore.bgState).
     var bgState = SettingsCore.bgState;
 
+    function redrawBackground() {
+        SettingsCore.withFocusRestore($('bg-body'), renderBackground);
+    }
+
     // Append-only thumbs + status — used when Live notifies during warm (chips unchanged).
     // Live status line and caption; shared by the full render and the live-only refresh.
     function renderLiveStatus(p, live, browseLive) {
@@ -419,8 +423,7 @@
                 p.liveKey = '';
                 Prefs.save();
                 Wallpaper.ensureLive();
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             }, { title: 'Immich shared album link', maxLength: 200, allowEmpty: true });
             return;
         }
@@ -433,8 +436,7 @@
                 p.liveKey = '';
                 Prefs.save();
                 Wallpaper.ensureLive();
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             }, { title: 'Unsplash Access Key', maxLength: 64, password: true });
             return;
         }
@@ -447,8 +449,7 @@
                 p.liveKey = '';
                 Prefs.save();
                 Wallpaper.ensureLive();
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             }, { title: 'Unsplash collection ID', maxLength: 64, allowEmpty: true });
             return;
         }
@@ -465,11 +466,9 @@
             if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
             else LiveWallpaper.clearCache();
             busyLiveProviderChange().then(function () {
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             }, function () {
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             });
             return;
         }
@@ -508,8 +507,7 @@
                     warmBgPicker();
                 }
             }
-            renderBackground();
-            UI.refresh();
+            redrawBackground();
             return;
         } else if (item.kind === 'mixMode') {
             if (!window.LiveWallpaper || !LiveWallpaper.setMixMode) return;
@@ -528,11 +526,9 @@
                 UI.toast(LiveWallpaper.status());
             }
             busyLiveProviderChange().then(function () {
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             }, function () {
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
             });
             return;
         } else if (item.kind === 'provider') {
@@ -549,8 +545,7 @@
                 var nowOn = LiveWallpaper.setMixSource(item.key, wantOn);
                 if (!wantOn && nowOn) {
                     UI.toast('Keep at least one source on');
-                    renderBackground();
-                    UI.refresh();
+                    redrawBackground();
                     return;
                 }
                 nextProv = 'mix';
@@ -577,30 +572,25 @@
 
             if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) {
                 UI.toast(LiveWallpaper.status());
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
                 return;
             }
             // Fetch can take a couple of seconds — keep the busy ring up to 5 s, then show grid.
             if ((p.mode === 'live' || bgState.keepLivePicker) &&
                     (nextProv !== prevProv || nextProv === 'mix')) {
                 busyLiveProviderChange().then(function () {
-                    renderBackground();
-                    UI.refresh();
+                    redrawBackground();
                 }, function () {
-                    renderBackground();
-                    UI.refresh();
+                    redrawBackground();
                 });
                 return;
             }
-            renderBackground();
-            UI.refresh();
+            redrawBackground();
             return;
         } else if (item.kind === 'pickMore') {
             if (!window.LiveWallpaper || !LiveWallpaper.loadMorePicks) return;
             UI.busy(LiveWallpaper.loadMorePicks()).then(function (n) {
-                renderBackground();
-                UI.refresh();
+                redrawBackground();
                 if (!n) UI.toast('No more photos');
             }, function () {
                 UI.toast('Could not load more');
@@ -680,8 +670,7 @@
         Prefs.save();
         Wallpaper.apply();
         if (p.mode === 'live') Wallpaper.ensureLive();
-        renderBackground();
-        UI.refresh();
+        redrawBackground();
         if (item.kind === 'mode' && item.key === 'live' &&
                 Prefs.get().wallpaper.liveProvider !== 'mix' &&
                 !(window.LiveWallpaper && LiveWallpaper.needsSetup())) {
@@ -702,13 +691,13 @@
                 renderBackgroundLiveDelta();
                 return;
             }
-            renderBackground();
-            UI.refresh();
+            redrawBackground();
         }, 350);
     }
 
     window.SettingsBackground = {
         render: renderBackground,
+        redraw: redrawBackground,
         activate: activateBackground,
         warm: warmBgPicker,
         onLiveChange: onLiveChange,

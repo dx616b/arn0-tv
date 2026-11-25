@@ -658,6 +658,11 @@
             onFocus: function () { UI.refreshHints(); },
             onKey: function (k) {
                 var log = $('lab-log');
+                // Actions column: ◀ backs to Settings (same as other settings pages).
+                if (k === KEY.LEFT && UI.atRowStart && UI.atRowStart()) {
+                    UI.back();
+                    return true;
+                }
                 if (!log || !log.classList.contains('focused')) return false;
                 if (k === KEY.UP) {
                     log.scrollTop = Math.max(0, log.scrollTop - 56);
@@ -673,11 +678,14 @@
                 return false;
             },
             hints: function () {
+                var back = window.SettingsCore && SettingsCore.backPair
+                    ? SettingsCore.backPair('Settings')
+                    : ['Back', 'Settings'];
                 var log = $('lab-log');
                 if (log && log.classList.contains('focused')) {
-                    return [['▲▼', 'Scroll'], ['◀', 'Actions'], ['Back', 'Home']];
+                    return [['▲▼', 'Scroll'], ['◀', 'Actions'], back];
                 }
-                return [['OK', 'Run'], ['▶', 'Log'], ['Back', 'Home']];
+                return [['OK', 'Run'], ['▶', 'Log'], ['◀', 'Back'], back];
             }
         });
     }

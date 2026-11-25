@@ -124,7 +124,14 @@
                     label: 'Use', run: function () { usePhotoKey(entry.key); }
                 },
                 {
-                    label: 'Remove save', run: function () { removeOnePin(entry.key); }
+                    label: 'Remove save', run: function () {
+                        UI.menu('Remove this saved pin?', [
+                            { label: 'Cancel', current: true },
+                            {
+                                label: 'Remove', run: function () { removeOnePin(entry.key); }
+                            }
+                        ], { detail: 'It will be deleted from Saved photos.' });
+                    }
                 },
                 { label: 'Cancel' }
             ]);
@@ -148,9 +155,10 @@
             return;
         }
         var size = pinStorageLabel();
-        UI.menu(size ? 'Clear saved pins (' + size + ')?' : 'Clear saved pins?', [
+        UI.menu('Clear all saved pins?', [
+            { label: 'Cancel', current: true },
             {
-                label: 'Clear', run: function () {
+                label: 'Clear pins', run: function () {
                     UI.busy(Wallpaper.clearPins()).then(function () {
                         var p = Prefs.get().wallpaper;
                         var visible = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
@@ -166,14 +174,22 @@
                         // Atmosphere list label + Background storage note both bake size at render.
                         if (typeof SettingsCore.renderAtmosphere === 'function') SettingsCore.renderAtmosphere();
                         if ($('bg-settings') && !$('bg-settings').classList.contains('hidden')) {
-                            renderBackground();
+                            if (SettingsBackground.redraw) SettingsBackground.redraw();
+                            else {
+                                renderBackground();
+                                UI.refresh();
+                            }
+                        } else {
+                            UI.refresh();
                         }
-                        UI.refresh();
                     });
                 }
-            },
-            { label: 'Cancel' }
-        ]);
+            }
+        ], {
+            detail: size
+                ? 'Deletes every permanently saved photo (' + size + ').'
+                : 'Deletes every permanently saved photo.'
+        });
     }
 
     function focusBgThumb(key) {
