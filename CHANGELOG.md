@@ -6,7 +6,7 @@
 - Immich: descriptions/captions come from search EXIF and are polished while the photo is still queued (not after it appears)
 - Long captions from every Live provider scroll (marquee) instead of being cut with an ellipsis
 - Screensaver caption/music slots sized so scrolling text stays clear of the clock, weather and shortcuts
-- Screensaver shows the caption again on every picture change (and when Immich polish fills it in)
+- Screensaver peeks only the picture description on each change (and Immich polish); clock/music/chrome stay hidden
 - Portrait drift: mild animated zoom (~1.06–1.14) on a slower leg (~1.6× landscape)
 
 ## 0.7.2

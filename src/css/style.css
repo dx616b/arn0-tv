@@ -1792,6 +1792,12 @@ html.preview, html.preview body {
     pointer-events: none;
 }
 
+/* Picture change / polish: show description only while the rest of chrome stays off. */
+#screensaver.chrome-off.caption-peek .ss-caption,
+#screensaver.chrome-off.caption-peek .ss-scrim {
+    opacity: 1;
+}
+
 .ss-title {
     font-size: 28px;
     font-weight: 600;

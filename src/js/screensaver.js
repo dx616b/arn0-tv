@@ -97,6 +97,7 @@
     var dark = false;
     var chromeHidden = false;   // writings faded; next key only reveals them
     var lastChromeAt = 0;       // last time chrome was shown or touched
+    var captionPeekTimer = 0;   // brief description-only reveal while chrome-off
     var advancing = false;      // one in-flight live takeNext (timer or remote)
     var shownKey = '';          // live polish may update caption after the photo is up
     var providerFlashTimer = 0;
@@ -1041,9 +1042,32 @@
         DevLog.log('Screen saver on');
     }
 
+    function clearCaptionPeek() {
+        if (captionPeekTimer) clearTimeout(captionPeekTimer);
+        captionPeekTimer = 0;
+        var root = $('screensaver');
+        if (root) root.classList.remove('caption-peek');
+    }
+
+    // While chrome is idle-hidden, briefly show only the picture description (not clock/music/…).
+    function peekCaption() {
+        if (!open || dark || !chromeHidden) return;
+        if (!captionText && !captionSub) return;
+        var root = $('screensaver');
+        if (!root) return;
+        root.classList.add('caption-peek');
+        if (captionPeekTimer) clearTimeout(captionPeekTimer);
+        var ms = chromeHide().ms || 12000;
+        captionPeekTimer = setTimeout(function () {
+            captionPeekTimer = 0;
+            if (root) root.classList.remove('caption-peek');
+        }, ms);
+    }
+
     function showChrome() {
         chromeHidden = false;
         lastChromeAt = Date.now();
+        clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.remove('chrome-off');
     }
@@ -1051,6 +1075,7 @@
     function hideChrome() {
         if (!open || dark || chromeHidden) return;
         chromeHidden = true;
+        clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.add('chrome-off');
     }
@@ -1094,6 +1119,7 @@
         if (dark) return;
         dark = true;
         hideChrome();
+        clearCaptionPeek();
         freezePan();
         var root = $('screensaver');
         if (root) root.classList.add('is-dark');
@@ -1135,8 +1161,8 @@
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
-        // Show description/chrome again on every picture change (idle fade had hidden them).
-        if (!dark) showChrome();
+        // Description only — do not bring back clock / music / shortcuts.
+        if (!dark) peekCaption();
         // After the crossfade — do not compete with the current decode on this SoC.
         setTimeout(function () {
             if (open && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
@@ -1149,8 +1175,8 @@
         var w = Wallpaper.find(shownKey);
         if (!w) return;
         caption(w);
-        // Polished description arrived — make sure chrome is up so it can be read.
-        if (!dark) showChrome();
+        // Polished description arrived — peek caption only if chrome is already idle-hidden.
+        if (!dark) peekCaption();
     }
 
     // Timer and remote Right both land here so the interval resets after a manual skip.
@@ -1241,10 +1267,11 @@
         lastInput = Date.now();
         photoToken++;
         clearTimeout(providerFlashTimer);
+        clearCaptionPeek();
         captionSub = '';
         lastMusicSig = '';
         var root = $('screensaver');
-        if (root) root.classList.remove('chrome-off', 'is-dark');
+        if (root) root.classList.remove('chrome-off', 'is-dark', 'caption-peek');
         var veil = $('ss-dark');
         if (veil) veil.style.opacity = '0';
         var flash = $('ss-provider');
