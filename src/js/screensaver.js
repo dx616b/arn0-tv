@@ -73,8 +73,6 @@
         { key: 'normal', label: 'Normal', factor: 1 },
         { key: 'fast', label: 'Fast', factor: 0.5 }
     ];
-    // Portrait zoom may be cut mid-leg when the photo changes — factor > 1 keeps it slow.
-    var ZOOM_LEG_FACTOR = 1.25;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
@@ -134,8 +132,8 @@
             layer.style.height = '';
             return;
         }
-        var padX = drift.padX || 160;
-        var padY = drift.padY || 90;
+        var padX = drift.padX || 96;
+        var padY = drift.padY || 54;
         layer.style.top = (-padY) + 'px';
         layer.style.left = (-padX) + 'px';
         layer.style.width = (VIEW_W + 2 * padX) + 'px';
@@ -164,9 +162,12 @@
     // ---------- Photos
 
     function rotating() {
-        var mode = Prefs.get().wallpaper.mode;
-        if (mode === 'live') return !!window.LiveWallpaper;
-        return mode === 'rotate' && Wallpaper.list().length > 1;
+        var p = Prefs.get().wallpaper;
+        if (p.mode === 'live') {
+            // Saved photos rotate only when Rotate is on; other providers always rotate.
+            return !!window.LiveWallpaper && (p.liveProvider !== 'photos' || p.rotateOn !== false);
+        }
+        return p.mode === 'rotate' && Wallpaper.list().length > 1;
     }
 
     // Active catalog only (live pool or bundled rotate) — never sneak in shipped stills during Live/Mix.
@@ -241,7 +242,7 @@
         } else {
             if (sharp) {
                 sharp.style.transition = 'none';
-                sharp.style.transform = 'translate(0, 0)';
+                sharp.style.transform = 'translate3d(0,0,0)';
             }
             layer.style.transform = pose(layer, u);
         }
@@ -263,10 +264,10 @@
         layer._frozen = null;
         if (!panOn()) {
             layer.style.transition = 'none';
-            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate3d(0,0,0)';
             if (sharp) {
                 sharp.style.transition = 'none';
-                sharp.style.transform = 'translate(0, 0)';
+                sharp.style.transform = 'translate3d(0,0,0)';
                 void sharp.offsetWidth;
             } else {
                 void layer.offsetWidth;
@@ -282,15 +283,15 @@
      * Drift speed. Drift Off parks the photo centred (no pan / portrait zoom).
      */
     function startPan() {
-        if (!panOn()) {
+        if (!panOn() || paused) {
             nextPanAt = 0;
             var layer0 = layers[front];
             var sharp0 = sharpEl(layer0);
             layer0.style.transition = 'opacity ' + FADE_MS + 'ms linear';
-            layer0.style.transform = layer0.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            layer0.style.transform = layer0.classList.contains('contain') ? 'none' : 'translate3d(0,0,0)';
             if (sharp0) {
                 sharp0.style.transition = 'none';
-                sharp0.style.transform = 'translate(0, 0)';
+                sharp0.style.transform = 'translate3d(0,0,0)';
             }
             return;
         }
@@ -319,8 +320,10 @@
         var flip = Math.max(800, flipMs || legMs());
         nextPanAt = now + flip;
         var contain = layer.classList.contains('contain');
-        var anim = Math.max(800, animMs || (contain ? Math.round(flip * ZOOM_LEG_FACTOR) : flip));
+        // Portrait no longer animates scale — same duration as landscape is fine.
+        var anim = Math.max(800, animMs || flip);
         layer._leg = { from: fromU, to: panSign, start: now, dur: anim };
+        // Opacity and transform on separate transitions — combining them on Tizen caused scan lines.
         if (contain) {
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
@@ -330,7 +333,7 @@
             }
             return;
         }
-        layer.style.transition = 'opacity ' + FADE_MS + 'ms linear, transform ' + anim + 'ms linear';
+        layer.style.transition = 'transform ' + anim + 'ms linear';
         layer.style.transform = pose(layer, panSign);
     }
 
@@ -571,13 +574,23 @@
         else el.textContent = text || '';
     }
 
+    // Short line for the screen: drops bracketed credits such as "(© Photographer / Agency)".
+    function shortCaption(text, max) {
+        var t = String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+        if (t.length <= max) return t;
+        var cut = t.slice(0, max);
+        var sp = cut.lastIndexOf(' ');
+        return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
+    }
+
     function caption(w) {
         // Title + date/credit from live metadata (title/sub/credit on each wallpaper entry).
-        captionText = w ? (w.title || w.credit || '') : '';
+        captionText = w ? shortCaption(w.title || w.credit || '', 40) : '';
         captionSub = '';
         if (w) {
             if (w.sub && w.credit && w.credit !== w.title) captionSub = w.sub + ' · ' + w.credit;
             else captionSub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
+            captionSub = shortCaption(captionSub, 48);
         }
         // Fixed-width slot + horizontal scroll when the line is longer (does not cover legend).
         fillLine($('ss-title'), captionText, true);
@@ -585,15 +598,15 @@
         $('ss-caption').classList.toggle('hidden', !w || (!captionText && !captionSub));
     }
 
-    // Hidden outright when there is no usable reading: see the note on staleness in weather.js.
-    function renderWeather() {
+    // Small weather line centred at the top, like the legend at the bottom.
+    function renderWeatherTop() {
+        var el = $('ss-weather-top');
+        if (!el) return;
         var w = window.Weather && Weather.current();
-        $('ss-clock').classList.toggle('with-weather', !!w);
-        $('ss-weather').classList.toggle('hidden', !w);
+        el.classList.toggle('hidden', !w);
         if (!w) return;
-        $('ss-wx-icon').innerHTML = w.icon;
-        $('ss-wx-temp').textContent = w.temp;
-        $('ss-wx-detail').textContent = w.detail;
+        el.innerHTML = '<span class="ss-wx-top-icon">' + w.icon + '</span><span></span>';
+        el.lastChild.textContent = w.temp + ' · ' + w.detail;
     }
 
     function musicReady() {
@@ -638,71 +651,352 @@
         var el = $('ss-legend');
         if (!el) return;
         var parts = [];
-        if (liveProviderChoices().length > 1) parts.push(legendItem('↑↓', 'Source'));
-        if (canAdvance()) parts.push(legendItem('→', 'Photo'));
-        if (musicReady()) {
-            parts.push(legendItem('←', 'Track'));
-            parts.push(legendItem('OK', Music.isPlaying() ? 'Pause' : 'Play'));
-        }
+        if (canAdvance()) parts.push(legendItem('←→', 'Photo'));
+        if (musicReady()) parts.push(legendItem('↑↓', 'Station'));
+        parts.push(legendItem('OK', 'Pause'));
         parts.push(legendItem('Back', 'Exit'));
         el.innerHTML = parts.join('');
         el.classList.toggle('hidden', !parts.length);
-    }
-
-    /*
-     * Live ↑↓ choices:
-     * - Configured providers + Mix when Settings has 2+ enabled usable chips.
-     * - Mix uses the Settings roster as-is; solo only changes liveProvider.
-     * - Photo / Rotate / Off: no source list.
-     */
-    function liveProviderChoices() {
-        if (Prefs.get().wallpaper.mode !== 'live' || !window.LiveWallpaper) return [];
-        if (LiveWallpaper.switchableProviders) return LiveWallpaper.switchableProviders();
-        return [];
-    }
-
-    function providerLabel(key) {
-        if (window.LiveWallpaper && LiveWallpaper.providerLabelFor) {
-            return LiveWallpaper.providerLabelFor(key);
+        var shortcuts = $('ss-shortcuts');
+        if (shortcuts) {
+            shortcuts.innerHTML = [
+                ['Hold →', 'Pictures'],
+                ['Hold ↑', 'Music'],
+                ['Hold OK', 'Menu']
+            ].map(function (r) {
+                return '<span class="ss-legend-key">' + r[0] + '</span><span class="ss-shortcut-label">' + r[1] + '</span>';
+            }).join('');
         }
-        return key;
     }
 
-    // Center-screen name only (no toast plate) when ↑↓ changes Live source.
-    function flashProvider(name) {
-        var el = $('ss-provider');
-        if (!el) return;
-        el.textContent = name || '';
-        el.classList.add('on');
-        clearTimeout(providerFlashTimer);
-        providerFlashTimer = setTimeout(function () {
-            el.classList.remove('on');
-        }, 1600);
+    // ---------- Pause, info, picture steps, and the quick menu (OK held)
+
+    var paused = false;
+    var pausedLeg = null;
+    var musicWasPlaying = false;
+    var enterTimer = null;
+    var HOLD_MS = 600;
+    var shownPhoto = null;
+    var menuOpen = false;
+    var menuArmed = false;
+    var menuIndex = 0;
+    var menuItems = [];
+    var menuParent = null;
+    var menuTimer = null;
+    var MENU_IDLE_MS = 20000;
+
+    function togglePause() {
+        var now = Date.now();
+        if (!paused) {
+            var layer = layers && layers[front];
+            var leg = layer && layer._leg;
+            pausedLeg = leg ? {
+                u: legU(leg, now),
+                to: leg.to,
+                flip: Math.max(0, nextPanAt - now),
+                anim: Math.max(0, leg.start + leg.dur - now)
+            } : null;
+            paused = true;
+            freezePan();
+        } else {
+            paused = false;
+            nextPhotoAt = now + photoEvery().ms;
+            if (open && !dark) resumePan();
+        }
+        UI.toast(paused ? 'Paused' : 'Playing');
+        DevLog.log('Screen saver ' + (paused ? 'paused' : 'resumed'));
     }
 
-    function cycleLiveProvider(delta) {
-        var choices = liveProviderChoices();
-        if (choices.length < 2 || advancing) return false;
-        if (!LiveWallpaper.selectLiveProvider) return false;
-        var cur = Prefs.get().wallpaper.liveProvider || choices[0];
-        var i = choices.indexOf(cur);
-        if (i < 0) i = 0;
-        var next = choices[(i + delta + choices.length * 8) % choices.length];
-        if (next === cur) return false;
-        if (!LiveWallpaper.selectLiveProvider(next)) return false;
-        flashProvider(providerLabel(next));
-        renderLegend();
-        advancing = true;
-        LiveWallpaper.takeNext().then(function (w) {
-            advancing = false;
-            if (!open) return;
-            if (w) applyPhoto(w);
-            else if (LiveWallpaper.needsSetup && LiveWallpaper.needsSetup()) {
-                UI.toast(LiveWallpaper.status());
-            }
-        }, function () {
-            advancing = false;
+    // OK: pauses or resumes the slideshow and the music together.
+    function togglePlay() {
+        if (!paused) {
+            musicWasPlaying = musicReady() && Music.isPlaying();
+            togglePause();
+            if (musicWasPlaying) Music.pause();
+        } else {
+            togglePause();
+            if (musicWasPlaying) Music.play();
+            musicWasPlaying = false;
+        }
+    }
+
+    function resumePan() {
+        var p = pausedLeg;
+        pausedLeg = null;
+        if (!p) {
+            startPan();
+            return;
+        }
+        panSign = p.to;
+        runPanLeg(p.flip, p.u, p.anim);
+    }
+
+    // Back and forward follow the list of photos already shown (Wallpaper.list), by position.
+    function stepPhoto(delta) {
+        var list = playlist();
+        var i = list.findIndex(function (x) { return x.key === shownKey; });
+        if (i < 0) return false;
+        var target = list[i + delta];
+        if (!target) return false;
+        applyPhoto(target);
+        return true;
+    }
+
+    function prevPhoto() {
+        if (!stepPhoto(-1)) UI.toast('No earlier picture');
+    }
+
+    function stepForward() {
+        if (stepPhoto(1)) return true;
+        return advancePhoto(true);
+    }
+
+    // Holding a key opens its list; a quick press does its normal action on release.
+    var holdKey = 0;
+    var holdFired = false;
+
+    function startHold(key, onHold) {
+        if (enterTimer) return;
+        holdKey = key;
+        holdFired = false;
+        enterTimer = setTimeout(function () {
+            enterTimer = null;
+            holdFired = true;
+            onHold();
+        }, HOLD_MS);
+    }
+
+    function openShortcut(items) {
+        menuItems = items;
+        menuParent = null;
+        menuIndex = 0;
+        menuOpen = true;
+        menuArmed = false;
+        renderMenu();
+    }
+
+    function shortPress(key) {
+        if (key === UI.KEY.ENTER) togglePlay();
+        else if (key === UI.KEY.UP) {
+            if (musicReady()) Music.next();
+        } else if (key === UI.KEY.RIGHT) {
+            if (canAdvance()) stepForward();
+        }
+    }
+
+    document.addEventListener('keyup', function (e) {
+        if (!open) return;
+        if (menuOpen) {
+            // The key that opened the menu is released: from now on the keys act on the menu.
+            menuArmed = true;
+            return;
+        }
+        if (!enterTimer || e.keyCode !== holdKey) return;
+        clearTimeout(enterTimer);
+        enterTimer = null;
+        if (!holdFired) shortPress(holdKey);
+    });
+
+    // Current source: a Live provider key (for example 'photos' or 'mix').
+    function sourceNow() {
+        var p = Prefs.get().wallpaper;
+        return p.mode === 'live' ? (p.liveProvider || '') : '';
+    }
+
+    function sourceLabel(key) {
+        if (key === 'mix') return 'Mix';
+        return LiveWallpaper.providerLabelFor ? LiveWallpaper.providerLabelFor(key) : key;
+    }
+
+    function setSource(key) {
+        var p = Prefs.get().wallpaper;
+        if (!window.LiveWallpaper || !LiveWallpaper.selectLiveProvider) return;
+        p.mode = 'live';
+        Prefs.save();
+        if (!LiveWallpaper.selectLiveProvider(key)) {
+            UI.toast(sourceLabel(key) + ' is not set up');
+            return;
+        }
+        advancePhoto(true);
+    }
+
+    function sourceRows() {
+        var keys = window.LiveWallpaper && LiveWallpaper.switchableProviders ? LiveWallpaper.switchableProviders() : [];
+        var now = sourceNow();
+        var rows = keys.map(function (key) {
+            return {
+                label: (key === now ? '● ' : '   ') + sourceLabel(key),
+                run: function () { setSource(key); }
+            };
         });
+        rows.push(backRow());
+        return rows;
+    }
+
+    // A list opened from a hold has nowhere to go back to, so its last row exits the menu.
+    function backRow() {
+        if (menuParent) return { label: '‹ Back', sub: true, run: backMenu };
+        return { label: 'Exit', run: closeMenu };
+    }
+
+    function openSourceMenu() {
+        menuParent = menuItems;
+        menuItems = sourceRows();
+        menuIndex = 0;
+        renderMenu();
+    }
+
+    function backMenu() {
+        if (!menuParent) {
+            closeMenu();
+            return;
+        }
+        menuItems = menuParent;
+        menuParent = null;
+        menuIndex = 0;
+        renderMenu();
+    }
+
+    function menuList() {
+        var items = [{
+            label: 'Picture source: ' + sourceLabel(sourceNow()),
+            sub: true,
+            run: openSourceMenu
+        }];
+        if (sourceNow() === 'photos') {
+            items.push({
+                label: 'Rotate: ' + (Prefs.get().wallpaper.rotateOn !== false ? 'On' : 'Off'),
+                run: function () {
+                    var p = Prefs.get().wallpaper;
+                    p.rotateOn = p.rotateOn === false;
+                    p.lastChange = Date.now();
+                    Prefs.save();
+                }
+            });
+        } else {
+            items.push({
+                label: 'Keep this picture',
+                run: function () {
+                    var w = shownPhoto;
+                    if (!w || !window.Wallpaper || !Wallpaper.pinLive) return;
+                    Wallpaper.pinLive(w, true).then(function (ok) {
+                        UI.toast(ok ? 'Kept in saved pictures' : 'Could not save this picture');
+                    });
+                }
+            });
+        }
+        if (window.Music) {
+            items.push({
+                label: 'Music source: ' + (Music.isRadio() ? 'Radio' : 'Navidrome'),
+                sub: true,
+                run: openMusicMenu
+            });
+            if (Music.isRadio()) items.push(favouriteRow());
+        }
+        return items;
+    }
+
+    function favouriteRow() {
+        return {
+            label: Music.isCurrentFavourite() ? 'Un-favorite station' : 'Favorite station',
+            run: function () {
+                var on = Music.favouriteCurrent();
+                UI.toast(on === null ? 'Not available for this station'
+                    : (on ? 'Added to favourites' : 'Removed from favourites'));
+            }
+        };
+    }
+
+    function musicRows() {
+        var rows = [];
+        var now = Music.currentRadioNav();
+        Music.radioNavOptions().forEach(function (o) {
+            rows.push({
+                label: (Music.isRadio() && o.nav === now ? '● ' : '   ') + o.label,
+                run: function () { Music.selectRadioNav(o.nav); }
+            });
+        });
+        rows.push({
+            label: (!Music.isRadio() ? '● ' : '   ') + 'Navidrome',
+            run: function () { Music.setSource('random'); }
+        });
+        rows.push(backRow());
+        return rows;
+    }
+
+    function openMusicMenu() {
+        menuParent = menuItems;
+        menuItems = musicRows();
+        menuIndex = 0;
+        renderMenu();
+    }
+
+    function renderMenu() {
+        if (!menuOpen) return;
+        // Idle time closes the menu; every menu change restarts the count.
+        clearTimeout(menuTimer);
+        menuTimer = setTimeout(closeMenu, MENU_IDLE_MS);
+        var root = $('screensaver');
+        var box = $('ss-menu');
+        if (!box && root) {
+            box = document.createElement('div');
+            box.id = 'ss-menu';
+            box.className = 'ss-menu';
+            root.appendChild(box);
+        }
+        if (!box) return;
+        box.innerHTML = '';
+        menuItems.forEach(function (it, i) {
+            var row = document.createElement('div');
+            row.className = 'ss-menu-row' + (i === menuIndex ? ' is-focus' : '');
+            row.textContent = it.label;
+            box.appendChild(row);
+        });
+        box.style.display = 'block';
+    }
+
+    function openMenu() {
+        menuItems = menuList();
+        menuIndex = 0;
+        menuOpen = true;
+        menuArmed = false;
+        renderMenu();
+    }
+
+    function closeMenu() {
+        clearTimeout(menuTimer);
+        menuTimer = null;
+        menuOpen = false;
+        menuParent = null;
+        menuArmed = false;
+        var box = $('ss-menu');
+        if (box) box.style.display = 'none';
+    }
+
+    // Up/Down move, OK runs the item, any other key (Left, Right, Back) closes the menu.
+    function menuKey(k) {
+        // Keys held down to open the menu must not act on it until they are released.
+        if (!menuArmed) return true;
+        if (k === UI.KEY.UP) menuIndex = (menuIndex - 1 + menuItems.length) % menuItems.length;
+        else if (k === UI.KEY.DOWN) menuIndex = (menuIndex + 1) % menuItems.length;
+        else if (k === UI.KEY.ENTER) {
+            // Held OK repeats while the menu is open must not run an item.
+            if (!menuArmed) return true;
+            var it = menuItems[menuIndex];
+            if (it && it.sub) {
+                it.run();
+                renderMenu();
+                return true;
+            }
+            closeMenu();
+            if (it) it.run();
+            return true;
+        } else {
+            if (menuParent) backMenu();
+            else closeMenu();
+            return true;
+        }
+        renderMenu();
         return true;
     }
 
@@ -712,6 +1006,8 @@
         if (open) return;
         returnTo = UI.current() || 'home';
         open = true;
+        paused = false;
+        pausedLeg = null;
         dark = false;
         front = 0;
         photoIndex = startIndex();
@@ -735,12 +1031,12 @@
         showChrome();
         updateClock();
         // Shows the cached reading at once, and asks for a new one only if the hour is up.
-        renderWeather();
         renderMusic();
+        renderWeatherTop();
         renderLegend();
-        if (window.Weather) Weather.refresh();
         var w = photoAt(photoIndex);
         shownKey = (w && w.key) || '';
+        shownPhoto = w || null;
         caption(w);
         showPhoto(w);
         DevLog.log('Screen saver on');
@@ -836,6 +1132,7 @@
         var list = playlist();
         var ni = list.findIndex(function (x) { return x.key === w.key; });
         photoIndex = ni < 0 ? photoIndex : ni;
+        shownPhoto = w;
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
@@ -897,7 +1194,7 @@
         if (dark) return;
         var hideAfter = chromeHide().ms;
         if (hideAfter && !chromeHidden && now - lastChromeAt >= hideAfter) hideChrome();
-        if (rotating() && now >= nextPhotoAt) {
+        if (!paused && rotating() && now >= nextPhotoAt) {
             advancePhoto();
         } else if (nextPanAt && now >= nextPanAt) {
             // A held photo has reached the far corner; send it back the other way.
@@ -924,6 +1221,11 @@
         if (!open) return;
         open = false;
         advancing = false;
+        paused = false;
+        shownPhoto = null;
+        closeMenu();
+        if (enterTimer) clearTimeout(enterTimer);
+        enterTimer = null;
         chromeHidden = false;
         dark = false;
         var keepKey = shownKey;
@@ -994,14 +1296,14 @@
     function init() {
         layers = [$('ss-photo-a'), $('ss-photo-b')];
         // A reading that lands mid-session should appear without waiting for the next photo.
-        if (window.Weather) {
-            Weather.onUpdate(function () {
-                if (open) renderWeather();
-            });
-        }
         if (window.Music) {
             Music.onUpdate(function () {
                 if (open) renderMusic();
+            });
+        }
+        if (window.Weather) {
+            Weather.onUpdate(function () {
+                if (open) renderWeatherTop();
             });
         }
         if (window.LiveWallpaper && LiveWallpaper.onChange) {
@@ -1021,31 +1323,37 @@
                     showChrome();
                     return true;
                 }
+                if (menuOpen) return menuKey(k);
                 touchChrome();
-                if (k === UI.KEY.UP && cycleLiveProvider(-1)) return true;
-                if (k === UI.KEY.DOWN && cycleLiveProvider(1)) return true;
-                if (k === UI.KEY.RIGHT && canAdvance()) {
-                    advancePhoto(true);
+                if (k === UI.KEY.UP) {
+                    startHold(k, function () { openShortcut(musicRows()); });
                     return true;
                 }
-                if (k === UI.KEY.LEFT && musicReady()) {
-                    Music.next();
+                if (k === UI.KEY.DOWN) {
+                    if (musicReady()) Music.prev();
                     return true;
                 }
-                if (k === UI.KEY.ENTER && musicReady()) {
-                    Music.toggle();
+                if (k === UI.KEY.LEFT) {
+                    if (canAdvance()) prevPhoto();
                     return true;
                 }
-                // Unused arrows / OK stay on the saver; other keys exit.
-                if (k === UI.KEY.UP || k === UI.KEY.DOWN ||
-                        k === UI.KEY.LEFT || k === UI.KEY.RIGHT ||
-                        k === UI.KEY.ENTER) {
+                if (k === UI.KEY.RIGHT) {
+                    startHold(k, function () { openShortcut(sourceRows()); });
+                    return true;
+                }
+                if (k === UI.KEY.ENTER) {
+                    startHold(k, openMenu);
                     return true;
                 }
                 close();
                 return true;
             },
             onBack: function () {
+                if (menuOpen) {
+                    if (menuParent) backMenu();
+                    else closeMenu();
+                    return true;
+                }
                 if (dark) {
                     wakeFromDark();
                     return true;

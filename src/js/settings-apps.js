@@ -88,6 +88,10 @@
         }
         if (k === KEY.LEFT || k === KEY.RIGHT) {
             if (!moving) {
+                if (k === KEY.LEFT && ed.col === 0) {
+                    UI.back();
+                    return true;
+                }
                 var col = k === KEY.LEFT ? 0 : 1;
                 if ([$('ed-home'), $('ed-other')][col].children.length) ed.col = col;
                 edRefresh();
@@ -177,8 +181,8 @@
                 }
                 return [
                     ['OK', ed.col === 0 ? 'Options' : 'Add to Home'],
-                    ['◀ ▶', 'Switch column'],
-                    ['Back', 'Settings']
+                    ['◀ ▶', ed.col === 0 ? 'Back / Add apps' : 'On Home'],
+                    SettingsCore.backPair()
                 ];
             }
         });

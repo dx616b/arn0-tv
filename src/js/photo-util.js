@@ -4,6 +4,32 @@
 (function () {
     'use strict';
 
+    // Home is fixed 1920×1080 landscape — shared gate for Use now / Live / Rotate.
+    var HOME_MIN_W = 1280;
+    var HOME_MIN_H = 720;
+
+    function allowPortrait() {
+        try {
+            return !!(Prefs.get().wallpaper && Prefs.get().wallpaper.allowPortrait);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function homeFitReason(ow, oh) {
+        if (!ow || !oh) return 'unreadable';
+        if (!allowPortrait() && oh > ow) return 'portrait';
+        if (ow < HOME_MIN_W || oh < HOME_MIN_H) return 'small';
+        return '';
+    }
+
+    function homeFitMessage(reason) {
+        if (reason === 'portrait') return 'Portrait photos are off — enable them in Background';
+        if (reason === 'small') return 'Needs at least ' + HOME_MIN_W + '\u00d7' + HOME_MIN_H + ' for Home';
+        if (reason === 'unreadable') return 'Could not read photo size';
+        return 'Could not use photo';
+    }
+
     function photoUrls(w) {
         var list = [];
         function add(u) {
@@ -66,5 +92,14 @@
         };
     }
 
-    window.PhotoUtil = { photoUrls: photoUrls, orientedSize: orientedSize, entryFields: entryFields };
+    window.PhotoUtil = {
+        HOME_MIN_W: HOME_MIN_W,
+        HOME_MIN_H: HOME_MIN_H,
+        allowPortrait: allowPortrait,
+        homeFitReason: homeFitReason,
+        homeFitMessage: homeFitMessage,
+        photoUrls: photoUrls,
+        orientedSize: orientedSize,
+        entryFields: entryFields
+    };
 })();

@@ -75,58 +75,53 @@
 
         <section id="settings" class="view page hidden">
             <header class="page-head"><h1>Settings</h1></header>
-            <ul class="settings-list"></ul>
+            <ul class="settings-list settings-hub scroll-y"></ul>
         </section>
 
-        <section id="settings-home" class="view page hidden">
-            <header class="page-head"><h1>Home screen</h1></header>
-            <ul class="settings-list"></ul>
-        </section>
-
-        <section id="settings-atmosphere" class="view page hidden">
-            <header class="page-head"><h1>Atmosphere</h1></header>
-            <ul class="settings-list"></ul>
-        </section>
-
-        <section id="settings-samsung" class="view page hidden">
-            <header class="page-head"><h1>Samsung</h1></header>
-            <ul class="settings-list"></ul>
-        </section>
-
-        <section id="bg-settings" class="view page hidden">
+        <section id="bg-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Background</h1></header>
             <div id="bg-body" class="settings-body scroll-y">
                 <div class="setting-block">
+                    <h2>Mode</h2>
                     <div id="bg-mode" class="chips"></div>
                 </div>
                 <div id="bg-interval-block" class="setting-block">
                     <h2>Change every</h2>
                     <div id="bg-interval" class="chips"></div>
                 </div>
+                <div id="bg-portrait-block" class="setting-block">
+                    <h2>Portrait photos</h2>
+                    <div id="bg-portrait" class="chips"></div>
+                    <p class="setting-note muted">Off skips tall photos on Home, Live and Rotate (better on a TV).</p>
+                </div>
                 <div id="bg-live-mix-block" class="setting-block hidden">
                     <h2>Mix</h2>
                     <div id="bg-live-mix" class="chips"></div>
-                    <p id="bg-live-mix-note" class="setting-note muted">Off: one source (browse / save). On: pick which sources Mix uses.</p>
                 </div>
                 <div id="bg-live-provider-block" class="setting-block hidden">
                     <h2>Sources</h2>
                     <div id="bg-live-provider" class="chips wrap"></div>
                     <p id="bg-live-provider-note" class="setting-note muted"></p>
                 </div>
+                <div id="bg-photos-rotate-block" class="setting-block hidden">
+                    <h2>Saved photos: rotate</h2>
+                    <div id="bg-photos-rotate" class="chips"></div>
+                </div>
                 <div id="bg-live-unsplash-block" class="setting-block hidden">
                     <h2>Unsplash</h2>
                     <div id="bg-live-unsplash-key" class="chips"></div>
-                    <p class="setting-note muted">Access Key from unsplash.com/developers. Collection ID from unsplash.com/collections/ID/… (empty = popular). Landscape photos at 1920×1080.</p>
                 </div>
                 <div id="bg-live-wallhaven-block" class="setting-block hidden">
                     <h2>Wallhaven</h2>
                     <div id="bg-live-wallhaven" class="chips wrap"></div>
-                    <p class="setting-note muted">SFW only. Exact 1920×1080 landscape. Category: General / Anime / People / All (API flags 100 / 010 / 001 / 111).</p>
                 </div>
                 <div id="bg-live-immich-block" class="setting-block hidden">
                     <h2>Immich album</h2>
                     <div id="bg-live-immich" class="chips"></div>
-                    <p class="setting-note muted">Paste the shared album link (https://host/share/KEY). Make the album a shared link in Immich first.</p>
+                </div>
+                <div id="bg-live-more-block" class="setting-block hidden">
+                    <h2>More options</h2>
+                    <div id="bg-live-more" class="chips"></div>
                 </div>
                 <div id="bg-shuffle-block" class="setting-block hidden">
                     <h2>Shuffle</h2>
@@ -136,7 +131,6 @@
                 <div id="bg-live-pool-block" class="setting-block hidden">
                     <h2>Queue size</h2>
                     <div id="bg-live-pool" class="chips"></div>
-                    <p class="setting-note muted">Photos buffered ahead per source. Bing keeps older days locally past its live archive.</p>
                 </div>
                 <div id="bg-live-status-block" class="setting-block hidden">
                     <p id="bg-live-status" class="setting-note"></p>
@@ -151,27 +145,22 @@
             </div>
         </section>
 
-        <section id="consoles" class="view page hidden">
+        <section id="consoles" class="view page settings-detail hidden">
             <header class="page-head"><h1>Consoles</h1></header>
-            <ul class="settings-list"></ul>
+            <ul class="settings-list scroll-y"></ul>
         </section>
 
-        <section id="appearance" class="view page hidden">
+        <section id="appearance" class="view page settings-detail hidden">
             <header class="page-head"><h1>Appearance</h1></header>
             <div id="appearance-body" class="settings-body compact scroll-y"></div>
         </section>
 
-        <section id="sound-settings" class="view page hidden">
+        <section id="sound-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Navigation sound</h1></header>
             <div id="sound-body" class="settings-body compact scroll-y"></div>
         </section>
 
-        <section id="advanced" class="view page hidden">
-            <header class="page-head"><h1>Advanced</h1></header>
-            <ul class="settings-list"></ul>
-        </section>
-
-        <section id="homeapps" class="view page hidden">
+        <section id="homeapps" class="view page settings-detail hidden">
             <header class="page-head">
                 <h1>Apps on Home</h1>
             </header>
@@ -185,7 +174,7 @@
             </div>
         </section>
 
-        <section id="lab" class="view page hidden">
+        <section id="lab" class="view page settings-detail hidden">
             <header class="page-head">
                 <h1>Lab</h1>
                 <div>Diagnostic actions. Output is in the panel on the right (scroll with ▲▼ when focused).</div>
@@ -194,17 +183,17 @@
             <pre id="lab-log" class="lab-log scroll-y" tabindex="-1"></pre>
         </section>
 
-        <section id="screensaver-settings" class="view page hidden">
+        <section id="screensaver-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Screen saver</h1></header>
             <div id="screensaver-body" class="settings-body compact scroll-y"></div>
         </section>
 
-        <section id="weather-settings" class="view page hidden">
+        <section id="weather-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Weather</h1></header>
             <div id="weather-body" class="settings-body compact scroll-y"></div>
         </section>
 
-        <section id="music-settings" class="view page hidden">
+        <section id="music-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Music</h1></header>
             <div id="music-body" class="settings-body compact scroll-y"></div>
         </section>
@@ -231,19 +220,14 @@
                 <div id="ss-music-artist" class="ss-music-artist marquee"></div>
             </div>
             <div id="ss-clock" class="ss-clock">
-                <div id="ss-weather" class="ss-weather hidden">
-                    <div class="ss-wx-now">
-                        <span id="ss-wx-icon" class="ss-wx-icon"></span>
-                        <span id="ss-wx-temp" class="ss-wx-temp"></span>
-                    </div>
-                    <div id="ss-wx-detail" class="ss-wx-detail"></div>
-                </div>
                 <div class="ss-clock-main">
                     <div id="ss-time" class="ss-time"></div>
                     <div id="ss-date" class="ss-date"></div>
                 </div>
             </div>
             <div id="ss-legend" class="ss-legend" aria-hidden="true"></div>
+            <div id="ss-shortcuts" class="ss-shortcuts" aria-hidden="true"></div>
+            <div id="ss-weather-top" class="ss-weather-top hidden" aria-hidden="true"></div>
             <div id="ss-provider" class="ss-provider" aria-hidden="true"></div>
             <div id="ss-dark" class="ss-dark"></div>
         </section>
@@ -258,6 +242,7 @@
         <div id="menu" class="view overlay hidden">
             <div class="menu-box">
                 <div id="menu-title"></div>
+                <div id="menu-detail" class="menu-detail hidden"></div>
                 <ul id="menu-list"></ul>
             </div>
         </div>

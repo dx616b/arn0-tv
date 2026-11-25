@@ -12,6 +12,9 @@
     var el = UI.el;
     var chip = SettingsCore.chip;
 
+    // Soft playback updates only touch Controls when the source layout is unchanged.
+    var lastLayoutSig = '';
+
     function iconChip(svg, on, item, label) {
         var c = el('div', 'chip icon-chip' + (on ? ' on' : ''));
         c.innerHTML = svg;
@@ -28,6 +31,19 @@
         volMed: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9v6h4l5 5V4L9 9H5zm11.5 3c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4z"/><path d="M14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z" opacity=".45"/></svg>',
         volHigh: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9v6h4l5 5V4L9 9H5zm11.5 3c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4z"/><path d="M14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>'
     };
+
+    function layoutSig(p, c) {
+        return [
+            p.enabled ? 1 : 0,
+            p.source || '',
+            p.playlistId || '',
+            p.radioNav || '',
+            c.baseUrl ? 1 : 0,
+            c.user ? 1 : 0,
+            c.password ? 1 : 0,
+            SettingsMusicPickers.favs().length
+        ].join('|');
+    }
 
     function navidromeBlock(p, c) {
         var wrap = el('div', 'setting-block');
@@ -66,9 +82,9 @@
         var nextBlock = el('div', 'setting-block');
         nextBlock.appendChild(el('h2', '', 'Next goes through'));
         var navChips = el('div', 'chips');
-        navChips.appendChild(chip('All channels', p.radioNav !== 'favourites' && p.radioNav !== 'list', { kind: 'radioNav', value: 'all' }));
-        navChips.appendChild(chip('Favourites', p.radioNav === 'favourites', { kind: 'radioNav', value: 'favourites' }));
-        navChips.appendChild(chip('Your list', p.radioNav === 'list', { kind: 'radioNav', value: 'list' }));
+        Music.radioNavOptions().forEach(function (o) {
+            navChips.appendChild(chip(o.label, (p.radioNav || 'all') === o.nav, { kind: 'radioNav', value: o.nav }));
+        });
         nextBlock.appendChild(navChips);
         var root = el('div', '');
         root.appendChild(wrap);
@@ -76,11 +92,48 @@
         return root;
     }
 
+    function appendTransport(body, p) {
+        var controlsBlock = el('div', 'setting-block');
+        controlsBlock.appendChild(el('h2', '', 'Controls'));
+        var controlChips = el('div', 'chips');
+        var playing = Music.isPlaying();
+        controlChips.appendChild(iconChip(ICON.play, playing, { kind: 'play' }, 'Play'));
+        controlChips.appendChild(iconChip(ICON.pause, !playing && !!Music.current(), { kind: 'pause' }, 'Pause'));
+        controlChips.appendChild(iconChip(ICON.next, false, { kind: 'next' }, 'Next'));
+        controlsBlock.appendChild(controlChips);
+        body.appendChild(controlsBlock);
+
+        var volumeBlock = el('div', 'setting-block');
+        volumeBlock.appendChild(el('h2', '', 'Volume'));
+        var volumeChips = el('div', 'chips');
+        volumeChips.appendChild(iconChip(ICON.volLow, p.volume === 'low', { kind: 'volume', value: 'low' }, 'Low'));
+        volumeChips.appendChild(iconChip(ICON.volMed, p.volume === 'med', { kind: 'volume', value: 'med' }, 'Med'));
+        volumeChips.appendChild(iconChip(ICON.volHigh, p.volume === 'high', { kind: 'volume', value: 'high' }, 'High'));
+        volumeBlock.appendChild(volumeChips);
+        body.appendChild(volumeBlock);
+    }
+
+    function updateTransportSoft(p) {
+        var body = $('music-body');
+        if (!body) return false;
+        var chips = body.querySelectorAll('.chip.icon-chip');
+        if (chips.length < 6) return false;
+        var playing = Music.isPlaying();
+        var hasTrack = !!Music.current();
+        chips[0].classList.toggle('on', playing);
+        chips[1].classList.toggle('on', !playing && hasTrack);
+        chips[3].classList.toggle('on', p.volume === 'low');
+        chips[4].classList.toggle('on', p.volume === 'med');
+        chips[5].classList.toggle('on', p.volume === 'high');
+        return true;
+    }
+
     function renderMusic() {
         var p = Prefs.get().music;
         var c = Subsonic.cfg();
         var body = $('music-body');
         body.innerHTML = '';
+        lastLayoutSig = layoutSig(p, c);
 
         var onBlock = el('div', 'setting-block');
         onBlock.appendChild(el('h2', '', 'Music'));
@@ -100,28 +153,19 @@
         body.appendChild(srcBlock);
 
         body.appendChild(onRadio ? radioBlock(p) : navidromeBlock(p, c));
-
-        var playBlock = el('div', 'setting-block');
-        var heads = el('div', 'setting-inline-heads');
-        heads.appendChild(el('h2', '', 'Controls'));
-        heads.appendChild(el('h2', '', 'Volume'));
-        playBlock.appendChild(heads);
-        var playChips = el('div', 'chips');
-        var playing = Music.isPlaying();
-        playChips.appendChild(iconChip(ICON.play, playing, { kind: 'play' }, 'Play'));
-        playChips.appendChild(iconChip(ICON.pause, !playing && !!Music.current(), { kind: 'pause' }, 'Pause'));
-        playChips.appendChild(iconChip(ICON.next, false, { kind: 'next' }, 'Next'));
-        playChips.appendChild(el('div', 'chip-gap'));
-        playChips.appendChild(iconChip(ICON.volLow, p.volume === 'low', { kind: 'volume', value: 'low' }, 'Low'));
-        playChips.appendChild(iconChip(ICON.volMed, p.volume === 'med', { kind: 'volume', value: 'med' }, 'Med'));
-        playChips.appendChild(iconChip(ICON.volHigh, p.volume === 'high', { kind: 'volume', value: 'high' }, 'High'));
-        playBlock.appendChild(playChips);
-        body.appendChild(playBlock);
+        appendTransport(body, p);
     }
 
     function render() {
-        if (UI.isVisible('music-settings')) renderMusic();
-        UI.refresh();
+        if (!UI.isVisible('music-settings')) return;
+        var p = Prefs.get().music;
+        var c = Subsonic.cfg();
+        var sig = layoutSig(p, c);
+        if (sig === lastLayoutSig && updateTransportSoft(p)) {
+            UI.refreshHints();
+            return;
+        }
+        SettingsCore.withFocusRestore($('music-body'), renderMusic);
     }
 
     function activateMusic(item) {
@@ -198,7 +242,8 @@
             UI.toast('Music: Random');
         } else if (item.kind === 'radioNav') {
             Music.setRadioNav(item.value);
-            UI.toast(item.value === 'favourites' ? 'Next: favourites' : item.value === 'list' ? 'Next: your list' : 'Next: all channels');
+            var picked = Music.radioNavOptions().filter(function (o) { return o.nav === item.value; })[0];
+            UI.toast('Next: ' + (picked ? picked.label : item.value));
         } else if (item.kind === 'enabled') {
             Music.setEnabled(item.value);
             if (!item.value) Music.pause();

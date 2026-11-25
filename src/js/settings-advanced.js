@@ -1,19 +1,50 @@
 /*
- * Settings → Advanced page (shortcuts, app list refresh, reset, Lab). Entry point is exposed on
- * window.SettingsAdvanced and wired up by settings.js.
+ * Settings → Advanced section entries (clock, look, weather, sound, refresh, reset, Lab).
+ * Wired into the flat Settings hub by settings.js.
  */
 (function () {
     'use strict';
 
+    function clockSummary() {
+        var p = Prefs.get().appearance;
+        var clock = p.clock === '12h' ? '12-hour' : '24-hour';
+        return p.showDate === false ? clock + ' · no date' : clock;
+    }
+
+    function appearanceSummary() {
+        var p = Prefs.get().appearance;
+        var font = Appearance.font(p.font);
+        var tiles = p.tiles === 'compact' ? 'Compact' : 'Comfortable';
+        return (font ? font.label : 'Manrope') + ' · ' + tiles;
+    }
+
+    function weatherSummary() {
+        if (window.Weather && Weather.summary) return Weather.summary();
+        return 'Off';
+    }
+
+    function soundSummary() {
+        var p = Prefs.get().sound;
+        if (!p.enabled) return 'Off';
+        var preset = (p.preset || 'soft');
+        preset = preset.charAt(0).toUpperCase() + preset.slice(1);
+        return 'On · ' + preset;
+    }
 
     function advancedEntries() {
         var entries = [
-            { label: 'Clock', run: SettingsCore.openClock },
-            { label: 'Weather', run: function () { UI.show('weather-settings'); } },
-            { label: 'Appearance', run: SettingsCore.openLook },
-            { label: 'Navigation sound', run: function () { UI.show('sound-settings'); } },
+            { label: 'Clock', value: clockSummary(), run: SettingsCore.openClock },
+            { label: 'Weather', value: weatherSummary(), run: function () { UI.show('weather-settings'); } },
+            { label: 'Appearance', value: appearanceSummary(), run: SettingsCore.openLook },
             {
-                label: 'Refresh app list', run: function () {
+                label: 'Navigation sound',
+                value: soundSummary(),
+                run: function () { UI.show('sound-settings'); }
+            },
+            {
+                label: 'Refresh app list',
+                kind: 'action',
+                run: function () {
                     UI.busy(Home.reloadApps()).then(function () {
                         UI.toast('App list refreshed');
                     });
@@ -22,23 +53,27 @@
         ];
         if (window.LAUNCHER_CONFIG.devLogUrl) {
             entries.push({
-                label: 'Export settings', run: function () {
+                label: 'Export settings',
+                kind: 'action',
+                run: function () {
                     DevLog.log('Settings export', Prefs.get());
                     UI.toast('Settings sent to the Mac log');
                 }
             });
         }
         entries.push({
-            label: 'Reset all settings', run: function () {
+            label: 'Reset all settings',
+            kind: 'danger',
+            run: function () {
                 UI.menu('Reset all settings?', [
+                    { label: 'Cancel', current: true },
                     {
-                        label: 'Reset', run: function () {
+                        label: 'Reset everything', run: function () {
                             Prefs.reset();
                             location.reload();
                         }
-                    },
-                    { label: 'Cancel' }
-                ]);
+                    }
+                ], { detail: 'Restores defaults. This cannot be undone.' });
             }
         });
         entries.push({ label: 'Lab', run: function () { UI.show('lab'); } });

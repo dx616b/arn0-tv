@@ -74,6 +74,11 @@
         if (place && title !== place && title.indexOf(place) !== 0) {
             sub = place + (date ? ' · ' + date : '');
         }
+        // Skip known portraits / tiny stills before they enter the Live queue (respects Portrait photos).
+        var x = immichExif(a);
+        var ew = Number(x.exifImageWidth) || Number(a.width) || 0;
+        var eh = Number(x.exifImageHeight) || Number(a.height) || 0;
+        if (ew && eh && PhotoUtil.homeFitReason(ew, eh)) return null;
         var original = base + '/original?' + query;
         var fullsize = base + '/thumbnail?size=fullsize' + q;
         var preview = base + '/thumbnail?size=preview' + q;

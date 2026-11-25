@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.7.2
+
+### Screen saver
+- Left/Right move photos; Up/Down change radio station; OK pauses picture and music
+- Hold OK opens a quick menu; hold Right opens picture sources; hold Up opens music sources
+- Quick menu: Picture source, Keep this picture, Music source, Favorite station (closes after 20 s idle)
+- Layout: top-right shortcuts, top-left music, top weather line, shorter caption; colour keys removed
+- Landscape drift overscan eased (~1.17× → ~1.10×) so pan crops less and stays sharper
+- Drift no longer animates scale (portrait uses a fixed mild crop + pan); fewer scan-line artifacts on TV
+
+### Live wallpaper / Home
+- Saved photos: Live provider using kept pictures and bundled stills; Rotate on/off under Saved photos
+- Background → Portrait photos (Yes/No, default No): when Off, Home / Live / Rotate / Use now skip portraits; under-1280×720 still rejected
+- Settings: Saved photos shows read-only thumbnails; source chips on one row
+
+### Music
+- Radio: Radio Record, SomaFM, Your list and Favourites lists; Next/Previous stay in the chosen list
+- Navidrome previous track; resume the last station on start
+- Settings radio list choice is shared with the screensaver
+
+### Settings
+- Flat Settings hub with section headers (Home screen, Atmosphere, Samsung, Advanced); OK / ▶ opens, ◀ goes back
+- Hub rows show the current value (Background mode, Music, Weather, counts, …)
+- Detail pages: clearer panels and focus, Left-at-edge goes back, scroll clearance above the hints bar
+- Background Live: Shuffle and Queue size tucked under More options; shorter helper text
+- Clear saved pins / Reset / Remove save: Cancel-first confirms with a two-line prompt
+- Apps on Home and Consoles match the same row styling
+- Appearance → Focus (Both / Scale / Ring) is Home-only; Settings / chips / pop-up menus use a fixed simple highlight
+
+### Tooling
+- Desktop preview stamps a fresh `?v=` on css/js every HTML load so Refresh always picks up edits
+
 ## 0.7.1
 
 ### Live wallpaper

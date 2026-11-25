@@ -63,8 +63,9 @@
     }
 
     function defaultMixEnabled() {
-        // Wallhaven defaults off so existing Mix rosters do not suddenly include it.
+        // Wallhaven and Saved photos default off so existing Mix rosters do not suddenly include them.
         return {
+            photos: false,
             bing: true,
             nasa: true,
             wikimedia: true,
@@ -92,6 +93,7 @@
     }
 
     function sourceConfigured(key) {
+        if (key === 'photos') return !!(window.Wallpaper && Wallpaper.savedPool && Wallpaper.savedPool().length);
         if (key === 'unsplash') return unsplashConfigured();
         if (key === 'immich') return immichConfigured();
         return freeSourceKeys().indexOf(key) >= 0;
@@ -237,6 +239,8 @@
         migrateLiveMultiSelect();
         ensureMixEnabledMap(p);
         var prev = p.liveProvider || 'bing';
+        // Saved photos is picked on its own (not a Mix roster source): keep it while it has pictures.
+        if (prev === 'photos' && sourceConfigured('photos')) return false;
         var on = enabledSourceKeys();
         if (!on.length) {
             p.mixEnabled.bing = true;

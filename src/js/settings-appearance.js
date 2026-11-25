@@ -9,9 +9,7 @@
     var el = UI.el;
     var chip = SettingsCore.chip;
 
-    // ---------- Appearance (Clock vs Look)
-
-    // Same view, two entry points: Atmosphere → Clock; Advanced → Appearance (font / names).
+    // Same view, two entry points: Advanced → Clock; Advanced → Appearance (font / names).
     var appearanceSection = 'clock';
 
     function appearanceBlocks() {
@@ -70,6 +68,10 @@
                 chips.appendChild(c);
             });
             block.appendChild(chips);
+            if (b.key === 'focus') {
+                block.appendChild(el('p', 'setting-note muted',
+                    'Home tiles only. Settings and menus keep a fixed simple highlight.'));
+            }
             body.appendChild(block);
         });
     }
@@ -79,8 +81,7 @@
         Prefs.save();
         Appearance.apply();
         Home.updateClock();
-        renderAppearance();
-        UI.refresh();
+        SettingsCore.withFocusRestore($('appearance-body'), renderAppearance);
     }
 
     SettingsCore.openClock = openClock;

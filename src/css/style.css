@@ -50,6 +50,7 @@
     --muted: rgba(244, 245, 247, 0.55);
     --faint: rgba(244, 245, 247, 0.5);
     --ring: #ffffff;
+    --accent: #3e8eff;
     --font: "Manrope", "SamsungOne", "Helvetica Neue", Arial, sans-serif;
     --edge: 120px;
 }
@@ -620,7 +621,7 @@ h1, h2 {
 }
 
 /*
- * Appearance → Focus (curated presets). Screensaver pan is separate.
+ * Appearance → Focus (Home only). Settings / pop-up menus stay fixed and simple.
  * Both = scale + ring. Scale = grow only. Ring = outline only.
  */
 .focus-ring .app.focused .tile,
@@ -759,14 +760,14 @@ h1, h2 {
 
 /* ---------- Settings ---------- */
 
-/* List hubs sit in the middle of the stage; title centered above. */
+/* List pages: title left-aligned with the list column. */
 #settings .page-head,
-#settings-home .page-head,
-#settings-atmosphere .page-head,
-#settings-samsung .page-head,
-#consoles .page-head,
-#advanced .page-head {
-    justify-content: center;
+#consoles .page-head {
+    left: 50%;
+    right: auto;
+    width: 1040px;
+    margin-left: -520px;
+    justify-content: flex-start;
 }
 
 .settings-list {
@@ -774,42 +775,118 @@ h1, h2 {
     top: 220px;
     bottom: 100px;
     left: 50%;
-    width: 960px;
-    margin: 0;
+    width: 1040px;
+    margin: 0 0 0 -520px;
     padding: 0;
     list-style: none;
-    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 
+/* Flat hub: every setting under its original group, one scroll. */
+#settings .settings-hub {
+    top: 200px;
+    bottom: 120px;
+    justify-content: flex-start;
+    padding: 8px 4px 56px;
+    box-sizing: border-box;
+}
+
+#settings .settings-hub .setting-row {
+    min-height: 76px;
+    padding: 18px 32px;
+    margin-bottom: 10px;
+    font-size: 32px;
+}
+
+#settings .settings-hub .setting-row-action {
+    font-size: 28px;
+}
+
+#settings .settings-hub .setting-value {
+    max-width: 460px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+#settings .settings-hub .setting-row-action .setting-value {
+    font-size: 22px;
+}
+
+.settings-section {
+    list-style: none;
+    margin: 26px 0 10px;
+    padding: 0 8px;
+    pointer-events: none;
+}
+
+.settings-section:first-child {
+    margin-top: 4px;
+}
+
+.settings-section-label {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(244, 245, 247, 0.72);
+}
+
 .setting-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 24px;
-    padding: 24px 36px;
-    margin-bottom: 12px;
-    border-radius: 16px;
+    min-height: 88px;
+    padding: 22px 36px;
+    margin-bottom: 14px;
+    border-radius: 18px;
     background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 2px transparent;
     font-size: 36px;
     font-weight: 600;
-    text-align: center;
+    text-align: left;
+    box-sizing: border-box;
 }
 
 .setting-label {
-    flex: none;
+    flex: 1;
+    min-width: 0;
 }
 
 .setting-row .mini {
-    margin-right: 28px;
+    margin-right: 12px;
+    flex: none;
 }
 
 .setting-value {
+    flex: none;
     font-size: 28px;
     font-weight: 500;
     color: var(--muted);
+}
+
+.setting-chevron {
+    flex: none;
+    font-size: 40px;
+    font-weight: 400;
+    color: var(--faint);
+    line-height: 1;
+}
+
+.setting-row-action {
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 30px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.setting-row-danger {
+    color: rgba(255, 170, 160, 0.9);
 }
 
 .setting-row.focused {
@@ -817,8 +894,15 @@ h1, h2 {
     color: var(--bg);
 }
 
-.setting-row.focused .setting-value {
-    color: rgba(9, 11, 16, 0.6);
+.setting-row.focused .setting-value,
+.setting-row.focused .setting-chevron {
+    color: rgba(9, 11, 16, 0.55);
+}
+
+.setting-row-action.focused,
+.setting-row-danger.focused {
+    background: var(--fg);
+    color: var(--bg);
 }
 
 .settings-body {
@@ -828,9 +912,32 @@ h1, h2 {
     right: var(--edge);
 }
 
+/* Detail pages: slightly smaller title so more of the page is usable. */
+.settings-detail .page-head {
+    top: 64px;
+}
+
+.settings-detail .page-head h1 {
+    font-size: 52px;
+    letter-spacing: -0.5px;
+}
+
+.settings-detail .settings-body {
+    top: 168px;
+    bottom: 120px;
+    padding: 8px 6px 48px;
+    box-sizing: border-box;
+}
+
+.settings-detail#consoles .settings-list,
+.settings-detail#homeapps .ed-col {
+    top: 168px;
+    bottom: 120px;
+}
+
 /* Scrolls inside its own box so the hints at the bottom stay readable; ui.js keeps focus in view. */
 .scroll-y {
-    bottom: 96px;
+    bottom: 120px;
     overflow-y: auto;
     scrollbar-width: none;
 }
@@ -840,11 +947,31 @@ h1, h2 {
 }
 
 .setting-block {
-    margin-bottom: 48px;
+    margin-bottom: 40px;
+}
+
+/* Panel rows on detail pages — clearer blocks for remote scanning. */
+.settings-detail .setting-block {
+    margin-bottom: 18px;
+    padding: 22px 28px 26px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.settings-detail .compact .setting-block {
+    margin-bottom: 14px;
+    padding: 16px 24px 20px;
+}
+
+.settings-detail .setting-block h2 {
+    margin-bottom: 14px;
+    font-size: 22px;
+    letter-spacing: 0.18em;
 }
 
 .compact .setting-block {
-    margin-bottom: 30px;
+    margin-bottom: 28px;
 }
 
 .compact .setting-block h2 {
@@ -853,53 +980,87 @@ h1, h2 {
 
 .setting-block h2,
 .ed-col h2 {
-    margin-bottom: 22px;
+    margin-bottom: 18px;
     font-size: 24px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--muted);
 }
 
+/* Status / note-only blocks stay quieter. */
+.settings-detail #bg-live-status-block {
+    background: transparent;
+    box-shadow: none;
+    padding: 4px 10px 12px;
+}
+
+.settings-detail .setting-note {
+    margin-top: 14px;
+    margin-bottom: 0;
+}
+
+.settings-detail .setting-note:first-child {
+    margin-top: 0;
+}
+
 .setting-note {
     margin: 0 0 12px;
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 500;
     color: var(--text);
     max-width: 1400px;
+    line-height: 1.35;
 }
 
 .setting-note.muted {
     color: var(--muted);
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 400;
 }
 
 .chips {
     display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 14px;
 }
 
 .chips.wrap {
     flex-wrap: wrap;
-    gap: 16px 0;
+    gap: 14px;
 }
 
 .chips.wrap .chip {
     margin-bottom: 0;
+    margin-right: 0;
+}
+
+#bg-live-provider {
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+#bg-live-provider .chip {
+    padding: 12px 20px;
+    margin-right: 0;
+    font-size: 22px;
 }
 
 .chip {
-    padding: 16px 32px;
-    margin-right: 16px;
-    border-radius: 40px;
+    padding: 15px 28px;
+    margin-right: 0;
+    border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
-    font-size: 28px;
+    box-shadow: inset 0 0 0 2px transparent;
+    font-size: 26px;
     font-weight: 600;
     color: var(--muted);
 }
 
 .chip.on {
-    background: rgba(62, 142, 255, 0.35);
+    background: rgba(62, 142, 255, 0.38);
     color: var(--fg);
+    box-shadow: inset 0 0 0 2px rgba(62, 142, 255, 0.55);
 }
 
 .chip.on::before {
@@ -907,6 +1068,11 @@ h1, h2 {
 }
 
 .chip.focused {
+    background: var(--fg);
+    color: var(--bg);
+}
+
+.chip.on.focused {
     background: var(--fg);
     color: var(--bg);
 }
@@ -920,25 +1086,14 @@ h1, h2 {
     color: var(--muted);
 }
 
-.setting-inline-heads {
-    display: flex;
-    align-items: baseline;
-    gap: 200px;
-    margin-bottom: 14px;
-}
-
-.setting-inline-heads h2 {
-    margin-bottom: 0;
-}
-
 .chip-gap {
-    width: 48px;
+    width: 36px;
     flex: none;
 }
 
 .chip.icon-chip {
-    width: 72px;
-    height: 72px;
+    width: 76px;
+    height: 76px;
     padding: 0;
     border-radius: 50%;
     display: flex;
@@ -946,8 +1101,18 @@ h1, h2 {
     justify-content: center;
 }
 
+.chip.icon-chip.on {
+    background: rgba(62, 142, 255, 0.42);
+    color: var(--fg);
+}
+
 .chip.icon-chip.on::before {
     content: none;
+}
+
+.chip.icon-chip.focused {
+    background: var(--fg);
+    color: var(--bg);
 }
 
 .chip.icon-chip svg {
@@ -998,11 +1163,11 @@ h1, h2 {
 
 .thumb.on .thumb-title::before {
     content: "✓\00a0\00a0";
-    color: #3e8eff;
+    color: var(--accent);
 }
 
 .thumb.on img {
-    box-shadow: 0 0 0 4px #3e8eff;
+    box-shadow: 0 0 0 4px var(--accent);
 }
 
 .thumb.focused img {
@@ -1015,12 +1180,19 @@ h1, h2 {
 .ed-col {
     position: absolute;
     top: 220px;
-    bottom: 110px;
+    bottom: 120px;
     width: 780px;
 }
 
 .ed-left { left: var(--edge); }
 .ed-right { left: 1020px; }
+
+.settings-detail#homeapps .ed-col h2 {
+    margin: 0 0 14px;
+    padding: 0 4px;
+    font-size: 22px;
+    letter-spacing: 0.18em;
+}
 
 .vport {
     position: absolute;
@@ -1030,6 +1202,7 @@ h1, h2 {
     right: 0;
     overflow: hidden;
     padding-top: 6px;
+    padding-bottom: 24px;
     box-sizing: border-box;
 }
 
@@ -1041,12 +1214,16 @@ h1, h2 {
 .ed-item {
     display: flex;
     align-items: center;
-    padding: 10px 18px;
-    margin-bottom: 6px;
-    border-radius: 14px;
+    min-height: 76px;
+    padding: 14px 22px;
+    margin-bottom: 10px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     font-size: 30px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--muted);
+    box-sizing: border-box;
 }
 
 .ed-item.focused {
@@ -1055,13 +1232,41 @@ h1, h2 {
 }
 
 .ed-item.moving {
-    background: #3e8eff;
+    background: var(--accent);
     color: #fff;
+    box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px rgba(62, 142, 255, 0.35);
 }
 
 .ed-move {
     margin-left: auto;
     font-size: 34px;
+}
+
+/* Consoles list matches hub/detail row language. */
+#consoles .settings-list {
+    top: 168px;
+    bottom: 120px;
+    justify-content: flex-start;
+    padding: 8px 4px 48px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+#consoles .setting-row {
+    justify-content: flex-start;
+    text-align: left;
+}
+
+#consoles .setting-row .setting-label {
+    flex: 1;
+    min-width: 0;
+}
+
+#consoles .setting-value {
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .mini {
@@ -1119,10 +1324,28 @@ h1, h2 {
 }
 
 #menu-title {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     font-size: 34px;
     font-weight: 700;
     text-align: center;
+    line-height: 1.25;
+}
+
+.menu-detail {
+    margin: 0 0 24px;
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    color: var(--muted);
+}
+
+.menu-detail.hidden {
+    display: none;
+}
+
+#menu-title.menu-title-solo {
+    margin-bottom: 20px;
 }
 
 #menu-list {
@@ -1132,10 +1355,9 @@ h1, h2 {
 }
 
 #menu-list li {
-    padding: 16px 24px;
-    margin-bottom: 6px;
-    border-radius: 12px;
+    padding: 14px 8px;
     font-size: 30px;
+    font-weight: 500;
     color: var(--muted);
     text-align: center;
     white-space: nowrap;
@@ -1143,9 +1365,10 @@ h1, h2 {
     text-overflow: ellipsis;
 }
 
+/* Selection = brighter text only. */
 #menu-list li.focused {
-    background: var(--fg);
-    color: var(--bg);
+    color: var(--fg);
+    font-weight: 700;
 }
 
 #menu-list li.checked::before {
@@ -1180,20 +1403,25 @@ h1, h2 {
 
 .lab-list {
     position: absolute;
-    top: 220px;
+    top: 168px;
+    bottom: 120px;
     left: var(--edge);
     width: 860px;
     margin: 0;
-    padding: 0;
+    padding: 0 0 48px;
     list-style: none;
+    box-sizing: border-box;
 }
 
 .lab-list li {
-    padding: 10px 24px;
-    margin-bottom: 4px;
-    border-radius: 10px;
-    font-size: 26px;
+    padding: 16px 28px;
+    margin-bottom: 10px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.045);
+    font-size: 28px;
+    font-weight: 600;
     color: var(--muted);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .lab-list li.focused {
@@ -1203,23 +1431,25 @@ h1, h2 {
 
 .lab-log {
     position: absolute;
-    top: 220px;
+    top: 168px;
+    bottom: 120px;
     left: 1040px;
     right: var(--edge);
     margin: 0;
     padding: 24px;
-    border-radius: 16px;
+    border-radius: 20px;
     background: rgba(0, 0, 0, 0.45);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
     font: 20px/1.45 Menlo, "Courier New", monospace;
     color: #cfd3da;
     white-space: pre-wrap;
     word-break: break-all;
+    box-sizing: border-box;
     /* .scroll-y: bottom + overflow so long probe output is readable */
 }
 
 .lab-log.focused {
-    outline: 2px solid rgba(220, 224, 232, 0.35);
-    outline-offset: -2px;
+    box-shadow: inset 0 0 0 2px rgba(220, 224, 232, 0.45), 0 0 0 4px rgba(255, 255, 255, 0.25);
 }
 
 /* ---------- Footer, toast ---------- */
@@ -1404,23 +1634,24 @@ html.preview, html.preview body {
 }
 
 /*
- * Laid out 320x180 larger than the screen and offset by half of that, so the photo can drift
- * 160px horizontally and 90px vertically without ever showing an edge. Panning rather than
- * zooming is deliberate: see the comment in js/screensaver.js. An <img> is used so Immich
- * originals respect EXIF orientation (CSS backgrounds do not).
+ * Laid out 192x108 larger than the screen and offset by half of that, so the photo can drift
+ * 96px horizontally and 54px vertically without showing an edge (~1.10× overscan — enough
+ * for drift, mild enough to keep landscape sharp). Panning rather than CSS zoom is deliberate:
+ * see js/screensaver.js. An <img> is used so Immich originals respect EXIF orientation.
  */
 .ss-photo {
     position: absolute;
-    top: -90px;
-    left: -160px;
-    width: 2240px;
-    height: 1260px;
+    top: -54px;
+    left: -96px;
+    width: 2112px;
+    height: 1188px;
     opacity: 0;
     overflow: hidden;
     background: #05060a;
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0);
     transition: opacity 2000ms linear;
     will-change: transform, opacity;
+    backface-visibility: hidden;
 }
 
 /* Contain (live sources): viewport-sized so the blur always covers the screen; pan only the sharp img. */
@@ -1477,8 +1708,9 @@ html.preview, html.preview body {
     object-fit: cover;
     object-position: center;
     image-orientation: from-image;
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+    backface-visibility: hidden;
 }
 
 /* Portrait: sharp photo fills stage height; pillars only on the sides. */
@@ -1492,6 +1724,31 @@ html.preview, html.preview body {
 }
 
 
+.ss-menu {
+    display: none;
+    position: absolute;
+    top: 160px;
+    right: 36px;
+    min-width: 360px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(10, 12, 18, 0.25);
+    z-index: 50;
+}
+
+.ss-menu-row {
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 26px;
+    color: rgba(255, 255, 255, 0.55);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.ss-menu-row.is-focus {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+}
+
 .ss-scrim {
     position: absolute;
     left: 0;
@@ -1504,9 +1761,9 @@ html.preview, html.preview body {
 .ss-caption {
     position: absolute;
     left: var(--edge);
-    bottom: 72px;
-    width: 640px;
-    max-width: 34vw;
+    bottom: 96px;
+    width: 42vw;
+    max-width: 42vw;
     transition: transform 1200ms ease-out, opacity 900ms linear;
 }
 
@@ -1524,22 +1781,27 @@ html.preview, html.preview body {
 #screensaver.chrome-off .ss-music,
 #screensaver.chrome-off .ss-clock,
 #screensaver.chrome-off .ss-legend,
+#screensaver.chrome-off .ss-shortcuts,
+#screensaver.chrome-off .ss-weather-top,
 #screensaver.chrome-off .ss-provider {
     opacity: 0;
     pointer-events: none;
 }
 
 .ss-title {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 600;
-    letter-spacing: 0.12em;
-    color: rgba(220, 224, 232, 0.75);
+    line-height: 1.2;
+    text-align: left;
+    color: rgba(243, 244, 246, 0.92);
 }
 
 .ss-sub {
-    margin-top: 8px;
-    font-size: 22px;
+    margin-top: 6px;
+    font-size: 28px;
     font-weight: 500;
+    line-height: 1.2;
+    text-align: left;
     color: rgba(220, 224, 232, 0.6);
 }
 
@@ -1568,7 +1830,7 @@ html.preview, html.preview body {
 .ss-music {
     position: absolute;
     left: var(--edge);
-    bottom: 190px;
+    top: 28px;
     width: 640px;
     max-width: 34vw;
     transition: transform 1200ms ease-out, opacity 900ms linear;
@@ -1589,11 +1851,52 @@ html.preview, html.preview body {
     box-sizing: border-box;
     font-size: 18px;
     font-weight: 500;
-    color: rgba(220, 224, 232, 0.55);
+    color: rgba(220, 224, 232, 0.75);
     pointer-events: none;
 }
 
 .ss-legend.hidden { display: none; }
+
+.ss-shortcuts {
+    position: absolute;
+    top: 28px;
+    right: var(--edge);
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 8px 14px;
+    font-size: 18px;
+    transition: opacity 900ms linear;
+}
+
+.ss-weather-top {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(243, 244, 246, 0.98);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+    white-space: nowrap;
+    transition: opacity 900ms linear;
+}
+
+.ss-weather-top.hidden { display: none; }
+
+.ss-weather-top .ss-wx-top-icon svg {
+    width: 22px;
+    height: 22px;
+    vertical-align: middle;
+}
+
+.ss-shortcut-label {
+    text-align: left;
+    white-space: nowrap;
+}
 
 .ss-legend-item {
     display: flex;
@@ -1666,15 +1969,10 @@ html.preview, html.preview body {
 }
 
 .ss-clock-main {
-    text-align: right;
+    text-align: center;
 }
 
 /* Only drawn when there is a reading to divide it from. */
-.ss-clock.with-weather .ss-clock-main {
-    border-left: 1px solid rgba(220, 224, 232, 0.22);
-    padding-left: 36px;
-}
-
 .ss-time {
     font-size: 72px;
     font-weight: 300;

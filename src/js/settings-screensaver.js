@@ -68,8 +68,7 @@
         Prefs.save();
         // Otherwise a countdown that began before the change could fire straight away.
         Screensaver.poke();
-        renderScreensaver();
-        UI.refresh();
+        SettingsCore.withFocusRestore($('screensaver-body'), renderScreensaver);
     }
 
     window.SettingsScreensaver = { render: renderScreensaver, activate: activateScreensaver };

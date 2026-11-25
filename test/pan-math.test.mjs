@@ -13,15 +13,15 @@ const PM = window.PanMath;
 test('landscape drift stays inside the stage and never below the fallback travel', function () {
     const d = PM.computeDrift(1600, 1200, false);
     assert.equal(d.zoom, 1);
-    assert.ok(d.coverX >= 160 && d.coverX <= 220, 'coverX ' + d.coverX);
-    assert.ok(d.coverY >= 90 && d.coverY <= 140, 'coverY ' + d.coverY);
+    assert.ok(d.coverX >= 96 && d.coverX <= 128, 'coverX ' + d.coverX);
+    assert.ok(d.coverY >= 54 && d.coverY <= 72, 'coverY ' + d.coverY);
     assert.ok(d.padX >= d.coverX && d.padY >= d.coverY);
 });
 
 test('near-16:9 landscape gets the invented overscan', function () {
     const d = PM.computeDrift(1920, 1080, false);
-    assert.equal(d.coverX, 160);
-    assert.equal(d.coverY, 90);
+    assert.equal(d.coverX, 96);
+    assert.equal(d.coverY, 54);
 });
 
 test('portrait drift zooms within 1.15-2.15 and never nudges vertically', function () {
@@ -39,15 +39,16 @@ test('missing dimensions fall back to the default drift', function () {
 
 test('landscape pose: u=-1 and u=+1 are the two corners, u=0 is centred', function () {
     const d = { coverX: 200, coverY: 100, zoom: 1 };
-    assert.equal(PM.poseTransform(d, false, -1), 'translate(-200px, -100px)');
-    assert.equal(PM.poseTransform(d, false, 1), 'translate(200px, 100px)');
-    assert.equal(PM.poseTransform(d, false, 0), 'translate(0px, 0px)');
+    assert.equal(PM.poseTransform(d, false, -1), 'translate3d(-200px,-100px,0)');
+    assert.equal(PM.poseTransform(d, false, 1), 'translate3d(200px,100px,0)');
+    assert.equal(PM.poseTransform(d, false, 0), 'translate3d(0px,0px,0)');
 });
 
-test('portrait pose: +1 is zoomed out, -1 is focus-in, no vertical offset', function () {
+test('portrait pose: fixed mild scale + horizontal translate only (no animated zoom)', function () {
     const d = { containX: 40, zoom: 1.5 };
-    assert.equal(PM.poseTransform(d, true, 1), 'translate(0px, 0) scale(1)');
-    assert.equal(PM.poseTransform(d, true, -1), 'translate(-40px, 0) scale(1.5)');
+    // Same scale at both ends — only X moves (avoids TV scan lines from animating scale).
+    assert.equal(PM.poseTransform(d, true, 1), 'translate3d(0px,0,0) scale(1.1)');
+    assert.equal(PM.poseTransform(d, true, -1), 'translate3d(-40px,0,0) scale(1.1)');
 });
 
 test('legU is linear across a leg and clamps outside it', function () {

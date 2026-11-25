@@ -38,7 +38,7 @@
                 run: function () { consoleMenu(i); }
             };
         });
-        entries.push({ label: '+ Add a console', value: '', run: addConsole });
+        entries.push({ label: '+ Add a console', kind: 'action', run: addConsole });
         return entries;
     }
 

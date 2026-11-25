@@ -23,6 +23,7 @@
             wallpaper: {
                 // Fresh install: Live Bing + shuffle (no API key). Seeds from config.local override.
                 mode: wallSeed.mode || 'live',   // 'off' | 'photo' | 'rotate' | 'live'
+                rotateOn: true,                  // Photos: timer moves through them (off = Left/Right only)
                 photo: wallSeed.photo || theme.wallpaper || 'forest',
                 liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'wallhaven' | 'unsplash' | 'immich' | 'mix'
                 liveKey: '',            // current entry in the live pool (date key)
@@ -47,6 +48,8 @@
                 random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
                 // How many remote entries to buffer per source / in the upcoming plan.
                 livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)
+                // Home / Live / Rotate: when false, skip portrait (taller than wide) photos.
+                allowPortrait: wallSeed.allowPortrait != null ? !!wallSeed.allowPortrait : false,
                 lastChange: 0
             },
             screensaver: {
@@ -82,6 +85,7 @@
                 customList: [],    // Your list: [{ id, title, url }]
                 radioNav: 'all',   // Next steps through: 'all' channels | 'favourites'
                 favourites: [],
+                songHistory: [],   // Navidrome tracks played, oldest first (Down steps back through them)
                 playlistId: musicSeed.playlistId || null,
                 playlistName: musicSeed.playlistName || null
             },
@@ -115,6 +119,12 @@
             if (saved) {
                 merge(prefs.sound, saved.sound);
                 merge(prefs.wallpaper, saved.wallpaper);
+                // Rotate is now a setting on Saved photos (Live), not its own mode.
+                if (prefs.wallpaper.mode === 'rotate') {
+                    prefs.wallpaper.mode = 'live';
+                    prefs.wallpaper.liveProvider = 'photos';
+                    prefs.wallpaper.rotateOn = true;
+                }
                 // mixEnabled is a map; fill any keys missing from older saves (keep def for new keys).
                 (function () {
                     var def = {

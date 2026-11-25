@@ -135,7 +135,29 @@
 
     // Take one from the list as soon as anything is ready; top up the queue in the background.
     // allowReuse=false for plan fill (stop when the unique pool is exhausted).
+    // Saved photos: the next kept picture straight from the saved list (all on the device).
+    // No queue and no search, so it never reports "empty" while pictures are saved.
+    function fetchPhotoFromPool(allowReuse) {
+        var ready = (window.Wallpaper && Wallpaper.hydratePins) ? Wallpaper.hydratePins() : Promise.resolve();
+        return Promise.resolve(ready).then(function () {
+            var pool = (window.Wallpaper && Wallpaper.savedPool) ? Wallpaper.savedPool() : [];
+            if (!pool.length) throw new Error('no saved photos');
+            var at = (LiveState.stream.photosIndex || 0) % pool.length;
+            var order = pool.slice(at).concat(pool.slice(0, at));
+            var pick = order.filter(function (w) {
+                return !LiveState.stream.plan.some(function (x) { return x.key === w.key; });
+            })[0] || (allowReuse ? order[0] : null);
+            if (!pick) throw new Error('all saved photos planned');
+            LiveState.stream.photosIndex = (pool.indexOf(pick) + 1) % pool.length;
+            var entry = {};
+            Object.keys(pick).forEach(function (k) { entry[k] = pick[k]; });
+            entry.source = 'photos';
+            return entry;
+        });
+    }
+
     function fetchOne(name, allowReuse) {
+        if (name === 'photos') return fetchPhotoFromPool(!!allowReuse);
         return waitForFresh(name, 1, !!allowReuse).then(function () {
             var entry = takeFromQueue(name, !!allowReuse);
             if (!entry) throw new Error('empty ' + name);
@@ -217,7 +239,10 @@
                 st.immichIndex = 0;
                 st.immichBatch = null;
             }
-            return Promise.resolve({ entries: [immichEntry(a, st.immichAlbumOrigin, st.immichAlbumQuery, st.immichAlbumName)] });
+            var entry = immichEntry(a, st.immichAlbumOrigin, st.immichAlbumQuery, st.immichAlbumName);
+            // Portrait / tiny (known EXIF) — advance and try the next asset.
+            if (!entry) return fetchImmichNext(tries);
+            return Promise.resolve({ entries: [entry] });
         }
         return ensureImmichAlbum().then(function (album) {
             var pageNum = st.immichPage || 1;
@@ -256,6 +281,7 @@
     // Keep the queue topped up. `limit` caps how far to fill (picker uses pickBatch);
     // Live rotation omits it and fills to effectiveAhead() (Mix boots small).
     function fillSourceQueue(name, limit) {
+        if (name === 'photos') return Promise.resolve();
         var q = sourceQueue(name);
         var cap = typeof limit === 'number' && limit > 0 ? limit : effectiveAhead();
         if (name === 'bing') cap = Math.min(cap, BING_WINDOW);

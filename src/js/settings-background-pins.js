@@ -91,13 +91,22 @@
     }
 
     function useLiveNow(entry) {
-        if (!Wallpaper.useTemporary || !Wallpaper.useTemporary(entry)) {
+        if (!Wallpaper.useTemporary) {
             UI.toast('Could not use photo');
             return;
         }
-        bgState.keepLivePicker = true;
-        UI.toast('Using now (not saved)');
-        afterPinChange(entry.key);
+        UI.busy(Wallpaper.useTemporary(entry)).then(function (fit) {
+            if (!fit || !fit.ok) {
+                UI.toast((Wallpaper.homeFitMessage && Wallpaper.homeFitMessage(fit && fit.reason)) ||
+                    'Could not use photo');
+                return;
+            }
+            bgState.keepLivePicker = true;
+            UI.toast('Using now (not saved)');
+            afterPinChange(entry.key);
+        }, function () {
+            UI.toast('Could not use photo');
+        });
     }
 
     function saveLivePermanent(entry) {
@@ -108,8 +117,11 @@
                 ? ('Saved permanently' + (sum ? ' · ' + sum : ''))
                 : 'Saved (online only)');
             afterPinChange(entry.key);
-        }, function () {
-            UI.toast('Could not save');
+        }, function (err) {
+            UI.toast((err && err.homeFit && Wallpaper.homeFitMessage &&
+                Wallpaper.homeFitMessage(err.homeFit.reason)) ||
+                (err && err.message) ||
+                'Could not save');
         });
     }
 
@@ -124,7 +136,14 @@
                     label: 'Use', run: function () { usePhotoKey(entry.key); }
                 },
                 {
-                    label: 'Remove save', run: function () { removeOnePin(entry.key); }
+                    label: 'Remove save', run: function () {
+                        UI.menu('Remove this saved pin?', [
+                            { label: 'Cancel', current: true },
+                            {
+                                label: 'Remove', run: function () { removeOnePin(entry.key); }
+                            }
+                        ], { detail: 'It will be deleted from Saved photos.' });
+                    }
                 },
                 { label: 'Cancel' }
             ]);
@@ -148,9 +167,10 @@
             return;
         }
         var size = pinStorageLabel();
-        UI.menu(size ? 'Clear saved pins (' + size + ')?' : 'Clear saved pins?', [
+        UI.menu('Clear all saved pins?', [
+            { label: 'Cancel', current: true },
             {
-                label: 'Clear', run: function () {
+                label: 'Clear pins', run: function () {
                     UI.busy(Wallpaper.clearPins()).then(function () {
                         var p = Prefs.get().wallpaper;
                         var visible = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
@@ -166,14 +186,22 @@
                         // Atmosphere list label + Background storage note both bake size at render.
                         if (typeof SettingsCore.renderAtmosphere === 'function') SettingsCore.renderAtmosphere();
                         if ($('bg-settings') && !$('bg-settings').classList.contains('hidden')) {
-                            renderBackground();
+                            if (SettingsBackground.redraw) SettingsBackground.redraw();
+                            else {
+                                renderBackground();
+                                UI.refresh();
+                            }
+                        } else {
+                            UI.refresh();
                         }
-                        UI.refresh();
                     });
                 }
-            },
-            { label: 'Cancel' }
-        ]);
+            }
+        ], {
+            detail: size
+                ? 'Deletes every permanently saved photo (' + size + ').'
+                : 'Deletes every permanently saved photo.'
+        });
     }
 
     function focusBgThumb(key) {

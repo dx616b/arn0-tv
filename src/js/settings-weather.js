@@ -19,8 +19,11 @@
         p.label = resolved.label;
         Prefs.save();
         Weather.applySettings();
-        renderWeather();
-        UI.refresh();
+        SettingsCore.withFocusRestore($('weather-body'), renderWeather);
+    }
+
+    function redrawWeather() {
+        SettingsCore.withFocusRestore($('weather-body'), renderWeather);
     }
 
     function renderWeather() {
@@ -56,7 +59,7 @@
         body.appendChild(unitBlock);
 
         var note = el('p', 'setting-note muted',
-            'Shown on Home and the screen saver. Automatic uses approximate IP location (Open-Meteo).');
+            'Shown on Home and the screen saver.');
         body.appendChild(note);
     }
 
@@ -112,13 +115,11 @@
                     if (err || !loc) {
                         UI.toast('Could not find location');
                         DevLog.log('Weather detect failed: ' + (err || 'unknown'));
-                        renderWeather();
-                        UI.refresh();
+                        redrawWeather();
                         return;
                     }
                     Weather.applyDetected(loc);
-                    renderWeather();
-                    UI.refresh();
+                    redrawWeather();
                     UI.toast('Weather: ' + Weather.summary());
                 });
                 return;
@@ -135,8 +136,7 @@
         }
         Prefs.save();
         Weather.applySettings();
-        renderWeather();
-        UI.refresh();
+        redrawWeather();
     }
 
 

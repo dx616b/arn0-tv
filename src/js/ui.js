@@ -20,9 +20,8 @@
 
     var KEY = {
         LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 10009,
-        RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406,
-        // Desktop preview equivalents: Esc/Backspace = Back, R/G/Y/B = colour keys
-        ESC: 27, BACKSPACE: 8, R: 82, G: 71, Y: 89, B: 66
+        // Desktop preview equivalent: Esc/Backspace = Back
+        ESC: 27, BACKSPACE: 8
     };
 
     var views = {};
@@ -186,12 +185,32 @@
         var scroller = item.closest && item.closest('.scroll-y');
         if (scroller) {
             // Prefer the whole setting block so the h2 is not clipped above On/Off chips.
-            var target = (item.closest && item.closest('.setting-block')) || item;
-            var r = target.getBoundingClientRect();
+            // A block taller than the view (a long photo grid) scrolls to the focused item instead.
             var p = scroller.getBoundingClientRect();
-            var pad = 28;
-            if (r.bottom > p.bottom - pad) scroller.scrollTop += r.bottom - (p.bottom - pad);
-            else if (r.top < p.top + pad) scroller.scrollTop -= (p.top + pad) - r.top;
+            var block = item.closest && item.closest('.setting-block');
+            var target = (block && block.getBoundingClientRect().height <= p.height) ? block : item;
+            var r = target.getBoundingClientRect();
+            // Room for focus rings + sticky section titles; keep clear of the hints bar.
+            var padTop = 64;
+            var padBottom = 56;
+            if (r.bottom > p.bottom - padBottom) scroller.scrollTop += r.bottom - (p.bottom - padBottom);
+            else if (r.top < p.top + padTop) scroller.scrollTop -= (p.top + padTop) - r.top;
+            // Tall blocks: if the section heading scrolled off above, pull it back when possible.
+            if (block && target === item) {
+                var head = block.querySelector('h2');
+                if (head) {
+                    p = scroller.getBoundingClientRect();
+                    var hr = head.getBoundingClientRect();
+                    if (hr.top < p.top + 8) {
+                        scroller.scrollTop -= (p.top + 8) - hr.top;
+                        r = item.getBoundingClientRect();
+                        p = scroller.getBoundingClientRect();
+                        if (r.bottom > p.bottom - padBottom) {
+                            scroller.scrollTop += r.bottom - (p.bottom - padBottom);
+                        }
+                    }
+                }
+            }
             return;
         }
         var track = item.parentNode;
@@ -217,7 +236,6 @@
     }
 
     var keyHook = null;   // e.g. HDMI shown inside the launcher swallows keys
-    var colourKey = null; // global shortcuts
 
     function onKey(e) {
         var k = e.keyCode;
@@ -242,8 +260,6 @@
                 if (cur && cur._item && def.activate) def.activate(cur._item, cur);
                 break;
             case KEY.BACK: case KEY.ESC: case KEY.BACKSPACE: back(); break;
-            default:
-                if (!(colourKey && colourKey(k, current))) return;
         }
         e.preventDefault();
     }
@@ -322,10 +338,12 @@
     // options: [{ label, run, checked }]
     // opts.onBack: what Back does from this menu, when it should return to a menu that was closed
     // to open this one (instead of the screen underneath).
+    // opts.detail: second prompt row under the title (muted supporting text).
     var menuBack = null;
 
     function menu(title, options, opts) {
-        menuBack = (opts && opts.onBack) || null;
+        opts = opts || {};
+        menuBack = opts.onBack || null;
         menuOpts = options || [];
         menuFocus = 0;
         for (var i = 0; i < menuOpts.length; i++) {
@@ -336,7 +354,15 @@
         }
         var maxStart = Math.max(0, menuOpts.length - MENU_PAGE);
         menuStart = clamp(menuFocus - Math.floor((MENU_PAGE - 1) / 2), 0, maxStart);
-        $('menu-title').textContent = title;
+        var titleEl = $('menu-title');
+        var detailEl = $('menu-detail');
+        titleEl.textContent = title;
+        if (detailEl) {
+            var detail = opts.detail || '';
+            detailEl.textContent = detail;
+            detailEl.classList.toggle('hidden', !detail);
+            titleEl.classList.toggle('menu-title-solo', !detail);
+        }
         renderMenuList();
         show('menu');
         if (menuOpts[menuFocus] && menuOpts[menuFocus].focus) menuOpts[menuFocus].focus();
@@ -432,9 +458,14 @@
         menu: menu,
         init: init,
         current: function () { return current; },
+        from: function () { return views[current] && views[current].from; },
+        // True when focus is on the first item of its row (for ◀ = Back on detail pages).
+        atRowStart: function () {
+            var f = focus[current];
+            return !f || f.c === 0;
+        },
         isVisible: function (name) { return current === name; },
         refreshMenu: refreshMenu,
         setKeyHook: function (fn) { keyHook = fn; },
-        setColourKey: function (fn) { colourKey = fn; }
     };
 })();
