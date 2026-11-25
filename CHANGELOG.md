@@ -12,6 +12,11 @@
 ### Screen saver
 - Chrome stays in its corner/edge slots; caption and music lines centre under each other without drifting from the edge inset
 - Top weather line wider so longer place names are less often clipped
+- Quick menu Music source matches Settings (Radio lists, Navidrome Random / Playlist); picking a radio list switches off Navidrome
+- Picture source: Photos is the local pool (ex–Saved photos); Rotate defaults Off; Right toggles Rotate On/Off
+
+### Live wallpaper / Settings
+- Provider label “Photos”; rotate defaults Off (On advances the local pool)
 
 ## 0.7.3
 

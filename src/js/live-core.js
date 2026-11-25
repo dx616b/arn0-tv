@@ -70,7 +70,7 @@
         { key: 'wallhaven', label: 'Wallhaven', needsKey: false },
         { key: 'unsplash', label: 'Unsplash', needsKey: true },
         { key: 'immich', label: 'Immich album', needsKey: true },
-        { key: 'photos', label: 'Saved photos', needsKey: false },
+        { key: 'photos', label: 'Photos', needsKey: false },
         { key: 'mix', label: 'Mix', needsKey: false }
     ];
 

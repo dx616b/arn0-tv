@@ -155,7 +155,7 @@
             var rotateChips = $('bg-photos-rotate');
             if (rotateChips) {
                 rotateChips.innerHTML = '';
-                var rotateOn = p.rotateOn !== false;
+                var rotateOn = p.rotateOn === true;
                 [[true, 'On'], [false, 'Off']].forEach(function (o) {
                     rotateChips.appendChild(chip(o[1], rotateOn === o[0], { kind: 'photosRotate', value: o[0] }));
                 });
@@ -290,7 +290,7 @@
                 shown.className = 'chip disabled';
                 shown.textContent = count + ' photos';
                 poolChips.appendChild(shown);
-                if (poolTitle) poolTitle.textContent = 'Saved photos';
+                if (poolTitle) poolTitle.textContent = 'Photos';
             } else {
             var pools = (window.LiveWallpaper && LiveWallpaper.LIVE_POOLS) || {
                 small: { label: '8' },
@@ -349,7 +349,7 @@
 
         if (showLiveThumbs) {
             if (photosTitle) {
-                photosTitle.textContent = prov === 'photos' ? 'Saved photos'
+                photosTitle.textContent = prov === 'photos' ? 'Photos'
                     : (pinSum ? 'Save (' + pinSum + ')' : 'Save (up to ' + pinMax + ')');
             }
             if (storageEl) {

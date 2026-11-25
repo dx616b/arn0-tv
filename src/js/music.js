@@ -1118,6 +1118,8 @@
     function playNavItem(item) {
         if (item.station) {
             var p = prefs();
+            // Same as Settings → Radio: leave Navidrome / playlist when a radio list is chosen.
+            p.source = 'radio';
             p.radioId = item.station.id;
             p.enabled = true;
             p.playing = true;
@@ -1222,9 +1224,16 @@
         return prefs().radioNav || 'all';
     }
 
-    // Sets the list Next and Previous use, and starts its first entry.
+    // Sets the list Next and Previous use, switches Music to Radio (shared with Settings), and
+    // starts the first entry of that list.
     function selectRadioNav(nav) {
         setRadioNav(nav);
+        var p = prefs();
+        if (p.source !== 'radio') {
+            p.source = 'radio';
+            Prefs.save();
+            notify();
+        }
         var list = navItems();
         if (!list.length) return false;
         playNavItem(list[0]);
