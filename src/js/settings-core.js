@@ -131,7 +131,12 @@
                 var items = focusableListItems(list);
                 return twoColumn ? columnRows(items) : items.map(function (li) { return [li]; });
             },
-            onShow: render,
+            onShow: function (opts) {
+                if ((!opts || !opts.back) && list && list.classList.contains('scroll-y')) {
+                    list.scrollTop = 0;
+                }
+                render();
+            },
             activate: function (item) { item.run(); },
             // Single-column lists: ▶ opens, ◀ goes back (chip pages still use Left/Right to move).
             onKey: twoColumn ? undefined : function (k) {
@@ -210,7 +215,10 @@
         UI.register(name, {
             el: opts.el,
             rows: function () { return chipRows(body); },
-            onShow: opts.onShow,
+            onShow: function (showOpts) {
+                if ((!showOpts || !showOpts.back) && body) body.scrollTop = 0;
+                if (opts.onShow) opts.onShow(showOpts);
+            },
             activate: opts.activate,
             onKey: chipDetailOnKey,
             onFocus: opts.onFocus || function () { UI.refreshHints(); },
@@ -223,7 +231,9 @@
         photosKeys: {},
         liveRefreshTimer: null,
         keepLivePicker: false,
-        softSig: ''
+        softSig: '',
+        // null = auto (open when non-default shuffle/queue); boolean after user toggles.
+        liveMore: null
     };
 
     window.SettingsCore = {

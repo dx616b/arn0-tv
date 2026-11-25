@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Settings
+- Flat Settings hub with section headers (Home screen, Atmosphere, Samsung, Advanced); OK / ▶ opens, ◀ goes back
+- Hub rows show the current value (Background mode, Music, Weather, counts, …)
+- Detail pages: clearer panels and focus, Left-at-edge goes back, scroll clearance above the hints bar
+- Background Live: Shuffle and Queue size tucked under More options; shorter helper text
+- Clear saved pins / Reset / Remove save: Cancel-first confirms with a two-line prompt
+- Apps on Home and Consoles match the same row styling
+
 ## 0.7.1
 
 ### Live wallpaper

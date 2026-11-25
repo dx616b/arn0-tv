@@ -167,10 +167,8 @@
                 });
             var provNote = $('bg-live-provider-note');
             if (provNote) {
-                provNote.classList.toggle('hidden', !browseLive);
-                provNote.textContent = mixOn
-                    ? 'Tap to include in Mix. At least one source must stay on.'
-                    : 'Tap one source to browse and use. Mix roster is kept for when Mix is On.';
+                provNote.classList.toggle('hidden', !browseLive || !mixOn);
+                provNote.textContent = mixOn ? 'At least one source must stay on.' : '';
             }
         }
 
@@ -229,9 +227,26 @@
             ));
         }
 
+        var moreWanted = browseLive && (showShuffleBlock(p) || prov !== 'photos');
+        var moreOpen = bgState.liveMore;
+        if (moreOpen == null) {
+            moreOpen = !!(p.random || (p.livePool && p.livePool !== 'small' && p.livePool !== 'normal'));
+        }
+        var liveMoreBlock = $('bg-live-more-block');
+        if (liveMoreBlock) {
+            liveMoreBlock.classList.toggle('hidden', !moreWanted);
+            var moreChips = $('bg-live-more');
+            if (moreChips) {
+                moreChips.innerHTML = '';
+                [[false, 'Off'], [true, 'On']].forEach(function (o) {
+                    moreChips.appendChild(chip(o[1], moreOpen === o[0], { kind: 'liveMore', value: o[0] }));
+                });
+            }
+        }
+
         var shuffleBlock = $('bg-shuffle-block');
         if (shuffleBlock) {
-            var showShuffle = showShuffleBlock(p);
+            var showShuffle = moreWanted && moreOpen && showShuffleBlock(p);
             shuffleBlock.classList.toggle('hidden', !showShuffle);
             if (showShuffle) {
                 var shuffleChips = $('bg-shuffle');
@@ -240,7 +255,10 @@
                     shuffleChips.appendChild(chip(o[1], !!p.random === o[0], { kind: 'random', value: o[0] }));
                 });
                 var shuffleNote = $('bg-shuffle-note');
-                if (shuffleNote) shuffleNote.textContent = shuffleNoteFor(p);
+                if (shuffleNote) {
+                    shuffleNote.textContent = shuffleNoteFor(p);
+                    shuffleNote.classList.toggle('hidden', !shuffleNote.textContent);
+                }
             }
         }
 
@@ -248,7 +266,7 @@
         if (poolBlock) {
             // Solo Bing: 8 stays selectable; 20/40 stay visible but locked (Bing window ~8).
             var bingSolo = browseLive && prov === 'bing';
-            poolBlock.classList.toggle('hidden', !browseLive);
+            poolBlock.classList.toggle('hidden', !(moreWanted && moreOpen && browseLive));
             var poolChips = $('bg-live-pool');
             poolChips.innerHTML = '';
             var poolTitle = poolBlock.querySelector('h2');
@@ -322,12 +340,11 @@
                     : (pinSum ? 'Save (' + pinSum + ')' : 'Save (up to ' + pinMax + ')');
             }
             if (storageEl) {
-                var liveNote = (pinCount
-                    ? 'Saved ' + pinSum + '. '
-                    : 'Up to ' + pinMax + ' saved locally. ') +
-                    'OK → Use now (no save) or Save permanently.';
+                var liveNote = pinCount
+                    ? (pinSum + ' saved · OK for Use now / Save')
+                    : ('Up to ' + pinMax + ' · OK for Use now / Save');
                 if (bgState.keepLivePicker && p.mode === 'photo') {
-                    liveNote = 'Home is Photo (frozen). ' + liveNote;
+                    liveNote = 'Photo frozen on Home · ' + liveNote;
                 }
                 storageEl.textContent = liveNote;
                 storageEl.classList.remove('hidden');
@@ -364,9 +381,8 @@
             if (photosTitle) photosTitle.textContent = 'Photo';
             if (storageEl) {
                 var hiddenN = Wallpaper.hiddenBundledCount ? Wallpaper.hiddenBundledCount() : 0;
-                var note = 'OK selects. OK again on the current photo for options.';
-                if (pinCount) note = 'Saved pins ' + pinSum + ' (local). ' + note;
-                if (hiddenN) note += ' ' + hiddenN + ' shipped hidden (Atmosphere → Restore).';
+                var note = pinCount ? (pinSum + ' saved · OK selects') : 'OK selects · OK again for options';
+                if (hiddenN) note += ' · ' + hiddenN + ' hidden';
                 storageEl.textContent = note;
                 storageEl.classList.remove('hidden');
             }
@@ -470,6 +486,11 @@
             }, function () {
                 redrawBackground();
             });
+            return;
+        }
+        if (item.kind === 'liveMore') {
+            bgState.liveMore = !!item.value;
+            redrawBackground();
             return;
         }
         if (item.kind === 'mode') {
