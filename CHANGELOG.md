@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.7.4
+
+### Home
+- Header uses one plate with equal clock / weather / music zones across three consoles
+- Gear focus: white icon with outer ring (no scale); five apps span the same width as three consoles
+- Music title/artist keep scrolling while play/next stay focused (no restart when moving between them)
+
+### Screen saver
+- Chrome stays in its corner/edge slots; caption and music lines centre under each other without drifting from the edge inset
+- Top weather line wider so longer place names are less often clipped
+
 ## 0.7.3
 
 ### Live wallpaper / Screen saver
