@@ -104,10 +104,10 @@ html, body {
     display: block;
 }
 
-/* Portrait: whole photo visible (contain), blurred copy fills the sides behind it. */
+/* Portrait on Home: cover crop (full-bleed, slight upward bias). No blur pillars — matches a TV. */
 .bg-photo.portrait {
-    object-fit: contain;
-    object-position: center;
+    object-fit: cover;
+    object-position: center 25%;
 }
 
 .bg-photo-blur {

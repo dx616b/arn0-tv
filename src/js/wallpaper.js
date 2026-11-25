@@ -625,8 +625,9 @@
             if (t !== token) return;
             var mode = Prefs.get().wallpaper.mode;
             var reason = homeFitReason(ow, oh);
-            // Live / Rotate: skip unfit shots automatically (same gate as Use now).
-            if (reason && (mode === 'live' || mode === 'rotate')) {
+            // Live / Rotate: auto-skip soft/small stills. Portraits stay — Home cover-crops them
+            // so exiting the screensaver on a tall shot does not jump to another landscape.
+            if (reason && reason !== 'portrait' && (mode === 'live' || mode === 'rotate')) {
                 if (w && w.key) unfitHomeKeys[w.key] = true;
                 DevLog.log('Home skipped (' + reason + '): ' + ((w && w.key) || url));
                 if (mode === 'live' && window.LiveHistory) LiveHistory.markFailed(w);
@@ -639,24 +640,14 @@
             if (url === lastHomeUrl && photo && photo.classList.contains('on')) return;
             lastHomeUrl = url;
             bg().style.backgroundImage = 'none';
-            // Portrait (after EXIF): cover with upward bias — no tiles/blur on Home.
-            // (Only reached in Photo mode, where the user already chose this still.)
+            // Portrait (after EXIF): full-bleed cover crop, no side blur (screensaver keeps pillars).
             var portrait = !!(ow && oh && oh > ow);
             if (photo) {
                 photo.src = url;
                 photo.classList.add('on');
                 photo.classList.toggle('portrait', portrait);
             }
-            if (portrait && blurEl && Prefs.get().screensaver.blur !== false) {
-                blurEl.onerror = function () {
-                    blurEl.onerror = null;
-                    if (blurEl.getAttribute('src') !== url) blurEl.src = url;
-                };
-                blurEl.src = w.thumb || url;
-                blurEl.classList.add('on');
-            } else {
-                clearBlur(blurEl);
-            }
+            clearBlur(blurEl);
             setScrim(!!w.remote);
         }
         function tryUrl() {

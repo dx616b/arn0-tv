@@ -44,7 +44,7 @@
     /*
      * naturalWidth/Height ignore EXIF rotation; Wikimedia (and many phone JPEGs) store a
      * landscape buffer that displays as portrait with image-orientation: from-image. Measure
-     * a hidden oriented <img> so contain+blur matches what the viewer actually sees.
+     * a hidden oriented <img> so Home cover-crop / screensaver pillars match what is seen.
      */
     function orientedSize(url, fallback, done) {
         var probe = document.createElement('img');
