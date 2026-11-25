@@ -1132,6 +1132,8 @@
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
+        // Show description/chrome again on every picture change (idle fade had hidden them).
+        if (!dark) showChrome();
         // After the crossfade — do not compete with the current decode on this SoC.
         setTimeout(function () {
             if (open && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
@@ -1142,7 +1144,10 @@
     function refreshCaptionIfShown() {
         if (!open || !shownKey) return;
         var w = Wallpaper.find(shownKey);
-        if (w) caption(w);
+        if (!w) return;
+        caption(w);
+        // Polished description arrived — make sure chrome is up so it can be read.
+        if (!dark) showChrome();
     }
 
     // Timer and remote Right both land here so the interval resets after a manual skip.
