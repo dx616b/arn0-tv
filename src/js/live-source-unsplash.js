@@ -77,8 +77,8 @@
             'w=' + DISPLAY_W +
             '&h=' + DISPLAY_H +
             '&fit=max&q=85&auto=format';
+        // Full title — screensaver marquees long lines (no ellipsis).
         var title = img.alt_description || img.description || 'Unsplash';
-        if (title.length > 48) title = title.slice(0, 45) + '…';
         var credit = (img.user && img.user.name) ? (img.user.name + ' on Unsplash') : 'Unsplash';
         return normalize({
             key: String(img.id || title),
