@@ -639,6 +639,17 @@
             },
             // Home is the root: Back does nothing.
             onBack: function () { return true; },
+            // ▲ hint is Settings: from apps/consoles Up still moves to the top row; on the top
+            // row (gear / music) Up opens Settings instead of doing nothing at the edge.
+            onKey: function (k) {
+                if (k !== KEY.UP) return false;
+                var el = document.querySelector('#home .focused');
+                if (el === $('gear') || el === $('music-btn-play') || el === $('music-btn-next')) {
+                    UI.show('settings');
+                    return true;
+                }
+                return false;
+            },
             onFocus: function (el) {
                 if (window.Music) {
                     if (el === $('music-btn-play') || el === $('music-btn-next')) Music.showFull();
