@@ -1758,12 +1758,16 @@ html.preview, html.preview body {
     background: linear-gradient(180deg, rgba(3, 4, 7, 0), rgba(3, 4, 7, 0.55));
 }
 
+/* Bottom-left: leave clear air for the bottom-right clock; clip marquee inside the box. */
 .ss-caption {
     position: absolute;
     left: var(--edge);
     bottom: 96px;
-    width: 42vw;
-    max-width: 42vw;
+    /* ~560px reserved for clock + gap; never reach center legend. */
+    width: min(720px, calc(100% - var(--edge) - 560px));
+    max-width: min(720px, calc(100% - var(--edge) - 560px));
+    overflow: hidden;
+    box-sizing: border-box;
     transition: transform 1200ms ease-out, opacity 900ms linear;
 }
 
@@ -1791,18 +1795,25 @@ html.preview, html.preview body {
 .ss-title {
     font-size: 28px;
     font-weight: 600;
-    line-height: 1.2;
+    line-height: 1.25;
     text-align: left;
     color: rgba(243, 244, 246, 0.92);
+    max-width: 100%;
 }
 
 .ss-sub {
     margin-top: 6px;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 500;
-    line-height: 1.2;
+    line-height: 1.25;
     text-align: left;
     color: rgba(220, 224, 232, 0.6);
+    max-width: 100%;
+}
+
+/* Screensaver: scroll long lines; clip when idle — never paint … over the clock. */
+#screensaver .marquee {
+    text-overflow: clip;
 }
 
 /* Dark text where the photo is bright behind the caption; chosen in js/screensaver.js. */
@@ -1826,13 +1837,15 @@ html.preview, html.preview body {
     color: #0b0d12;
 }
 
-/* Now-playing, above the photo caption — same fixed-width slot as caption. */
+/* Top-left music: stay clear of centred weather and top-right shortcuts. */
 .ss-music {
     position: absolute;
     left: var(--edge);
     top: 28px;
-    width: 640px;
-    max-width: 34vw;
+    width: min(560px, 30vw);
+    max-width: min(560px, 30vw);
+    overflow: hidden;
+    box-sizing: border-box;
     transition: transform 1200ms ease-out, opacity 900ms linear;
 }
 
@@ -1877,11 +1890,15 @@ html.preview, html.preview body {
     display: flex;
     align-items: center;
     gap: 10px;
+    max-width: min(520px, 28vw);
+    overflow: hidden;
+    box-sizing: border-box;
     font-size: 18px;
     font-weight: 600;
     color: rgba(243, 244, 246, 0.98);
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
     white-space: nowrap;
+    text-overflow: clip;
     transition: opacity 900ms linear;
 }
 
@@ -1945,16 +1962,18 @@ html.preview, html.preview body {
 }
 
 .ss-music-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 600;
     color: rgba(243, 244, 246, 0.92);
+    max-width: 100%;
 }
 
 .ss-music-artist {
     margin-top: 6px;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 500;
     color: rgba(220, 224, 232, 0.6);
+    max-width: 100%;
 }
 
 /* Fixed bottom-right — clear of the caption; photo drift covers burn-in motion. */
