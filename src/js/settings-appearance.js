@@ -68,6 +68,10 @@
                 chips.appendChild(c);
             });
             block.appendChild(chips);
+            if (b.key === 'focus') {
+                block.appendChild(el('p', 'setting-note muted',
+                    'Applies on Home, Settings, menus and the screen saver.'));
+            }
             body.appendChild(block);
         });
     }

@@ -9,6 +9,7 @@
 - Background Live: Shuffle and Queue size tucked under More options; shorter helper text
 - Clear saved pins / Reset / Remove save: Cancel-first confirms with a two-line prompt
 - Apps on Home and Consoles match the same row styling
+- Appearance → Focus (Both / Scale / Ring) also applies to menus, Settings rows, chips and Lab
 
 ## 0.7.1
 

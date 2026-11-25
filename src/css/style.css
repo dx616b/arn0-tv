@@ -621,14 +621,20 @@ h1, h2 {
 }
 
 /*
- * Appearance → Focus (curated presets). Screensaver pan is separate.
+ * Appearance → Focus (global). Home tiles, Settings chrome, menus, Lab, screen-saver menus.
  * Both = scale + ring. Scale = grow only. Ring = outline only.
  */
 .focus-ring .app.focused .tile,
 .focus-ring .input.focused .tile,
 .focus-ring .gear.focused,
 .focus-ring .music-btn.focused,
-.focus-ring .thumb.focused img {
+.focus-ring .thumb.focused img,
+.focus-ring .setting-row.focused,
+.focus-ring .chip.focused,
+.focus-ring .ed-item.focused,
+.focus-ring #menu-list li.focused,
+.focus-ring .lab-list li.focused,
+.focus-ring .ss-menu-row.is-focus {
     transform: none;
 }
 
@@ -638,6 +644,16 @@ h1, h2 {
 }
 
 .focus-scale .thumb.focused img {
+    box-shadow: none;
+}
+
+.focus-scale .setting-row.focused,
+.focus-scale .chip.focused,
+.focus-scale .chip.on.focused,
+.focus-scale .ed-item.focused,
+.focus-scale #menu-list li.focused,
+.focus-scale .lab-list li.focused,
+.focus-scale .ss-menu-row.is-focus {
     box-shadow: none;
 }
 
@@ -851,6 +867,7 @@ h1, h2 {
     font-weight: 600;
     text-align: left;
     box-sizing: border-box;
+    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .setting-label {
@@ -892,6 +909,7 @@ h1, h2 {
 .setting-row.focused {
     background: var(--fg);
     color: var(--bg);
+    transform: scale(1.02);
     box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
@@ -1056,7 +1074,7 @@ h1, h2 {
     font-size: 26px;
     font-weight: 600;
     color: var(--muted);
-    transition: background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
+    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .chip.on {
@@ -1072,6 +1090,7 @@ h1, h2 {
 .chip.focused {
     background: var(--fg);
     color: var(--bg);
+    transform: scale(1.05);
     box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 5px rgba(255, 255, 255, 0.4);
 }
 
@@ -1228,11 +1247,13 @@ h1, h2 {
     font-weight: 600;
     color: var(--muted);
     box-sizing: border-box;
+    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .ed-item.focused {
     background: var(--fg);
     color: var(--bg);
+    transform: scale(1.02);
     box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
@@ -1361,19 +1382,22 @@ h1, h2 {
 
 #menu-list li {
     padding: 16px 24px;
-    margin-bottom: 6px;
-    border-radius: 12px;
+    margin-bottom: 8px;
+    border-radius: 14px;
     font-size: 30px;
     color: var(--muted);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 #menu-list li.focused {
     background: var(--fg);
     color: var(--bg);
+    transform: scale(1.04);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
 }
 
 #menu-list li.checked::before {
@@ -1427,11 +1451,13 @@ h1, h2 {
     font-weight: 600;
     color: var(--muted);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .lab-list li.focused {
     background: var(--fg);
     color: var(--bg);
+    transform: scale(1.02);
     box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
@@ -1748,8 +1774,14 @@ html.preview, html.preview body {
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
+.ss-menu-row {
+    transition: transform 0.1s ease-out, background 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+
 .ss-menu-row.is-focus {
     background: rgba(255, 255, 255, 0.18);
+    transform: scale(1.03);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
 .ss-scrim {
