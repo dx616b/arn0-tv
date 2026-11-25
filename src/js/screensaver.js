@@ -574,23 +574,19 @@
         else el.textContent = text || '';
     }
 
-    // Short line for the screen: drops bracketed credits such as "(© Photographer / Agency)".
-    function shortCaption(text, max) {
-        var t = String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
-        if (t.length <= max) return t;
-        var cut = t.slice(0, max);
-        var sp = cut.lastIndexOf(' ');
-        return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
+    // Clean caption text; keep full length — fillLine marquees overflow (no ellipsis).
+    function cleanCaption(text) {
+        return String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
     }
 
     function caption(w) {
         // Title + date/credit from live metadata (title/sub/credit on each wallpaper entry).
-        captionText = w ? shortCaption(w.title || w.credit || '', 40) : '';
+        captionText = w ? cleanCaption(w.title || w.credit || '') : '';
         captionSub = '';
         if (w) {
             if (w.sub && w.credit && w.credit !== w.title) captionSub = w.sub + ' · ' + w.credit;
             else captionSub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
-            captionSub = shortCaption(captionSub, 48);
+            captionSub = cleanCaption(captionSub);
         }
         // Fixed-width slot + horizontal scroll when the line is longer (does not cover legend).
         fillLine($('ss-title'), captionText, true);

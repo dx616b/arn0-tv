@@ -4,6 +4,7 @@
 
 ### Live wallpaper
 - Immich: descriptions/captions come from search EXIF and are polished while the photo is still queued (not after it appears)
+- Long captions scroll (marquee) instead of being cut with an ellipsis
 
 ## 0.7.2
 

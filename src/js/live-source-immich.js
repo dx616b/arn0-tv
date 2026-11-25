@@ -43,7 +43,8 @@
     function immichTitle(a, album) {
         var x = immichExif(a);
         var desc = String(x.description || a.description || '').trim();
-        if (desc) return desc.length > 120 ? desc.slice(0, 117) + '…' : desc;
+        // Full description — screen saver / Home marquees long lines (no ellipsis).
+        if (desc) return desc;
         var place = immichPlace(a);
         if (place) return place;
         var name = String(a.originalFileName || '').split(/[/\\]/).pop() || '';
