@@ -657,6 +657,23 @@ h1, h2 {
     box-shadow: none;
 }
 
+/* Ring-only menus/rows: keep a clear outline when scale is off. */
+.focus-ring #menu-list li.focused,
+.focus-ring .setting-row.focused,
+.focus-ring .lab-list li.focused,
+.focus-ring .ed-item.focused {
+    box-shadow: 0 0 0 5px var(--ring);
+}
+
+.focus-ring .chip.focused,
+.focus-ring .chip.on.focused {
+    box-shadow: 0 0 0 5px var(--ring);
+}
+
+.focus-ring .ss-menu-row.is-focus {
+    box-shadow: 0 0 0 3px var(--ring);
+}
+
 /* ---------- Pages (everything except Home) ---------- */
 
 /* Static dim layer so pages stay readable over any wallpaper. */
@@ -1329,10 +1346,11 @@ h1, h2 {
     transform: translateY(-50%);
     left: 640px;
     width: 640px;
-    padding: 36px;
+    padding: 36px 40px;
     border-radius: 22px;
     background: #1b1e25;
     box-sizing: border-box;
+    overflow: visible;
 }
 
 .menu-box.more-above {
@@ -1376,13 +1394,15 @@ h1, h2 {
 
 #menu-list {
     margin: 0;
-    padding: 0;
+    padding: 8px 4px;
     list-style: none;
+    /* Rings/scale must not be clipped by the list. */
+    overflow: visible;
 }
 
 #menu-list li {
     padding: 16px 24px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     border-radius: 14px;
     font-size: 30px;
     color: var(--muted);
@@ -1394,10 +1414,12 @@ h1, h2 {
 }
 
 #menu-list li.focused {
+    /* Visible overflow so the Focus ring is not clipped by text-overflow. */
+    overflow: visible;
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.04);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
+    transform: scale(1.06);
+    box-shadow: 0 0 0 5px var(--ring);
 }
 
 #menu-list li.checked::before {
