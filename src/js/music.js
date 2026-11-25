@@ -867,16 +867,18 @@
     }
 
     /*
-     * Long title/artist: scroll a few times, then freeze (ellipsis). Infinite animation was
-     * a large idle-CPU cost on this SoC (~40%).
+     * Long title/artist: scroll a few times, then freeze (ellipsis). Infinite only while the
+     * play/next controls are focused (see showFull) — idle infinite scroll was ~40% CPU here.
      */
-    // Scrolls a long line once through, then holds it. A re-draw with the same text keeps the scroll
-    // where it is; only a new text starts it again.
-    function fillMarquee(el, text, animate) {
+    // A re-draw with the same text keeps the scroll; only new text (or force) starts it again.
+    function fillMarquee(el, text, animate, opts) {
         if (!el) return;
-        var key = (animate ? 'scroll|' : 'static|') + (text || '');
-        if (el.getAttribute('data-marquee') === key) return;
-        el.classList.remove('scroll');
+        opts = opts || {};
+        var loop = !!opts.loop;
+        var force = !!opts.force;
+        var key = (animate ? (loop ? 'loop|' : 'scroll|') : 'static|') + (text || '');
+        if (!force && el.getAttribute('data-marquee') === key) return;
+        el.classList.remove('scroll', 'marquee-loop');
         el.innerHTML = '';
         if (!text) {
             el.setAttribute('data-marquee', key);
@@ -905,24 +907,53 @@
                 var copy = span.cloneNode(true);
                 copy.setAttribute('aria-hidden', 'true');
                 track.appendChild(copy);
-                function freeze() {
-                    track.removeEventListener('animationend', freeze);
-                    if (!el.contains(track)) return;
-                    el.classList.remove('scroll');
-                    el.textContent = text;
+                if (!loop) {
+                    function freeze() {
+                        track.removeEventListener('animationend', freeze);
+                        if (!el.contains(track)) return;
+                        // Still focused on play/next — keep going instead of freezing.
+                        var bar = document.getElementById('music-bar');
+                        if (bar && bar.classList.contains('marquee-hold')) {
+                            el.classList.add('marquee-loop');
+                            return;
+                        }
+                        el.classList.remove('scroll');
+                        el.textContent = text;
+                    }
+                    track.addEventListener('animationend', freeze);
+                } else {
+                    el.classList.add('marquee-loop');
                 }
-                track.addEventListener('animationend', freeze);
                 el.classList.add('scroll');
                 el.setAttribute('data-marquee', key);
             });
         });
     }
 
-    // Focusing the bar scrolls the title and artist once more, so a long line can be read in full.
+    // While play/next is focused: keep title/artist scrolling so a long line can be read.
+    // Only (re)starts when first entering the music controls — not when moving play ↔ next.
     function showFull() {
-        if (!current) return;
-        fillMarquee(document.getElementById('music-now-title'), current.title, true);
-        fillMarquee(document.getElementById('music-now-artist'), current.artist || current.album || '', true);
+        var bar = document.getElementById('music-bar');
+        if (!bar) return;
+        var already = bar.classList.contains('marquee-hold');
+        bar.classList.add('marquee-hold');
+        if (!current || already) return;
+        var title = document.getElementById('music-now-title');
+        var artist = document.getElementById('music-now-artist');
+        fillMarquee(title, current.title, true, { force: true, loop: true });
+        fillMarquee(artist, current.artist || current.album || '', true, { force: true, loop: true });
+    }
+
+    // Left play/next — drop infinite scroll and restore the usual few-pass marquee.
+    function releaseFull() {
+        var bar = document.getElementById('music-bar');
+        if (!bar || !bar.classList.contains('marquee-hold')) return;
+        bar.classList.remove('marquee-hold');
+        var title = document.getElementById('music-now-title');
+        var artist = document.getElementById('music-now-artist');
+        if (title) title.removeAttribute('data-marquee');
+        if (artist) artist.removeAttribute('data-marquee');
+        renderBar();
     }
 
     function renderBar() {
@@ -1238,6 +1269,7 @@
         actions: labActions,
         renderBar: renderBar,
         showFull: showFull,
+        releaseFull: releaseFull,
         fillMarquee: fillMarquee,
         barVisible: barVisible,
         kick: kick,
