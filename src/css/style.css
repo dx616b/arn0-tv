@@ -164,14 +164,59 @@ h1, h2 {
 
 /* ---------- Home ---------- */
 
+/*
+ * One shy rectangle: three equal zones, each the width of one console tile
+ * (536 + 36 gutter + 536 + 36 + 536 = 1680, same as .row-viewport).
+ */
+#home {
+    --home-plate: rgba(18, 22, 30, 0.48);
+}
+
 .clock {
+    --home-zone: 536px;
+    --home-gutter: 36px;
     position: absolute;
     top: 88px;
     left: var(--edge);
-    right: calc(var(--edge) + 100px);
+    right: auto;
+    width: 1680px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 36px;
+    gap: 0;
+    padding: 18px 0;
+    border-radius: 20px;
+    background: var(--home-plate);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.tiles-compact .clock {
+    --home-zone: 524px;
+    --home-gutter: 28px;
+    width: 1628px;
+}
+
+/* Let weather + music sit as flex siblings of the clock (equal zones). */
+.home-chrome {
+    display: contents;
+}
+
+.clock-main,
+.home-weather,
+.music-bar {
+    flex: none;
+    width: var(--home-zone);
+    box-sizing: border-box;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.clock-main,
+.home-weather {
+    flex-direction: column;
+    text-align: center;
 }
 
 #time {
@@ -179,6 +224,7 @@ h1, h2 {
     font-weight: 300;
     letter-spacing: -3px;
     line-height: 1;
+    text-align: center;
 }
 
 #time-suffix {
@@ -189,21 +235,36 @@ h1, h2 {
 }
 
 #date {
-    margin-top: 14px;
+    margin-top: 10px;
     font-size: 34px;
     font-weight: 500;
     color: var(--muted);
-}
-
-.clock.with-weather .clock-main {
-    border-right: 1px solid rgba(220, 224, 232, 0.22);
-    padding-right: 36px;
+    text-align: center;
 }
 
 .home-weather {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    position: relative;
+    margin-left: var(--home-gutter);
+}
+
+.music-bar {
+    position: relative;
+    margin-left: var(--home-gutter);
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 14px;
+}
+
+/* Clean vertical rules in the console gutters. */
+.home-weather::before,
+.music-bar::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--home-gutter) / -2);
+    top: 14%;
+    bottom: 14%;
+    width: 1px;
+    background: rgba(220, 224, 232, 0.28);
 }
 
 .home-wx-now {
@@ -246,13 +307,14 @@ h1, h2 {
     margin-top: 8px;
     font-size: 22px;
     color: rgba(220, 224, 232, 0.6);
+    text-align: center;
 }
 
 .home-wx-week {
     display: flex;
     justify-content: center;
-    gap: 18px;
-    margin-top: 14px;
+    gap: 14px;
+    margin-top: 12px;
 }
 
 .home-wx-day {
@@ -306,10 +368,11 @@ h1, h2 {
 
 .shelf h2 {
     margin-bottom: 26px;
-    font-size: 24px;
-    letter-spacing: 0.16em;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--muted);
+    color: rgba(244, 245, 247, 0.72);
 }
 
 .row-viewport {
@@ -323,17 +386,17 @@ h1, h2 {
     transition: transform 0.18s ease-out;
 }
 
-/* App tiles */
+/* App tiles — five fit the same 1680px as three consoles (5×w + 4×36). */
 
 .app {
     flex: none;
-    width: 300px;
+    width: calc((1680px - 4 * 36px) / 5);
     margin-right: 36px;
 }
 
 .tile {
     position: relative;
-    height: 170px;
+    height: 174px;
     border-radius: 22px;
     box-sizing: border-box;
     border: 1px solid rgba(255, 255, 255, 0.22);
@@ -497,15 +560,26 @@ h1, h2 {
 /* Gear (Settings) */
 
 .gear {
+    /*
+     * Centre in the strip after the plate: (plate → gear) == (gear → screen).
+     * Vertically centred on the plate (top 88, ~224 tall → mid at 162).
+     */
     position: absolute;
-    top: 100px;
-    right: var(--edge);
+    top: 162px;
+    left: calc(var(--edge) + 1680px + (100% - var(--edge) - 1680px - 76px) / 2);
+    right: auto;
     width: 76px;
     height: 76px;
     border-radius: 50%;
-    color: var(--muted);
-    will-change: transform;
-    transition: transform 0.1s ease-out;
+    color: rgba(243, 244, 246, 0.78);
+    /* Same wash as the clock plate. */
+    background: var(--home-plate);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    transition: box-shadow 40ms linear, color 40ms linear;
+}
+
+.tiles-compact .gear {
+    left: calc(var(--edge) + 1628px + (100% - var(--edge) - 1628px - 76px) / 2);
 }
 
 .gear svg {
@@ -516,36 +590,27 @@ h1, h2 {
     height: 44px;
 }
 
+/* Gear: white icon inside + ring outside — no fill invert. */
 .gear.focused {
-    background: var(--fg);
-    color: var(--bg);
-    transform: scale(1.08);
+    background: var(--home-plate);
+    color: #fff;
+    transform: none;
+    box-shadow: 0 0 0 6px #fff, inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* ---------- Home music (beside weather) ---------- */
 
+/* Plates already separate weather and music — no hairline. */
 .home-music-sep {
-    flex: none;
-    font-size: 28px;
-    font-weight: 300;
-    line-height: 1;
-    color: rgba(220, 224, 232, 0.35);
-}
-
-.music-bar {
-    position: relative;
-    flex: none;
-    width: 340px;
-    max-width: 340px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: transparent;
+    display: none;
 }
 
 .music-meta {
     min-width: 0;
-    flex: 1;
+    flex: 1 1 auto;
+    /* Use the rest of the 536px zone (controls ~110px + padding). */
+    max-width: none;
+    text-align: left;
 }
 
 .music-now-title {
@@ -583,6 +648,12 @@ h1, h2 {
     animation: marquee-x 14s linear 3 forwards;
 }
 
+/* Keep scrolling while play/next is focused (see Music.showFull). */
+.marquee.marquee-loop.scroll .marquee-track,
+.music-bar.marquee-hold .marquee.scroll .marquee-track {
+    animation: marquee-x 14s linear infinite;
+}
+
 @keyframes marquee-x {
     from { transform: translateX(0); }
     to { transform: translateX(-50%); }
@@ -602,8 +673,7 @@ h1, h2 {
     color: var(--fg);
     background: rgba(255, 255, 255, 0.08);
     position: relative;
-    will-change: transform;
-    transition: transform 0.1s ease-out, background 0.1s ease-out;
+    transition: background 40ms linear, box-shadow 40ms linear, color 40ms linear;
 }
 
 .music-btn svg {
@@ -614,28 +684,41 @@ h1, h2 {
     height: 26px;
 }
 
+/* Music circles: invert + ring, never scale. */
 .music-btn.focused {
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.08);
+    transform: none;
+    box-shadow: 0 0 0 4px var(--ring);
 }
 
 /*
  * Appearance → Focus (Home only). Settings / pop-up menus stay fixed and simple.
  * Both = scale + ring. Scale = grow only. Ring = outline only.
+ * Gear / music ignore scale in every preset; gear never inverts.
  */
 .focus-ring .app.focused .tile,
 .focus-ring .input.focused .tile,
-.focus-ring .gear.focused,
-.focus-ring .music-btn.focused,
 .focus-ring .thumb.focused img {
     transform: none;
+}
+
+.focus-ring .music-btn.focused {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fg);
+    box-shadow: 0 0 0 4px var(--ring);
 }
 
 .focus-scale .app.focused .tile,
 .focus-scale .input.focused .tile {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
+
+.focus-scale .music-btn.focused {
+    box-shadow: none;
+}
+
+/* Gear has no scale — keep the ring in Scale mode so focus stays obvious. */
 
 .focus-scale .thumb.focused img {
     box-shadow: none;
@@ -683,8 +766,9 @@ h1, h2 {
 .grid {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(5, 300px);
-    column-gap: 45px;
+    /* Same tile width as Home comfortable apps. */
+    grid-template-columns: repeat(5, calc((1680px - 4 * 36px) / 5));
+    column-gap: 36px;
     row-gap: 34px;
     transition: transform 0.22s ease-out;
 }
@@ -1758,17 +1842,18 @@ html.preview, html.preview body {
     background: linear-gradient(180deg, rgba(3, 4, 7, 0), rgba(3, 4, 7, 0.55));
 }
 
-/* Bottom-left: leave clear air for the bottom-right clock; clip marquee inside the box. */
+/* Bottom-left caption; lines centred under each other, box hugs content at --edge. */
 .ss-caption {
     position: absolute;
     left: var(--edge);
     bottom: 96px;
     /* ~560px reserved for clock + gap; never reach center legend. */
-    width: min(720px, calc(100% - var(--edge) - 560px));
+    width: fit-content;
     max-width: min(720px, calc(100% - var(--edge) - 560px));
     overflow: hidden;
     box-sizing: border-box;
-    transition: transform 1200ms ease-out, opacity 900ms linear;
+    text-align: center;
+    transition: opacity 900ms linear;
 }
 
 /* Idle: fade all writings; first remote key brings them back without other actions. */
@@ -1802,7 +1887,7 @@ html.preview, html.preview body {
     font-size: 28px;
     font-weight: 600;
     line-height: 1.25;
-    text-align: left;
+    text-align: center;
     color: rgba(243, 244, 246, 0.92);
     max-width: 100%;
 }
@@ -1812,7 +1897,7 @@ html.preview, html.preview body {
     font-size: 24px;
     font-weight: 500;
     line-height: 1.25;
-    text-align: left;
+    text-align: center;
     color: rgba(220, 224, 232, 0.6);
     max-width: 100%;
 }
@@ -1843,16 +1928,17 @@ html.preview, html.preview body {
     color: #0b0d12;
 }
 
-/* Top-left music: stay clear of centred weather and top-right shortcuts. */
+/* Top-left music; lines centred under each other, box hugs content at --edge. */
 .ss-music {
     position: absolute;
     left: var(--edge);
     top: 28px;
-    width: min(560px, 30vw);
+    width: fit-content;
     max-width: min(560px, 30vw);
     overflow: hidden;
     box-sizing: border-box;
-    transition: transform 1200ms ease-out, opacity 900ms linear;
+    text-align: center;
+    transition: opacity 900ms linear;
 }
 
 /* Compact remote legend — center bottom, clear of caption and clock. */
@@ -1888,6 +1974,7 @@ html.preview, html.preview body {
     transition: opacity 900ms linear;
 }
 
+/* Top centre weather. */
 .ss-weather-top {
     position: absolute;
     top: 28px;
@@ -1895,25 +1982,50 @@ html.preview, html.preview body {
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 10px;
-    max-width: min(520px, 28vw);
+    justify-content: center;
+    gap: 12px;
+    max-width: min(720px, calc(100% - 2 * (var(--edge) + 200px)));
+    min-height: 34px;
     overflow: hidden;
     box-sizing: border-box;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 600;
+    line-height: 1.35;
     color: rgba(243, 244, 246, 0.98);
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
     white-space: nowrap;
-    text-overflow: clip;
     transition: opacity 900ms linear;
 }
 
 .ss-weather-top.hidden { display: none; }
 
+.ss-weather-top .ss-wx-top-icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    line-height: 0;
+}
+
 .ss-weather-top .ss-wx-top-icon svg {
-    width: 22px;
-    height: 22px;
-    vertical-align: middle;
+    display: block;
+    width: 26px;
+    height: 26px;
+    color: rgba(243, 244, 246, 0.98);
+}
+
+.ss-weather-top > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#screensaver.tone-dark .ss-weather-top {
+    color: #0b0d12;
+    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.35);
+}
+
+#screensaver.tone-dark .ss-weather-top .ss-wx-top-icon svg {
+    color: #0b0d12;
 }
 
 .ss-shortcut-label {
@@ -1972,6 +2084,7 @@ html.preview, html.preview body {
     font-weight: 600;
     color: rgba(243, 244, 246, 0.92);
     max-width: 100%;
+    text-align: center;
 }
 
 .ss-music-artist {
@@ -1980,6 +2093,7 @@ html.preview, html.preview body {
     font-weight: 500;
     color: rgba(220, 224, 232, 0.6);
     max-width: 100%;
+    text-align: center;
 }
 
 /* Fixed bottom-right — clear of the caption; photo drift covers burn-in motion. */

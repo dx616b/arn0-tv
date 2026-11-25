@@ -21,31 +21,33 @@
                     <div id="time"><span id="time-main"></span><span id="time-suffix"></span></div>
                     <div id="date"></div>
                 </div>
-                <div id="home-weather" class="home-weather hidden">
-                    <div class="home-wx-now">
-                        <span id="home-wx-icon" class="home-wx-icon"></span>
-                        <span id="home-wx-temp" class="home-wx-temp"></span>
-                        <span class="home-wx-pipe">|</span>
-                        <span id="home-wx-range" class="home-wx-range"></span>
-                    </div>
-                    <div id="home-wx-detail" class="home-wx-detail"></div>
-                    <div id="home-wx-week" class="home-wx-week"></div>
-                </div>
-                <div id="home-music-sep" class="home-music-sep hidden" aria-hidden="true">|</div>
-                <!-- Compact now-playing, beside weather when Subsonic is configured. -->
-                <div id="music-bar" class="music-bar hidden">
-                    <div id="music-controls" class="music-controls">
-                        <div id="music-btn-play" class="music-btn" tabindex="-1">
-                            <svg class="music-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                            <svg class="music-icon-pause hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+                <!-- Weather + music share one top band so music sits with the “now” row, not mid-week. -->
+                <div class="home-chrome">
+                    <div id="home-weather" class="home-weather hidden">
+                        <div class="home-wx-now">
+                            <span id="home-wx-icon" class="home-wx-icon"></span>
+                            <span id="home-wx-temp" class="home-wx-temp"></span>
+                            <span class="home-wx-pipe">|</span>
+                            <span id="home-wx-range" class="home-wx-range"></span>
                         </div>
-                        <div id="music-btn-next" class="music-btn" tabindex="-1">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-                        </div>
+                        <div id="home-wx-detail" class="home-wx-detail"></div>
+                        <div id="home-wx-week" class="home-wx-week"></div>
                     </div>
-                    <div class="music-meta">
-                        <div id="music-now-title" class="music-now-title marquee">Not playing</div>
-                        <div id="music-now-artist" class="music-now-artist marquee"></div>
+                    <div id="home-music-sep" class="home-music-sep hidden" aria-hidden="true"></div>
+                    <div id="music-bar" class="music-bar hidden">
+                        <div id="music-controls" class="music-controls">
+                            <div id="music-btn-play" class="music-btn" tabindex="-1">
+                                <svg class="music-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                <svg class="music-icon-pause hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+                            </div>
+                            <div id="music-btn-next" class="music-btn" tabindex="-1">
+                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                            </div>
+                        </div>
+                        <div class="music-meta">
+                            <div id="music-now-title" class="music-now-title marquee">Not playing</div>
+                            <div id="music-now-artist" class="music-now-artist marquee"></div>
+                        </div>
                     </div>
                 </div>
             </header>

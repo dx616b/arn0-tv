@@ -609,7 +609,15 @@
             el: $('home'),
             startRow: 1,
             hints: function () {
-                return [['OK', 'Open'], ['▲', 'Settings']];
+                var el = document.querySelector('#home .focused');
+                var item = el && el._item;
+                var ok = 'Open';
+                if (item && item.kind === 'settings') ok = 'Settings';
+                else if (item && item.kind === 'music') {
+                    if (item.action === 'next') ok = 'Next';
+                    else ok = (Music.isPlaying && Music.isPlaying()) ? 'Pause' : 'Play';
+                } else if (item && item.kind === 'input') ok = 'Switch';
+                return [['OK', ok], ['▲', 'Settings']];
             },
             rows: function () {
                 var top = [$('gear')];
@@ -632,7 +640,11 @@
             // Home is the root: Back does nothing.
             onBack: function () { return true; },
             onFocus: function (el) {
-                if (window.Music && (el === $('music-btn-play') || el === $('music-btn-next'))) Music.showFull();
+                if (window.Music) {
+                    if (el === $('music-btn-play') || el === $('music-btn-next')) Music.showFull();
+                    else if (Music.releaseFull) Music.releaseFull();
+                }
+                if (UI.refreshHints) UI.refreshHints();
             }
         });
         $('gear')._item = { kind: 'settings' };
