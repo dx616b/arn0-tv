@@ -70,7 +70,7 @@
             block.appendChild(chips);
             if (b.key === 'focus') {
                 block.appendChild(el('p', 'setting-note muted',
-                    'Applies on Home, Settings, menus and the screen saver.'));
+                    'Applies on Home, Settings and the screen saver. Menus stay plain.'));
             }
             body.appendChild(block);
         });

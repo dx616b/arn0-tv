@@ -632,7 +632,6 @@ h1, h2 {
 .focus-ring .setting-row.focused,
 .focus-ring .chip.focused,
 .focus-ring .ed-item.focused,
-.focus-ring #menu-list li.focused,
 .focus-ring .lab-list li.focused,
 .focus-ring .ss-menu-row.is-focus {
     transform: none;
@@ -651,14 +650,12 @@ h1, h2 {
 .focus-scale .chip.focused,
 .focus-scale .chip.on.focused,
 .focus-scale .ed-item.focused,
-.focus-scale #menu-list li.focused,
 .focus-scale .lab-list li.focused,
 .focus-scale .ss-menu-row.is-focus {
     box-shadow: none;
 }
 
-/* Ring-only menus/rows: keep a clear outline when scale is off. */
-.focus-ring #menu-list li.focused,
+/* Ring-only Settings chrome (menus stay invert-only; see #menu-list). */
 .focus-ring .setting-row.focused,
 .focus-ring .lab-list li.focused,
 .focus-ring .ed-item.focused {
@@ -1346,11 +1343,10 @@ h1, h2 {
     transform: translateY(-50%);
     left: 640px;
     width: 640px;
-    padding: 36px 40px;
+    padding: 36px;
     border-radius: 22px;
     background: #1b1e25;
     box-sizing: border-box;
-    overflow: visible;
 }
 
 .menu-box.more-above {
@@ -1394,32 +1390,26 @@ h1, h2 {
 
 #menu-list {
     margin: 0;
-    padding: 8px 4px;
+    padding: 0;
     list-style: none;
-    /* Rings/scale must not be clipped by the list. */
-    overflow: visible;
 }
 
 #menu-list li {
     padding: 16px 24px;
-    margin-bottom: 10px;
-    border-radius: 14px;
+    margin-bottom: 6px;
+    border-radius: 12px;
     font-size: 30px;
     color: var(--muted);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
+/* Menus: invert only — no Focus scale/ring animation. */
 #menu-list li.focused {
-    /* Visible overflow so the Focus ring is not clipped by text-overflow. */
-    overflow: visible;
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.06);
-    box-shadow: 0 0 0 5px var(--ring);
 }
 
 #menu-list li.checked::before {
