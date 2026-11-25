@@ -23,7 +23,7 @@
             wallpaper: {
                 // Fresh install: Live Bing + shuffle (no API key). Seeds from config.local override.
                 mode: wallSeed.mode || 'live',   // 'off' | 'photo' | 'rotate' | 'live'
-                rotateOn: true,                  // Photos: timer moves through them (off = Left/Right only)
+                rotateOn: false,                 // Photos: Off = hold current; On = timer / Left-Right advance
                 photo: wallSeed.photo || theme.wallpaper || 'forest',
                 liveProvider: wallSeed.liveProvider || 'bing',   // 'bing' | 'nasa' | 'wikimedia' | 'wallhaven' | 'unsplash' | 'immich' | 'mix'
                 liveKey: '',            // current entry in the live pool (date key)
@@ -119,7 +119,7 @@
             if (saved) {
                 merge(prefs.sound, saved.sound);
                 merge(prefs.wallpaper, saved.wallpaper);
-                // Rotate is now a setting on Saved photos (Live), not its own mode.
+                // Old Rotate mode → Photos Live provider with rotate on.
                 if (prefs.wallpaper.mode === 'rotate') {
                     prefs.wallpaper.mode = 'live';
                     prefs.wallpaper.liveProvider = 'photos';

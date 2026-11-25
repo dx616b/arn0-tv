@@ -167,8 +167,8 @@
     function rotating() {
         var p = Prefs.get().wallpaper;
         if (p.mode === 'live') {
-            // Saved photos rotate only when Rotate is on; other providers always rotate.
-            return !!window.LiveWallpaper && (p.liveProvider !== 'photos' || p.rotateOn !== false);
+            // Photos rotate only when Rotate is On; other Live providers always rotate.
+            return !!window.LiveWallpaper && (p.liveProvider !== 'photos' || p.rotateOn === true);
         }
         return p.mode === 'rotate' && Wallpaper.list().length > 1;
     }
@@ -801,7 +801,7 @@
         if (!holdFired) shortPress(holdKey);
     });
 
-    // Current source: a Live provider key (for example 'photos' or 'mix').
+    // Current Live provider key, or '' when Background is not Live.
     function sourceNow() {
         var p = Prefs.get().wallpaper;
         return p.mode === 'live' ? (p.liveProvider || '') : '';
@@ -810,6 +810,15 @@
     function sourceLabel(key) {
         if (key === 'mix') return 'Mix';
         return LiveWallpaper.providerLabelFor ? LiveWallpaper.providerLabelFor(key) : key;
+    }
+
+    // Live provider name, or Background mode when not Live.
+    function pictureMenuLabel() {
+        var p = Prefs.get().wallpaper;
+        if (p.mode === 'live') return sourceLabel(p.liveProvider || '');
+        if (p.mode === 'photo') return 'Photo';
+        if (p.mode === 'off') return 'Off';
+        return '—';
     }
 
     function setSource(key) {
@@ -824,12 +833,14 @@
         advancePhoto(true);
     }
 
+    // Live providers (Photos = local pool; Rotate is a separate row when Photos is active).
     function sourceRows() {
+        var p = Prefs.get().wallpaper;
         var keys = window.LiveWallpaper && LiveWallpaper.switchableProviders ? LiveWallpaper.switchableProviders() : [];
-        var now = sourceNow();
+        var liveKey = sourceNow();
         var rows = keys.map(function (key) {
             return {
-                label: (key === now ? '● ' : '   ') + sourceLabel(key),
+                label: (p.mode === 'live' && key === liveKey ? '● ' : '   ') + sourceLabel(key),
                 run: function () { setSource(key); }
             };
         });
@@ -861,23 +872,27 @@
         renderMenu();
     }
 
+    // Same Music prefs as Settings: Radio (+ Next list) or Navidrome Random / Playlist.
+    function musicMenuLabel() {
+        var p = Prefs.get().music;
+        if (p.source === 'radio') {
+            var nav = Music.currentRadioNav();
+            var hit = Music.radioNavOptions().filter(function (o) { return o.nav === nav; })[0];
+            return hit ? 'Radio · ' + hit.label : 'Radio';
+        }
+        if (p.source === 'playlist' && p.playlistId) return p.playlistName || 'Playlist';
+        return 'Navidrome · Random';
+    }
+
     function menuList() {
         var items = [{
-            label: 'Picture source: ' + sourceLabel(sourceNow()),
+            label: 'Picture source: ' + pictureMenuLabel(),
             sub: true,
             run: openSourceMenu
         }];
         if (sourceNow() === 'photos') {
-            items.push({
-                label: 'Rotate: ' + (Prefs.get().wallpaper.rotateOn !== false ? 'On' : 'Off'),
-                run: function () {
-                    var p = Prefs.get().wallpaper;
-                    p.rotateOn = p.rotateOn === false;
-                    p.lastChange = Date.now();
-                    Prefs.save();
-                }
-            });
-        } else {
+            items.push(rotateRow());
+        } else if (Prefs.get().wallpaper.mode === 'live') {
             items.push({
                 label: 'Keep this picture',
                 run: function () {
@@ -891,13 +906,27 @@
         }
         if (window.Music) {
             items.push({
-                label: 'Music source: ' + (Music.isRadio() ? 'Radio' : 'Navidrome'),
+                label: 'Music source: ' + musicMenuLabel(),
                 sub: true,
                 run: openMusicMenu
             });
             if (Music.isRadio()) items.push(favouriteRow());
         }
         return items;
+    }
+
+    function toggleRotate() {
+        var p = Prefs.get().wallpaper;
+        p.rotateOn = p.rotateOn !== true;
+        p.lastChange = Date.now();
+        Prefs.save();
+    }
+
+    function rotateRow() {
+        return {
+            label: 'Rotate: ' + (Prefs.get().wallpaper.rotateOn === true ? 'On' : 'Off'),
+            toggle: toggleRotate
+        };
     }
 
     function favouriteRow() {
@@ -913,17 +942,28 @@
 
     function musicRows() {
         var rows = [];
+        var p = Prefs.get().music;
         var now = Music.currentRadioNav();
         Music.radioNavOptions().forEach(function (o) {
             rows.push({
-                label: (Music.isRadio() && o.nav === now ? '● ' : '   ') + o.label,
+                label: (p.source === 'radio' && o.nav === now ? '● ' : '   ') + o.label,
                 run: function () { Music.selectRadioNav(o.nav); }
             });
         });
         rows.push({
-            label: (!Music.isRadio() ? '● ' : '   ') + 'Navidrome',
+            label: (p.source === 'random' ? '● ' : '   ') + 'Navidrome · Random',
             run: function () { Music.setSource('random'); }
         });
+        if (p.playlistId) {
+            rows.push({
+                label: (p.source === 'playlist' ? '● ' : '   ') + (p.playlistName || 'Playlist'),
+                run: function () {
+                    var m = Prefs.get().music;
+                    if (!m.playlistId) return;
+                    Music.setSource('playlist', { id: m.playlistId, name: m.playlistName || 'Playlist' });
+                }
+            });
+        }
         rows.push(backRow());
         return rows;
     }
@@ -977,13 +1017,27 @@
         if (box) box.style.display = 'none';
     }
 
-    // Up/Down move, OK runs the item, any other key (Left, Right, Back) closes the menu.
+    // Up/Down move, OK runs the item, Right toggles rows that support it, else Back/Left closes.
     function menuKey(k) {
         // Keys held down to open the menu must not act on it until they are released.
         if (!menuArmed) return true;
         if (k === UI.KEY.UP) menuIndex = (menuIndex - 1 + menuItems.length) % menuItems.length;
         else if (k === UI.KEY.DOWN) menuIndex = (menuIndex + 1) % menuItems.length;
-        else if (k === UI.KEY.ENTER) {
+        else if (k === UI.KEY.RIGHT) {
+            var row = menuItems[menuIndex];
+            if (row && row.toggle) {
+                var keep = menuIndex;
+                row.toggle();
+                menuItems = menuList();
+                menuParent = null;
+                menuIndex = Math.min(keep, menuItems.length - 1);
+                renderMenu();
+                return true;
+            }
+            if (menuParent) backMenu();
+            else closeMenu();
+            return true;
+        }         else if (k === UI.KEY.ENTER) {
             // Held OK repeats while the menu is open must not run an item.
             if (!menuArmed) return true;
             var it = menuItems[menuIndex];
@@ -992,6 +1046,8 @@
                 renderMenu();
                 return true;
             }
+            // Toggle rows (Rotate): Right flips the value; OK does nothing.
+            if (it && it.toggle) return true;
             closeMenu();
             if (it) it.run();
             return true;

@@ -142,7 +142,7 @@
                             {
                                 label: 'Remove', run: function () { removeOnePin(entry.key); }
                             }
-                        ], { detail: 'It will be deleted from Saved photos.' });
+                        ], { detail: 'It will be deleted from Photos.' });
                     }
                 },
                 { label: 'Cancel' }
