@@ -239,7 +239,10 @@
                 st.immichIndex = 0;
                 st.immichBatch = null;
             }
-            return Promise.resolve({ entries: [immichEntry(a, st.immichAlbumOrigin, st.immichAlbumQuery, st.immichAlbumName)] });
+            var entry = immichEntry(a, st.immichAlbumOrigin, st.immichAlbumQuery, st.immichAlbumName);
+            // Portrait / tiny (known EXIF) — advance and try the next asset.
+            if (!entry) return fetchImmichNext(tries);
+            return Promise.resolve({ entries: [entry] });
         }
         return ensureImmichAlbum().then(function (album) {
             var pageNum = st.immichPage || 1;

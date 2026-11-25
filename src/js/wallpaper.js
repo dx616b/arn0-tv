@@ -247,17 +247,67 @@
         return entryFromPin(pinsMeta()[0]) || bundled()[0] || null;
     }
 
+    // Home is 1920×1080 landscape — reject portraits and soft/low-res stills (manual + auto).
+    var HOME_MIN_W = PhotoUtil.HOME_MIN_W;
+    var HOME_MIN_H = PhotoUtil.HOME_MIN_H;
+    var homeFitReason = PhotoUtil.homeFitReason;
+    var homeFitMessage = PhotoUtil.homeFitMessage;
+    var unfitHomeKeys = {};
+    var homeSkipBusy = false;
+
+    function clearUnfitHome() {
+        unfitHomeKeys = {};
+    }
+
+    // Probe display size (EXIF-aware). Resolves { ok, reason, width, height }.
+    function checkHomeFit(entry) {
+        return new Promise(function (resolve) {
+            if (!entry || !entry.file) {
+                resolve({ ok: false, reason: 'missing' });
+                return;
+            }
+            var urls = pinUrls(entry);
+            var i = 0;
+            var probe = new Image();
+            function fail(reason) {
+                resolve({ ok: false, reason: reason || 'unreadable', width: 0, height: 0 });
+            }
+            function tryUrl() {
+                if (i >= urls.length) {
+                    fail('unreadable');
+                    return;
+                }
+                var url = urls[i++];
+                probe.onload = function () {
+                    PhotoUtil.orientedSize(url, probe, function (ow, oh) {
+                        var reason = homeFitReason(ow, oh);
+                        resolve({ ok: !reason, reason: reason, width: ow, height: oh });
+                    });
+                };
+                probe.onerror = function () { tryUrl(); };
+                probe.src = url;
+            }
+            tryUrl();
+        });
+    }
+
     // Apply a Live photo as Photo without adding it to the pin shelf (needs network).
+    // Returns Promise<{ ok, reason? }> — rejects soft-fail via ok:false (portrait / too small).
     function useTemporary(entry) {
-        if (!entry || !entry.key || !entry.file) return false;
-        var w = Prefs.get().wallpaper;
-        w.tempPhoto = PhotoUtil.entryFields(entry, entry.title || 'Temporary');
-        w.tempPhoto.source = entry.source || '';
-        w.photo = entry.key;
-        w.mode = 'photo';
-        Prefs.save();
-        apply();
-        return true;
+        if (!entry || !entry.key || !entry.file) {
+            return Promise.resolve({ ok: false, reason: 'missing' });
+        }
+        return checkHomeFit(entry).then(function (fit) {
+            if (!fit.ok) return fit;
+            var w = Prefs.get().wallpaper;
+            w.tempPhoto = PhotoUtil.entryFields(entry, entry.title || 'Temporary');
+            w.tempPhoto.source = entry.source || '';
+            w.photo = entry.key;
+            w.mode = 'photo';
+            Prefs.save();
+            apply();
+            return { ok: true };
+        });
     }
 
     var fetchBlob = Http.getBlob;
@@ -315,32 +365,46 @@
 
     // Save up to PIN_MAX favorites with image bytes (IndexedDB), then apply as Photo.
     // Returns a Promise<boolean> — true when bytes were stored locally.
-    // saveOnly: keep the picture in the saved list without showing it as the Photo.
+    // saveOnly: keep the picture in the saved list without showing it as the Photo
+    // (skips Home size/aspect gate — used by the screen saver).
     function pinLive(entry, saveOnly) {
         if (!entry || !entry.key || !entry.file) return Promise.resolve(false);
-        var finish = saveOnly ? function (m) { rememberPinMeta(m); Prefs.save(); } : activatePin;
-        var existing = pinsMeta().find(function (x) { return x.key === entry.key; });
-        var meta = PhotoUtil.entryFields(entry, entry.title || 'Pinned');
-        meta.remote = true;
-        meta.bytes = existing && existing.bytes > 0 ? existing.bytes : 0;
-        if (blobUrls[entry.key] || existing) {
-            if (blobUrls[entry.key]) {
-                finish(meta);
-                return Promise.resolve(true);
+
+        function doPin() {
+            var finish = saveOnly ? function (m) { rememberPinMeta(m); Prefs.save(); } : activatePin;
+            var existing = pinsMeta().find(function (x) { return x.key === entry.key; });
+            var meta = PhotoUtil.entryFields(entry, entry.title || 'Pinned');
+            meta.remote = true;
+            meta.bytes = existing && existing.bytes > 0 ? existing.bytes : 0;
+            if (blobUrls[entry.key] || existing) {
+                if (blobUrls[entry.key]) {
+                    finish(meta);
+                    return Promise.resolve(true);
+                }
             }
-        }
-        return downloadPinBlob(entry).then(function (blob) {
-            return putPinBlob(entry.key, blob).then(function () {
-                setBlobUrl(entry.key, blob);
-                meta.bytes = blob && blob.size ? blob.size : 0;
+            return downloadPinBlob(entry).then(function (blob) {
+                return putPinBlob(entry.key, blob).then(function () {
+                    setBlobUrl(entry.key, blob);
+                    meta.bytes = blob && blob.size ? blob.size : 0;
+                    finish(meta);
+                    return true;
+                });
+            }, function (e) {
+                DevLog.log('Pin save failed: ' + (e && e.message ? e.message : e));
+                // Still remember + apply via URL while online.
                 finish(meta);
-                return true;
+                return false;
             });
-        }, function (e) {
-            DevLog.log('Pin save failed: ' + (e && e.message ? e.message : e));
-            // Still remember + apply via URL while online.
-            finish(meta);
-            return false;
+        }
+
+        if (saveOnly) return doPin();
+        return checkHomeFit(entry).then(function (fit) {
+            if (!fit.ok) {
+                var err = new Error(homeFitMessage(fit.reason));
+                err.homeFit = fit;
+                return Promise.reject(err);
+            }
+            return doPin();
         });
     }
 
@@ -559,10 +623,24 @@
         var probe = new Image();
         function paint(url, ow, oh) {
             if (t !== token) return;
+            var mode = Prefs.get().wallpaper.mode;
+            var reason = homeFitReason(ow, oh);
+            // Live / Rotate: skip unfit shots automatically (same gate as Use now).
+            if (reason && (mode === 'live' || mode === 'rotate')) {
+                if (w && w.key) unfitHomeKeys[w.key] = true;
+                DevLog.log('Home skipped (' + reason + '): ' + ((w && w.key) || url));
+                if (mode === 'live' && window.LiveHistory) LiveHistory.markFailed(w);
+                if (!homeSkipBusy) {
+                    homeSkipBusy = true;
+                    next(function () { homeSkipBusy = false; });
+                }
+                return;
+            }
             if (url === lastHomeUrl && photo && photo.classList.contains('on')) return;
             lastHomeUrl = url;
             bg().style.backgroundImage = 'none';
             // Portrait (after EXIF): cover with upward bias — no tiles/blur on Home.
+            // (Only reached in Photo mode, where the user already chose this still.)
             var portrait = !!(ow && oh && oh > ow);
             if (photo) {
                 photo.src = url;
@@ -634,13 +712,17 @@
     }
 
     // Next catalog entry: sequential wrap, or random excluding the current key.
+    // Skips keys already known unfit for Home (portrait / too small).
     function pickNext(l, key, random) {
         if (!l || !l.length) return null;
-        if (!random || l.length < 2) {
-            var i = l.findIndex(function (w) { return w.key === key; });
-            return l[((i < 0 ? 0 : i) + 1) % l.length];
+        var pool = l.filter(function (w) { return w && w.key && !unfitHomeKeys[w.key]; });
+        if (!pool.length) return null;
+        if (!random || pool.length < 2) {
+            var i = pool.findIndex(function (w) { return w.key === key; });
+            return pool[((i < 0 ? 0 : i) + 1) % pool.length];
         }
-        var others = l.filter(function (w) { return w.key !== key; });
+        var others = pool.filter(function (w) { return w.key !== key; });
+        if (!others.length) return pool[0];
         return others[Math.floor(Math.random() * others.length)];
     }
 
@@ -787,6 +869,11 @@
         pinsBytes: pinsBytes,
         pinsStorageSummary: pinsStorageSummary,
         formatBytes: formatBytes,
+        HOME_MIN_W: HOME_MIN_W,
+        HOME_MIN_H: HOME_MIN_H,
+        checkHomeFit: checkHomeFit,
+        homeFitMessage: homeFitMessage,
+        clearUnfitHome: clearUnfitHome,
         pinLive: pinLive,
         useTemporary: useTemporary,
         tempPhotoEntry: tempPhotoEntry,

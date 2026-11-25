@@ -621,19 +621,14 @@ h1, h2 {
 }
 
 /*
- * Appearance → Focus (global). Home tiles, Settings chrome, menus, Lab, screen-saver menus.
+ * Appearance → Focus (Home only). Settings / pop-up menus stay fixed and simple.
  * Both = scale + ring. Scale = grow only. Ring = outline only.
  */
 .focus-ring .app.focused .tile,
 .focus-ring .input.focused .tile,
 .focus-ring .gear.focused,
 .focus-ring .music-btn.focused,
-.focus-ring .thumb.focused img,
-.focus-ring .setting-row.focused,
-.focus-ring .chip.focused,
-.focus-ring .ed-item.focused,
-.focus-ring .lab-list li.focused,
-.focus-ring .ss-menu-row.is-focus {
+.focus-ring .thumb.focused img {
     transform: none;
 }
 
@@ -644,31 +639,6 @@ h1, h2 {
 
 .focus-scale .thumb.focused img {
     box-shadow: none;
-}
-
-.focus-scale .setting-row.focused,
-.focus-scale .chip.focused,
-.focus-scale .chip.on.focused,
-.focus-scale .ed-item.focused,
-.focus-scale .lab-list li.focused,
-.focus-scale .ss-menu-row.is-focus {
-    box-shadow: none;
-}
-
-/* Ring-only Settings chrome (menus stay invert-only; see #menu-list). */
-.focus-ring .setting-row.focused,
-.focus-ring .lab-list li.focused,
-.focus-ring .ed-item.focused {
-    box-shadow: 0 0 0 5px var(--ring);
-}
-
-.focus-ring .chip.focused,
-.focus-ring .chip.on.focused {
-    box-shadow: 0 0 0 5px var(--ring);
-}
-
-.focus-ring .ss-menu-row.is-focus {
-    box-shadow: 0 0 0 3px var(--ring);
 }
 
 /* ---------- Pages (everything except Home) ---------- */
@@ -881,7 +851,6 @@ h1, h2 {
     font-weight: 600;
     text-align: left;
     box-sizing: border-box;
-    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .setting-label {
@@ -923,8 +892,6 @@ h1, h2 {
 .setting-row.focused {
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.02);
-    box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
 .setting-row.focused .setting-value,
@@ -1088,7 +1055,6 @@ h1, h2 {
     font-size: 26px;
     font-weight: 600;
     color: var(--muted);
-    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .chip.on {
@@ -1104,14 +1070,11 @@ h1, h2 {
 .chip.focused {
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.05);
-    box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 5px rgba(255, 255, 255, 0.4);
 }
 
 .chip.on.focused {
     background: var(--fg);
     color: var(--bg);
-    box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 5px rgba(62, 142, 255, 0.55);
 }
 
 .chip.disabled {
@@ -1261,14 +1224,11 @@ h1, h2 {
     font-weight: 600;
     color: var(--muted);
     box-sizing: border-box;
-    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .ed-item.focused {
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.02);
-    box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
 .ed-item.moving {
@@ -1395,10 +1355,9 @@ h1, h2 {
 }
 
 #menu-list li {
-    padding: 16px 24px;
-    margin-bottom: 6px;
-    border-radius: 12px;
+    padding: 14px 8px;
     font-size: 30px;
+    font-weight: 500;
     color: var(--muted);
     text-align: center;
     white-space: nowrap;
@@ -1406,10 +1365,10 @@ h1, h2 {
     text-overflow: ellipsis;
 }
 
-/* Menus: invert only — no Focus scale/ring animation. */
+/* Selection = brighter text only. */
 #menu-list li.focused {
-    background: var(--fg);
-    color: var(--bg);
+    color: var(--fg);
+    font-weight: 700;
 }
 
 #menu-list li.checked::before {
@@ -1463,14 +1422,11 @@ h1, h2 {
     font-weight: 600;
     color: var(--muted);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-    transition: transform 0.1s ease-out, background 0.12s ease-out, color 0.12s ease-out, box-shadow 0.12s ease-out;
 }
 
 .lab-list li.focused {
     background: var(--fg);
     color: var(--bg);
-    transform: scale(1.02);
-    box-shadow: inset 0 0 0 2px var(--fg), 0 0 0 4px rgba(255, 255, 255, 0.35);
 }
 
 .lab-log {
@@ -1678,23 +1634,24 @@ html.preview, html.preview body {
 }
 
 /*
- * Laid out 320x180 larger than the screen and offset by half of that, so the photo can drift
- * 160px horizontally and 90px vertically without ever showing an edge. Panning rather than
- * zooming is deliberate: see the comment in js/screensaver.js. An <img> is used so Immich
- * originals respect EXIF orientation (CSS backgrounds do not).
+ * Laid out 192x108 larger than the screen and offset by half of that, so the photo can drift
+ * 96px horizontally and 54px vertically without showing an edge (~1.10× overscan — enough
+ * for drift, mild enough to keep landscape sharp). Panning rather than CSS zoom is deliberate:
+ * see js/screensaver.js. An <img> is used so Immich originals respect EXIF orientation.
  */
 .ss-photo {
     position: absolute;
-    top: -90px;
-    left: -160px;
-    width: 2240px;
-    height: 1260px;
+    top: -54px;
+    left: -96px;
+    width: 2112px;
+    height: 1188px;
     opacity: 0;
     overflow: hidden;
     background: #05060a;
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0);
     transition: opacity 2000ms linear;
     will-change: transform, opacity;
+    backface-visibility: hidden;
 }
 
 /* Contain (live sources): viewport-sized so the blur always covers the screen; pan only the sharp img. */
@@ -1751,8 +1708,9 @@ html.preview, html.preview body {
     object-fit: cover;
     object-position: center;
     image-orientation: from-image;
-    transform: translate(0, 0);
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+    backface-visibility: hidden;
 }
 
 /* Portrait: sharp photo fills stage height; pillars only on the sides. */
@@ -1782,18 +1740,13 @@ html.preview, html.preview body {
     padding: 14px 18px;
     border-radius: 8px;
     font-size: 26px;
-    color: #fff;
+    color: rgba(255, 255, 255, 0.55);
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
 }
 
-.ss-menu-row {
-    transition: transform 0.1s ease-out, background 0.12s ease-out, box-shadow 0.12s ease-out;
-}
-
 .ss-menu-row.is-focus {
+    color: #fff;
     background: rgba(255, 255, 255, 0.18);
-    transform: scale(1.03);
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
 .ss-scrim {

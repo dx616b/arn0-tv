@@ -67,8 +67,10 @@
 
     function parseUnsplashImage(img) {
         if (!img || !img.urls || !img.urls.raw) return null;
-        // Prefer landscape for TV; skip portraits when dimensions are known.
-        if (img.width > 0 && img.height > 0 && img.width < img.height) return null;
+        // Prefer landscape for TV unless Background → Portrait photos is On.
+        if (!PhotoUtil.allowPortrait() && img.width > 0 && img.height > 0 && img.width < img.height) {
+            return null;
+        }
         // Size the raw URL to 1080p; regular/full API URLs are fixed-size.
         var raw = img.urls.raw;
         var file = raw + (raw.indexOf('?') === -1 ? '?' : '&') +

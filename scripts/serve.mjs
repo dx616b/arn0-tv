@@ -273,12 +273,30 @@ createServer(async (req, res) => {
         return;
     }
     try {
-        const body = await readFile(file);
-        res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+        let body = await readFile(file);
+        const headers = {
+            'Content-Type': types[extname(file)] || 'application/octet-stream',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0'
+        };
+        // Preview has no live-reload: every HTML load gets fresh css/js query strings
+        // so a normal Refresh always picks up edits (browsers still cache ?v= urls).
+        if (extname(file) === '.html') {
+            const v = String(Date.now());
+            body = Buffer.from(
+                body.toString('utf8').replace(
+                    /(href|src)="((?:css|js)\/[^"?]+)(?:\?[^"]*)?"/g,
+                    '$1="$2?v=' + v + '"'
+                ),
+                'utf8'
+            );
+        }
+        res.writeHead(200, headers);
         res.end(body);
     } catch {
         res.writeHead(404).end('Not found');
     }
 }).listen(port, '127.0.0.1', () => {
-    console.log(`Preview: http://localhost:${port}`);
+    console.log(`Preview: http://localhost:${port}  (manual refresh; assets cache-busted per load)`);
 });

@@ -48,6 +48,8 @@
                 random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
                 // How many remote entries to buffer per source / in the upcoming plan.
                 livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)
+                // Home / Live / Rotate: when false, skip portrait (taller than wide) photos.
+                allowPortrait: wallSeed.allowPortrait != null ? !!wallSeed.allowPortrait : false,
                 lastChange: 0
             },
             screensaver: {

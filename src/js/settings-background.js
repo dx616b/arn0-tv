@@ -117,6 +117,19 @@
         });
         $('bg-interval-block').classList.toggle('hidden', !cycle);
 
+        var portraitBlock = $('bg-portrait-block');
+        if (portraitBlock) {
+            portraitBlock.classList.toggle('hidden', p.mode === 'off');
+            var portraitChips = $('bg-portrait');
+            if (portraitChips) {
+                portraitChips.innerHTML = '';
+                var allowP = !!p.allowPortrait;
+                [[false, 'No'], [true, 'Yes']].forEach(function (o) {
+                    portraitChips.appendChild(chip(o[1], allowP === o[0], { kind: 'allowPortrait', value: o[0] }));
+                });
+            }
+        }
+
         if (browseLive && window.LiveWallpaper && LiveWallpaper.syncLiveProvider) {
             LiveWallpaper.syncLiveProvider();
             p = Prefs.get().wallpaper;
@@ -490,6 +503,21 @@
         }
         if (item.kind === 'liveMore') {
             bgState.liveMore = !!item.value;
+            redrawBackground();
+            return;
+        }
+        if (item.kind === 'allowPortrait') {
+            var wantPortrait = !!item.value;
+            if (!!p.allowPortrait === wantPortrait) return;
+            p.allowPortrait = wantPortrait;
+            Prefs.save();
+            if (Wallpaper.clearUnfitHome) Wallpaper.clearUnfitHome();
+            // Portraits previously skipped as failed can re-enter the Live queue.
+            if (wantPortrait && window.LiveState) LiveState.failedFiles = {};
+            if (p.mode === 'live' && window.LiveWallpaper && LiveWallpaper.rebuildPlan) {
+                LiveWallpaper.rebuildPlan();
+            }
+            Wallpaper.apply();
             redrawBackground();
             return;
         }

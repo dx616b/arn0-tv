@@ -105,8 +105,11 @@
         if (!w || !w.path || !w.id) return null;
         // Honour selected category even if the API ignores a bad flags string.
         if (!wallhavenCategoryAllowed(w.category)) return null;
-        // Landscape only (ratios=16x9 already; double-check dimensions when present).
-        if (w.dimension_x > 0 && w.dimension_y > 0 && w.dimension_x < w.dimension_y) return null;
+        // Landscape preferred (API ratios=16x9); still drop portraits unless Portrait photos is On.
+        if (!PhotoUtil.allowPortrait() && w.dimension_x > 0 && w.dimension_y > 0 &&
+                w.dimension_x < w.dimension_y) {
+            return null;
+        }
         // Hard cap — no 1440p/UHD originals (Wallhaven serves the file as-is).
         if (w.dimension_x > DISPLAY_W || w.dimension_y > DISPLAY_H) return null;
         // 1080p PNG can be several MB; only skip extremes that decode poorly on TV.

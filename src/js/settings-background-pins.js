@@ -91,13 +91,22 @@
     }
 
     function useLiveNow(entry) {
-        if (!Wallpaper.useTemporary || !Wallpaper.useTemporary(entry)) {
+        if (!Wallpaper.useTemporary) {
             UI.toast('Could not use photo');
             return;
         }
-        bgState.keepLivePicker = true;
-        UI.toast('Using now (not saved)');
-        afterPinChange(entry.key);
+        UI.busy(Wallpaper.useTemporary(entry)).then(function (fit) {
+            if (!fit || !fit.ok) {
+                UI.toast((Wallpaper.homeFitMessage && Wallpaper.homeFitMessage(fit && fit.reason)) ||
+                    'Could not use photo');
+                return;
+            }
+            bgState.keepLivePicker = true;
+            UI.toast('Using now (not saved)');
+            afterPinChange(entry.key);
+        }, function () {
+            UI.toast('Could not use photo');
+        });
     }
 
     function saveLivePermanent(entry) {
@@ -108,8 +117,11 @@
                 ? ('Saved permanently' + (sum ? ' · ' + sum : ''))
                 : 'Saved (online only)');
             afterPinChange(entry.key);
-        }, function () {
-            UI.toast('Could not save');
+        }, function (err) {
+            UI.toast((err && err.homeFit && Wallpaper.homeFitMessage &&
+                Wallpaper.homeFitMessage(err.homeFit.reason)) ||
+                (err && err.message) ||
+                'Could not save');
         });
     }
 

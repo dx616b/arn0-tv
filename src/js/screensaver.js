@@ -73,8 +73,6 @@
         { key: 'normal', label: 'Normal', factor: 1 },
         { key: 'fast', label: 'Fast', factor: 0.5 }
     ];
-    // Portrait zoom may be cut mid-leg when the photo changes — factor > 1 keeps it slow.
-    var ZOOM_LEG_FACTOR = 1.25;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
@@ -134,8 +132,8 @@
             layer.style.height = '';
             return;
         }
-        var padX = drift.padX || 160;
-        var padY = drift.padY || 90;
+        var padX = drift.padX || 96;
+        var padY = drift.padY || 54;
         layer.style.top = (-padY) + 'px';
         layer.style.left = (-padX) + 'px';
         layer.style.width = (VIEW_W + 2 * padX) + 'px';
@@ -244,7 +242,7 @@
         } else {
             if (sharp) {
                 sharp.style.transition = 'none';
-                sharp.style.transform = 'translate(0, 0)';
+                sharp.style.transform = 'translate3d(0,0,0)';
             }
             layer.style.transform = pose(layer, u);
         }
@@ -266,10 +264,10 @@
         layer._frozen = null;
         if (!panOn()) {
             layer.style.transition = 'none';
-            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            layer.style.transform = layer.classList.contains('contain') ? 'none' : 'translate3d(0,0,0)';
             if (sharp) {
                 sharp.style.transition = 'none';
-                sharp.style.transform = 'translate(0, 0)';
+                sharp.style.transform = 'translate3d(0,0,0)';
                 void sharp.offsetWidth;
             } else {
                 void layer.offsetWidth;
@@ -290,10 +288,10 @@
             var layer0 = layers[front];
             var sharp0 = sharpEl(layer0);
             layer0.style.transition = 'opacity ' + FADE_MS + 'ms linear';
-            layer0.style.transform = layer0.classList.contains('contain') ? 'none' : 'translate(0, 0)';
+            layer0.style.transform = layer0.classList.contains('contain') ? 'none' : 'translate3d(0,0,0)';
             if (sharp0) {
                 sharp0.style.transition = 'none';
-                sharp0.style.transform = 'translate(0, 0)';
+                sharp0.style.transform = 'translate3d(0,0,0)';
             }
             return;
         }
@@ -322,8 +320,10 @@
         var flip = Math.max(800, flipMs || legMs());
         nextPanAt = now + flip;
         var contain = layer.classList.contains('contain');
-        var anim = Math.max(800, animMs || (contain ? Math.round(flip * ZOOM_LEG_FACTOR) : flip));
+        // Portrait no longer animates scale — same duration as landscape is fine.
+        var anim = Math.max(800, animMs || flip);
         layer._leg = { from: fromU, to: panSign, start: now, dur: anim };
+        // Opacity and transform on separate transitions — combining them on Tizen caused scan lines.
         if (contain) {
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
@@ -333,7 +333,7 @@
             }
             return;
         }
-        layer.style.transition = 'opacity ' + FADE_MS + 'ms linear, transform ' + anim + 'ms linear';
+        layer.style.transition = 'transform ' + anim + 'ms linear';
         layer.style.transform = pose(layer, panSign);
     }
 

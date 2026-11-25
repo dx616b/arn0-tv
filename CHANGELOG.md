@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Screen saver
+- Landscape drift overscan eased (~1.17× → ~1.10×) so pan crops less and stays sharper
+- Drift no longer animates scale (portrait uses a fixed mild crop + pan); fewer scan-line artifacts on TV
+
+### Live wallpaper / Home
+- Background → Portrait photos (Yes/No, default No): when Off, Home / Live / Rotate / Use now skip portraits; under-1280×720 still rejected
+
 ### Settings
 - Flat Settings hub with section headers (Home screen, Atmosphere, Samsung, Advanced); OK / ▶ opens, ◀ goes back
 - Hub rows show the current value (Background mode, Music, Weather, counts, …)
@@ -9,7 +16,7 @@
 - Background Live: Shuffle and Queue size tucked under More options; shorter helper text
 - Clear saved pins / Reset / Remove save: Cancel-first confirms with a two-line prompt
 - Apps on Home and Consoles match the same row styling
-- Appearance → Focus (Both / Scale / Ring) also applies to Settings rows, chips, Lab and screen saver menus (not pop-up menus)
+- Appearance → Focus (Both / Scale / Ring) is Home-only again; Settings / chips / pop-up menus use a fixed simple highlight (no scale/ring)
 
 ## 0.7.1
 
