@@ -12,7 +12,7 @@
     var VIEW_H = 1080;
     var FALLBACK_DRIFT = {
         coverX: 96, coverY: 54, zoom: 1.35,
-        containX: 0, containY: 40, padX: 96, padY: 54
+        containX: 48, containY: 0, padX: 96, padY: 54
     };
 
     /*
@@ -28,14 +28,16 @@
             var fh = oh * fit;
             // 1 = contain (full height); fill = scale that would flush width too.
             var fill = Math.max(VIEW_W / fw, VIEW_H / fh);
-            var zoom = Math.min(2.15, Math.max(1.15, 1 + (fill - 1) * 0.8));
+            var fillZoom = Math.min(2.15, Math.max(1.15, 1 + (fill - 1) * 0.8));
+            // Milder than full-bleed (~45% of the way to fill), still clearly visible.
+            var zoom = Math.min(1.55, Math.max(1.22, 1 + (fillZoom - 1) * 0.45));
             var zW = fw * zoom;
             var spillX = Math.max(0, (zW - VIEW_W) / 2);
             return {
                 coverX: 0,
                 coverY: 0,
                 zoom: zoom,
-                containX: Math.round(Math.min(64, spillX * 0.45)),
+                containX: Math.round(Math.min(72, spillX * 0.5)),
                 containY: 0, // never nudge vertically — keeps top/bottom sealed
                 padX: 0,
                 padY: 0
@@ -66,18 +68,13 @@
     /*
      * CSS transform for pose u.
      * Landscape: integer translate3d only (no scale — TV re-rasterises animated scale as scan lines).
-     * Portrait: horizontal nudge + mild animated zoom (contain ↔ slight crop). Keep the range
-     * small (~1.06–1.14) so Tizen scan-line shimmer stays subdued.
+     * Portrait: horizontal nudge + animated zoom from contain (u=+1) to drift.zoom (u=-1).
      */
     function poseTransform(drift, contain, u) {
         if (contain) {
             var t = (1 - u) / 2; // u=-1 focus-in, u=+1 zoomed out
             var x = Math.round(-t * (drift.containX || 0));
-            var zMax = 1.08;
-            if (drift.zoom > 1) {
-                zMax = Math.min(1.14, Math.max(1.06, 1 + (drift.zoom - 1) * 0.12));
-                zMax = Math.round(zMax * 1000) / 1000;
-            }
+            var zMax = drift.zoom > 1 ? drift.zoom : 1.22;
             var z = Math.round((1 + t * (zMax - 1)) * 1000) / 1000;
             return 'translate3d(' + x + 'px,0,0) scale(' + z + ')';
         }

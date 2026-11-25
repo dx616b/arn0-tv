@@ -7,7 +7,7 @@
 - Long captions from every Live provider scroll (marquee) instead of being cut with an ellipsis
 - Screensaver caption/music slots sized so scrolling text stays clear of the clock, weather and shortcuts
 - Screensaver peeks only the picture description on each change (and Immich polish); clock/music/chrome stay hidden
-- Portrait drift: mild animated zoom (~1.06–1.14) on a slower leg (~1.6× landscape)
+- Portrait drift: visible mild zoom (~1.22–1.55, short of full-bleed) on a slower leg (~1.6× landscape)
 
 ## 0.7.2
 

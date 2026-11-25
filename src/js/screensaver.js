@@ -332,6 +332,10 @@
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
             if (sharp) {
+                // Pin the start pose, then transition — otherwise some Tizen builds skip the zoom.
+                sharp.style.transition = 'none';
+                sharp.style.transform = pose(layer, fromU);
+                void sharp.offsetWidth;
                 sharp.style.transition = 'transform ' + anim + 'ms linear';
                 sharp.style.transform = pose(layer, panSign);
             }
