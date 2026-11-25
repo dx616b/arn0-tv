@@ -73,6 +73,8 @@
         { key: 'normal', label: 'Normal', factor: 1 },
         { key: 'fast', label: 'Fast', factor: 0.5 }
     ];
+    // Portrait zoom legs run slower than landscape pan (factor > 1).
+    var ZOOM_LEG_FACTOR = 1.6;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
@@ -317,11 +319,12 @@
             return;
         }
         var now = Date.now();
-        var flip = Math.max(800, flipMs || legMs());
-        nextPanAt = now + flip;
         var contain = layer.classList.contains('contain');
-        // Portrait no longer animates scale — same duration as landscape is fine.
-        var anim = Math.max(800, animMs || flip);
+        var flip = Math.max(800, flipMs || legMs());
+        // Slow portrait zoom: stretch the schedule unless resume passed an explicit anim.
+        if (contain && animMs == null) flip = Math.round(flip * ZOOM_LEG_FACTOR);
+        nextPanAt = now + flip;
+        var anim = Math.max(800, animMs != null ? animMs : flip);
         layer._leg = { from: fromU, to: panSign, start: now, dur: anim };
         // Opacity and transform on separate transitions — combining them on Tizen caused scan lines.
         if (contain) {

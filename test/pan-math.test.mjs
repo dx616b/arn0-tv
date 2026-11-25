@@ -44,11 +44,11 @@ test('landscape pose: u=-1 and u=+1 are the two corners, u=0 is centred', functi
     assert.equal(PM.poseTransform(d, false, 0), 'translate3d(0px,0px,0)');
 });
 
-test('portrait pose: fixed mild scale + horizontal translate only (no animated zoom)', function () {
+test('portrait pose: mild animated zoom + horizontal translate', function () {
     const d = { containX: 40, zoom: 1.5 };
-    // Same scale at both ends — only X moves (avoids TV scan lines from animating scale).
-    assert.equal(PM.poseTransform(d, true, 1), 'translate3d(0px,0,0) scale(1.1)');
-    assert.equal(PM.poseTransform(d, true, -1), 'translate3d(-40px,0,0) scale(1.1)');
+    // zoom 1.5 → zMax = 1.06; u=+1 out (scale 1), u=-1 in (scale 1.06).
+    assert.equal(PM.poseTransform(d, true, 1), 'translate3d(0px,0,0) scale(1)');
+    assert.equal(PM.poseTransform(d, true, -1), 'translate3d(-40px,0,0) scale(1.06)');
 });
 
 test('legU is linear across a leg and clamps outside it', function () {

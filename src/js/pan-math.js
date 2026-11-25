@@ -66,19 +66,19 @@
     /*
      * CSS transform for pose u.
      * Landscape: integer translate3d only (no scale — TV re-rasterises animated scale as scan lines).
-     * Portrait: same — a fixed mild crop scale (constant for the whole leg) + horizontal translate.
-     * Animating scale() was the main source of shimmer / scan lines on Tizen.
+     * Portrait: horizontal nudge + mild animated zoom (contain ↔ slight crop). Keep the range
+     * small (~1.06–1.14) so Tizen scan-line shimmer stays subdued.
      */
     function poseTransform(drift, contain, u) {
         if (contain) {
-            var t = (1 - u) / 2;
+            var t = (1 - u) / 2; // u=-1 focus-in, u=+1 zoomed out
             var x = Math.round(-t * (drift.containX || 0));
-            // Constant crop for the leg (not interpolated) — keeps the compositor on translate.
-            var z = 1.06;
+            var zMax = 1.08;
             if (drift.zoom > 1) {
-                z = Math.min(1.12, Math.max(1.04, 1 + (drift.zoom - 1) * 0.2));
-                z = Math.round(z * 1000) / 1000;
+                zMax = Math.min(1.14, Math.max(1.06, 1 + (drift.zoom - 1) * 0.12));
+                zMax = Math.round(zMax * 1000) / 1000;
             }
+            var z = Math.round((1 + t * (zMax - 1)) * 1000) / 1000;
             return 'translate3d(' + x + 'px,0,0) scale(' + z + ')';
         }
         var tx = Math.round(u * drift.coverX);
