@@ -42,23 +42,58 @@
 
     // ---------- Hub (flat, same groups / same entries as before)
 
-    function atmosphereEntries() {
-        var clearLabel = 'Clear saved pins';
-        var size = pinStorageLabel();
-        if (size && ((Wallpaper.pinsList && Wallpaper.pinsList()) || []).length) {
-            clearLabel += ' (' + size + ')';
+    function backgroundSummary() {
+        var p = Prefs.get().wallpaper;
+        if (p.mode === 'off') return 'Off';
+        if (p.mode === 'photo') return 'Photo';
+        if (p.mode === 'live') {
+            if (window.LiveWallpaper && LiveWallpaper.providerLabel) {
+                return 'Live · ' + LiveWallpaper.providerLabel();
+            }
+            return 'Live';
         }
+        if (p.mode === 'rotate') return 'Photo';
+        return p.mode || 'Off';
+    }
+
+    function screensaverSummary() {
+        var p = Prefs.get().screensaver;
+        if (!p.enabled) return 'Off';
+        var delay = (Screensaver.DELAYS || []).filter(function (d) { return d.key === p.delay; })[0];
+        return delay ? ('On · ' + delay.label) : 'On';
+    }
+
+    function musicSummary() {
+        var p = Prefs.get().music;
+        if (!p.enabled) return 'Off';
+        if (p.source === 'radio') return 'Radio';
+        if (p.source === 'playlist') return p.playlistName || 'Playlist';
+        return 'Navidrome';
+    }
+
+    function pinsSummary() {
+        var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
+        if (!pins.length) return 'None';
+        return pinStorageLabel() || (pins.length + ' saved');
+    }
+
+    function atmosphereEntries() {
         var entries = [
-            { label: 'Background', run: function () { UI.show('bg'); } },
-            { label: 'Screen saver', run: function () { UI.show('screensaver-settings'); } },
-            { label: 'Music', run: function () { UI.show('music-settings'); } },
-            { label: clearLabel, kind: 'action', run: clearSavedPins }
+            { label: 'Background', value: backgroundSummary(), run: function () { UI.show('bg'); } },
+            {
+                label: 'Screen saver',
+                value: screensaverSummary(),
+                run: function () { UI.show('screensaver-settings'); }
+            },
+            { label: 'Music', value: musicSummary(), run: function () { UI.show('music-settings'); } },
+            { label: 'Clear saved pins', value: pinsSummary(), kind: 'action', run: clearSavedPins }
         ];
         var hidden = window.Wallpaper && Wallpaper.hiddenBundledCount
             ? Wallpaper.hiddenBundledCount() : 0;
         if (hidden) {
             entries.push({
-                label: 'Restore bundled photos (' + hidden + ')',
+                label: 'Restore bundled photos',
+                value: String(hidden),
                 kind: 'action',
                 run: restoreBundledPhotos
             });
@@ -67,10 +102,20 @@
     }
 
     function hubEntries() {
+        var apps = Home.homeItems ? Home.homeItems().length : 0;
+        var consoles = Home.inputs ? Home.inputs().filter(function (i) { return !i.hidden; }).length : 0;
         return [{ section: 'Home screen' }]
             .concat([
-                { label: 'Apps on Home', run: function () { UI.show('homeapps'); } },
-                { label: 'Consoles', run: function () { UI.show('consoles'); } }
+                {
+                    label: 'Apps on Home',
+                    value: String(apps),
+                    run: function () { UI.show('homeapps'); }
+                },
+                {
+                    label: 'Consoles',
+                    value: consoles ? String(consoles) : 'None',
+                    run: function () { UI.show('consoles'); }
+                }
             ])
             .concat([{ section: 'Atmosphere' }])
             .concat(atmosphereEntries())

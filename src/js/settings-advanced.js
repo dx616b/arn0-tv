@@ -5,12 +5,42 @@
 (function () {
     'use strict';
 
+    function clockSummary() {
+        var p = Prefs.get().appearance;
+        var clock = p.clock === '12h' ? '12-hour' : '24-hour';
+        return p.showDate === false ? clock + ' · no date' : clock;
+    }
+
+    function appearanceSummary() {
+        var p = Prefs.get().appearance;
+        var font = Appearance.font(p.font);
+        var tiles = p.tiles === 'compact' ? 'Compact' : 'Comfortable';
+        return (font ? font.label : 'Manrope') + ' · ' + tiles;
+    }
+
+    function weatherSummary() {
+        if (window.Weather && Weather.summary) return Weather.summary();
+        return 'Off';
+    }
+
+    function soundSummary() {
+        var p = Prefs.get().sound;
+        if (!p.enabled) return 'Off';
+        var preset = (p.preset || 'soft');
+        preset = preset.charAt(0).toUpperCase() + preset.slice(1);
+        return 'On · ' + preset;
+    }
+
     function advancedEntries() {
         var entries = [
-            { label: 'Clock', run: SettingsCore.openClock },
-            { label: 'Weather', run: function () { UI.show('weather-settings'); } },
-            { label: 'Appearance', run: SettingsCore.openLook },
-            { label: 'Navigation sound', run: function () { UI.show('sound-settings'); } },
+            { label: 'Clock', value: clockSummary(), run: SettingsCore.openClock },
+            { label: 'Weather', value: weatherSummary(), run: function () { UI.show('weather-settings'); } },
+            { label: 'Appearance', value: appearanceSummary(), run: SettingsCore.openLook },
+            {
+                label: 'Navigation sound',
+                value: soundSummary(),
+                run: function () { UI.show('sound-settings'); }
+            },
             {
                 label: 'Refresh app list',
                 kind: 'action',

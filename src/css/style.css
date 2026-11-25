@@ -804,6 +804,19 @@ h1, h2 {
     font-size: 28px;
 }
 
+#settings .settings-hub .setting-value {
+    max-width: 460px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+#settings .settings-hub .setting-row-action .setting-value {
+    font-size: 22px;
+}
+
 .settings-section {
     list-style: none;
     margin: 26px 0 10px;

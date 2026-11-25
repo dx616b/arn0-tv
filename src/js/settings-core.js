@@ -86,7 +86,7 @@
             if (e.mini) li.appendChild(e.mini);
             li.appendChild(el('span', 'setting-label', e.label));
             if (e.value) li.appendChild(el('span', 'setting-value', e.value));
-            else if (e.kind !== 'action' && e.kind !== 'danger') {
+            if (e.kind !== 'action' && e.kind !== 'danger') {
                 li.appendChild(el('span', 'setting-chevron', '\u203A'));
             }
             li._item = e;
