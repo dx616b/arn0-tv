@@ -73,6 +73,8 @@
         { key: 'normal', label: 'Normal', factor: 1 },
         { key: 'fast', label: 'Fast', factor: 0.5 }
     ];
+    // Portrait zoom legs run slower than landscape pan (factor > 1).
+    var ZOOM_LEG_FACTOR = 1.6;
     var HELD_LEG_MS = 90 * 1000;    // one leg of the drift when a single photo is held
     var FADE_MS = 2000;             // crossfade, also set as the default in the stylesheet
     var POLL_MS = 1000;
@@ -95,6 +97,7 @@
     var dark = false;
     var chromeHidden = false;   // writings faded; next key only reveals them
     var lastChromeAt = 0;       // last time chrome was shown or touched
+    var captionPeekTimer = 0;   // brief description-only reveal while chrome-off
     var advancing = false;      // one in-flight live takeNext (timer or remote)
     var shownKey = '';          // live polish may update caption after the photo is up
     var providerFlashTimer = 0;
@@ -317,17 +320,22 @@
             return;
         }
         var now = Date.now();
-        var flip = Math.max(800, flipMs || legMs());
-        nextPanAt = now + flip;
         var contain = layer.classList.contains('contain');
-        // Portrait no longer animates scale — same duration as landscape is fine.
-        var anim = Math.max(800, animMs || flip);
+        var flip = Math.max(800, flipMs || legMs());
+        // Slow portrait zoom: stretch the schedule unless resume passed an explicit anim.
+        if (contain && animMs == null) flip = Math.round(flip * ZOOM_LEG_FACTOR);
+        nextPanAt = now + flip;
+        var anim = Math.max(800, animMs != null ? animMs : flip);
         layer._leg = { from: fromU, to: panSign, start: now, dur: anim };
         // Opacity and transform on separate transitions — combining them on Tizen caused scan lines.
         if (contain) {
             layer.style.transition = 'opacity ' + FADE_MS + 'ms linear';
             layer.style.transform = 'none';
             if (sharp) {
+                // Pin the start pose, then transition — otherwise some Tizen builds skip the zoom.
+                sharp.style.transition = 'none';
+                sharp.style.transform = pose(layer, fromU);
+                void sharp.offsetWidth;
                 sharp.style.transition = 'transform ' + anim + 'ms linear';
                 sharp.style.transform = pose(layer, panSign);
             }
@@ -574,23 +582,19 @@
         else el.textContent = text || '';
     }
 
-    // Short line for the screen: drops bracketed credits such as "(© Photographer / Agency)".
-    function shortCaption(text, max) {
-        var t = String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
-        if (t.length <= max) return t;
-        var cut = t.slice(0, max);
-        var sp = cut.lastIndexOf(' ');
-        return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
+    // Clean caption text; keep full length — fillLine marquees overflow (no ellipsis).
+    function cleanCaption(text) {
+        return String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
     }
 
     function caption(w) {
         // Title + date/credit from live metadata (title/sub/credit on each wallpaper entry).
-        captionText = w ? shortCaption(w.title || w.credit || '', 40) : '';
+        captionText = w ? cleanCaption(w.title || w.credit || '') : '';
         captionSub = '';
         if (w) {
             if (w.sub && w.credit && w.credit !== w.title) captionSub = w.sub + ' · ' + w.credit;
             else captionSub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
-            captionSub = shortCaption(captionSub, 48);
+            captionSub = cleanCaption(captionSub);
         }
         // Fixed-width slot + horizontal scroll when the line is longer (does not cover legend).
         fillLine($('ss-title'), captionText, true);
@@ -1042,9 +1046,32 @@
         DevLog.log('Screen saver on');
     }
 
+    function clearCaptionPeek() {
+        if (captionPeekTimer) clearTimeout(captionPeekTimer);
+        captionPeekTimer = 0;
+        var root = $('screensaver');
+        if (root) root.classList.remove('caption-peek');
+    }
+
+    // While chrome is idle-hidden, briefly show only the picture description (not clock/music/…).
+    function peekCaption() {
+        if (!open || dark || !chromeHidden) return;
+        if (!captionText && !captionSub) return;
+        var root = $('screensaver');
+        if (!root) return;
+        root.classList.add('caption-peek');
+        if (captionPeekTimer) clearTimeout(captionPeekTimer);
+        var ms = chromeHide().ms || 12000;
+        captionPeekTimer = setTimeout(function () {
+            captionPeekTimer = 0;
+            if (root) root.classList.remove('caption-peek');
+        }, ms);
+    }
+
     function showChrome() {
         chromeHidden = false;
         lastChromeAt = Date.now();
+        clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.remove('chrome-off');
     }
@@ -1052,6 +1079,7 @@
     function hideChrome() {
         if (!open || dark || chromeHidden) return;
         chromeHidden = true;
+        clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.add('chrome-off');
     }
@@ -1095,6 +1123,7 @@
         if (dark) return;
         dark = true;
         hideChrome();
+        clearCaptionPeek();
         freezePan();
         var root = $('screensaver');
         if (root) root.classList.add('is-dark');
@@ -1136,6 +1165,8 @@
         shownKey = w.key || '';
         caption(w);
         showPhoto(w);
+        // Description only — do not bring back clock / music / shortcuts.
+        if (!dark) peekCaption();
         // After the crossfade — do not compete with the current decode on this SoC.
         setTimeout(function () {
             if (open && Wallpaper.preloadAhead) Wallpaper.preloadAhead();
@@ -1146,7 +1177,10 @@
     function refreshCaptionIfShown() {
         if (!open || !shownKey) return;
         var w = Wallpaper.find(shownKey);
-        if (w) caption(w);
+        if (!w) return;
+        caption(w);
+        // Polished description arrived — peek caption only if chrome is already idle-hidden.
+        if (!dark) peekCaption();
     }
 
     // Timer and remote Right both land here so the interval resets after a manual skip.
@@ -1237,10 +1271,11 @@
         lastInput = Date.now();
         photoToken++;
         clearTimeout(providerFlashTimer);
+        clearCaptionPeek();
         captionSub = '';
         lastMusicSig = '';
         var root = $('screensaver');
-        if (root) root.classList.remove('chrome-off', 'is-dark');
+        if (root) root.classList.remove('chrome-off', 'is-dark', 'caption-peek');
         var veil = $('ss-dark');
         if (veil) veil.style.opacity = '0';
         var flash = $('ss-provider');

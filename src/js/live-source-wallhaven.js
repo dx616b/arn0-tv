@@ -67,12 +67,6 @@
         'digital art': 1
     };
 
-    function wallhavenCap(s, n) {
-        s = String(s || '').trim();
-        if (!s) return '';
-        return s.length > n ? s.slice(0, n - 1) + '…' : s;
-    }
-
     function wallhavenTitleFromTags(tags) {
         var names = (Array.isArray(tags) ? tags : []).map(function (t) {
             return t && t.name ? String(t.name).trim() : '';
@@ -82,7 +76,8 @@
         });
         if (!rich.length) rich = names;
         if (!rich.length) return '';
-        return wallhavenCap(rich.slice(0, 2).join(' · '), 48);
+        // Full tag line — screensaver marquees overflow (no ellipsis).
+        return rich.join(' · ');
     }
 
     // Caption fields only — never apply size filters here (detail polish must always run).

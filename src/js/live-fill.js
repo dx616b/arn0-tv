@@ -249,12 +249,14 @@
             st.immichAlbumOrigin = album.origin;
             st.immichAlbumQuery = album.query;
             st.immichAlbumName = album.name;
+            // withExif: captions (description / place) arrive with the page — otherwise
+            // polishImmich waits on a second /assets round-trip after the photo is already up.
             return xhrPostJson(immichApi('/search/metadata?' + album.query), {
                 albumIds: [album.id],
                 type: 'IMAGE',
                 size: IMMICH_PAGE,
                 page: pageNum,
-                withExif: false
+                withExif: true
             }, IMMICH_XHR_MS).then(function (res) {
                 var list = ((res.assets && res.assets.items) || []).filter(function (a) {
                     return a && a.type === 'IMAGE' && a.id;

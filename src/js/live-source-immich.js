@@ -43,7 +43,8 @@
     function immichTitle(a, album) {
         var x = immichExif(a);
         var desc = String(x.description || a.description || '').trim();
-        if (desc) return desc.length > 120 ? desc.slice(0, 117) + '…' : desc;
+        // Full description — screen saver / Home marquees long lines (no ellipsis).
+        if (desc) return desc;
         var place = immichPlace(a);
         if (place) return place;
         var name = String(a.originalFileName || '').split(/[/\\]/).pop() || '';
@@ -130,18 +131,24 @@
         });
     }
 
-    // Enrich place/title when showing; never block plan fill on /assets round-trips.
+    // Enrich place/title from /assets. Search withExif usually has description already;
+    // this fills reverse-geocode gaps. Coalesced so plan prefetch + show share one request.
     function polishImmich(entry) {
         if (!entry || !entry.key || !LiveState.stream.immichAlbum) return Promise.resolve(entry);
         if ((entry.credit || '').indexOf('Immich') !== 0) return Promise.resolve(entry);
+        if (entry._immichPolished) return Promise.resolve(entry);
+        if (entry._immichPolish) return entry._immichPolish;
         var album = LiveState.stream.immichAlbum;
         // Catalog keys are "immich:<uuid>"; the assets API wants the bare id.
         var id = String(entry.key).replace(/^immich:/, '');
         if (!id) return Promise.resolve(entry);
-        return fetchImmichAsset(id).then(function (full) {
+        entry._immichPolish = fetchImmichAsset(id).then(function (full) {
+            entry._immichPolished = true;
+            entry._immichPolish = null;
             if (!full) return entry;
             var merged = mergeImmichAsset({ id: id, exifInfo: {} }, full);
             var better = immichEntry(merged, album.origin, album.query, album.name);
+            if (!better) return entry;
             entry.title = better.title;
             entry.sub = better.sub;
             entry.file = better.file;
@@ -149,7 +156,11 @@
             entry.fileFallbacks = better.fileFallbacks;
             entry.thumb = better.thumb;
             return entry;
-        }, function () { return entry; });
+        }, function () {
+            entry._immichPolish = null;
+            return entry;
+        });
+        return entry._immichPolish;
     }
 
     window.LiveSources = window.LiveSources || {};

@@ -24,9 +24,9 @@ test('near-16:9 landscape gets the invented overscan', function () {
     assert.equal(d.coverY, 54);
 });
 
-test('portrait drift zooms within 1.15-2.15 and never nudges vertically', function () {
+test('portrait drift uses a mild zoom (below full-bleed) and never nudges vertically', function () {
     const d = PM.computeDrift(3000, 4000, true);
-    assert.ok(d.zoom >= 1.15 && d.zoom <= 2.15, 'zoom ' + d.zoom);
+    assert.ok(d.zoom >= 1.22 && d.zoom <= 1.55, 'zoom ' + d.zoom);
     assert.equal(d.containY, 0);
     assert.equal(d.coverX, 0);
     assert.equal(d.coverY, 0);
@@ -44,11 +44,11 @@ test('landscape pose: u=-1 and u=+1 are the two corners, u=0 is centred', functi
     assert.equal(PM.poseTransform(d, false, 0), 'translate3d(0px,0px,0)');
 });
 
-test('portrait pose: fixed mild scale + horizontal translate only (no animated zoom)', function () {
-    const d = { containX: 40, zoom: 1.5 };
-    // Same scale at both ends — only X moves (avoids TV scan lines from animating scale).
-    assert.equal(PM.poseTransform(d, true, 1), 'translate3d(0px,0,0) scale(1.1)');
-    assert.equal(PM.poseTransform(d, true, -1), 'translate3d(-40px,0,0) scale(1.1)');
+test('portrait pose: animated zoom + horizontal translate', function () {
+    const d = { containX: 40, zoom: 1.4 };
+    // u=+1 contain (scale 1), u=-1 focus-in (scale 1.4).
+    assert.equal(PM.poseTransform(d, true, 1), 'translate3d(0px,0,0) scale(1)');
+    assert.equal(PM.poseTransform(d, true, -1), 'translate3d(-40px,0,0) scale(1.4)');
 });
 
 test('legU is linear across a leg and clamps outside it', function () {

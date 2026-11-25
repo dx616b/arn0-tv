@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+## 0.7.3
+
+### Live wallpaper / Screen saver
+- Immich: descriptions/captions come from search EXIF and are polished while the photo is still queued (not after it appears)
+- Long captions from every Live provider scroll (marquee) instead of being cut with an ellipsis
+- Screensaver caption/music slots sized so scrolling text stays clear of the clock, weather and shortcuts
+- Screensaver peeks only the picture description on each change (and Immich polish); clock/music/chrome stay hidden
+- Portrait drift: visible mild zoom (~1.22–1.55, short of full-bleed) on a slower leg (~1.6× landscape)
+- Home portraits use cover crop (no side blur) so leaving the screensaver keeps the same picture
+
 ## 0.7.2
 
 ### Screen saver
