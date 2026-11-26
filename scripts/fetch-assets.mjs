@@ -31,6 +31,9 @@ const fonts = {
     'inter.woff2': FS + 'inter@5.1.0/files/inter-latin-wght-normal.woff2',
     'outfit.woff2': FS + 'outfit@5.1.0/files/outfit-latin-wght-normal.woff2',
     'dm-sans.woff2': FS + 'dm-sans@5.1.0/files/dm-sans-latin-wght-normal.woff2',
+    // Screen saver clock only — display numerals, not the UI face.
+    'space-grotesk.woff2': FS + 'space-grotesk@5.1.0/files/space-grotesk-latin-wght-normal.woff2',
+    'space-grotesk-OFL.txt': FS + 'space-grotesk@5.1.0/LICENSE',
     'OFL.txt': FS + 'manrope@5.1.0/LICENSE'
 };
 

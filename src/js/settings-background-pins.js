@@ -16,6 +16,19 @@
         return Wallpaper.pinsStorageSummary();
     }
 
+    // Cancel-first confirm for discard / remove / clear. opts: { detail, onBack }.
+    function confirmDanger(title, confirmLabel, onConfirm, opts) {
+        opts = opts || {};
+        var rows = [
+            { label: 'Cancel', kind: 'action', current: true, run: opts.onBack },
+            { label: confirmLabel, kind: 'danger', run: onConfirm }
+        ];
+        var menuOpts = {};
+        if (opts.onBack) menuOpts.onBack = opts.onBack;
+        if (opts.detail) menuOpts.detail = opts.detail;
+        UI.menu(title, rows, menuOpts);
+    }
+
     function isPinnedKey(key) {
         var list = (window.Wallpaper && Wallpaper.pinsList && Wallpaper.pinsList()) || [];
         return list.some(function (pin) { return pin.key === key; });
@@ -63,17 +76,63 @@
             UI.toast('No hidden bundled photos');
             return;
         }
+        // Restore is not destructive, but still Cancel-first like other confirms.
         UI.menu('Restore ' + n + ' bundled photo' + (n === 1 ? '' : 's') + '?', [
+            { label: 'Cancel', kind: 'action', current: true },
             {
-                label: 'Restore', run: function () {
+                label: 'Restore',
+                kind: 'action',
+                run: function () {
                     Wallpaper.restoreBundled();
                     UI.toast('Bundled photos restored');
                     afterPinChange(Prefs.get().wallpaper.photo);
                     if (typeof SettingsCore.renderAtmosphere === 'function') SettingsCore.renderAtmosphere();
                 }
-            },
-            { label: 'Cancel' }
+            }
         ]);
+    }
+
+    function confirmRemovePin(key, opts) {
+        opts = opts || {};
+        confirmDanger('Remove this saved photo?', 'Remove', function () {
+            removeOnePin(key);
+        }, {
+            onBack: opts.onBack,
+            detail: opts.detail || 'It will be deleted from Photos.'
+        });
+    }
+
+    function confirmHideBundled(key, opts) {
+        opts = opts || {};
+        confirmDanger('Hide this bundled photo?', 'Hide', function () {
+            hideOneBundled(key);
+        }, {
+            onBack: opts.onBack,
+            detail: opts.detail || 'You can restore hidden bundled photos later.'
+        });
+    }
+
+    function confirmDiscardTemp(entry, opts) {
+        opts = opts || {};
+        var key = entry && entry.key;
+        confirmDanger('Discard temporary photo?', 'Discard', function () {
+            if (Wallpaper.clearTempPhoto) Wallpaper.clearTempPhoto();
+            var next = Prefs.get().wallpaper.photo;
+            if (key && next === key) {
+                var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
+                var ship = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
+                    Wallpaper.bundled();
+                next = (pins[0] && pins[0].key) || (ship[0] && ship[0].key) || next;
+                Prefs.get().wallpaper.photo = next;
+                Prefs.save();
+                Wallpaper.apply();
+            }
+            UI.toast('Discarded');
+            afterPinChange(Prefs.get().wallpaper.photo);
+        }, {
+            onBack: opts.onBack,
+            detail: opts.detail || 'It will not be saved to Photos.'
+        });
     }
 
     function usePhotoKey(key) {
@@ -131,32 +190,37 @@
             return;
         }
         if (isPinnedKey(entry.key)) {
+            var reopen = function () { livePhotoMenu(entry); };
             UI.menu(entry.title || 'Saved photo', [
                 {
-                    label: 'Use', run: function () { usePhotoKey(entry.key); }
+                    label: 'Use',
+                    kind: 'action',
+                    run: function () { usePhotoKey(entry.key); }
                 },
                 {
-                    label: 'Remove save', run: function () {
-                        UI.menu('Remove this saved pin?', [
-                            { label: 'Cancel', current: true },
-                            {
-                                label: 'Remove', run: function () { removeOnePin(entry.key); }
-                            }
-                        ], { detail: 'It will be deleted from Photos.' });
+                    label: 'Remove save',
+                    kind: 'danger',
+                    run: function () {
+                        // ◀ returns here; Back cancels the whole menu stack.
+                        confirmRemovePin(entry.key, { onBack: reopen });
                     }
                 },
-                { label: 'Cancel' }
+                { label: 'Cancel', kind: 'action' }
             ]);
             return;
         }
         UI.menu(entry.title || 'Photo', [
             {
-                label: 'Use now', run: function () { useLiveNow(entry); }
+                label: 'Use now',
+                kind: 'action',
+                run: function () { useLiveNow(entry); }
             },
             {
-                label: 'Save permanently', run: function () { saveLivePermanent(entry); }
+                label: 'Save permanently',
+                kind: 'action',
+                run: function () { saveLivePermanent(entry); }
             },
-            { label: 'Cancel' }
+            { label: 'Cancel', kind: 'action' }
         ]);
     }
 
@@ -167,37 +231,32 @@
             return;
         }
         var size = pinStorageLabel();
-        UI.menu('Clear all saved pins?', [
-            { label: 'Cancel', current: true },
-            {
-                label: 'Clear pins', run: function () {
-                    UI.busy(Wallpaper.clearPins()).then(function () {
-                        var p = Prefs.get().wallpaper;
-                        var visible = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
-                            Wallpaper.bundled();
-                        if (visible.length) {
-                            p.photo = visible[0].key;
-                            Prefs.save();
-                            Wallpaper.apply();
-                        }
-                        bgState.gridMode = '';
-                        bgState.photosKeys = {};
-                        UI.toast('Saved pins cleared');
-                        // Atmosphere list label + Background storage note both bake size at render.
-                        if (typeof SettingsCore.renderAtmosphere === 'function') SettingsCore.renderAtmosphere();
-                        if ($('bg-settings') && !$('bg-settings').classList.contains('hidden')) {
-                            if (SettingsBackground.redraw) SettingsBackground.redraw();
-                            else {
-                                renderBackground();
-                                UI.refresh();
-                            }
-                        } else {
-                            UI.refresh();
-                        }
-                    });
+        confirmDanger('Clear all saved pins?', 'Clear pins', function () {
+            UI.busy(Wallpaper.clearPins()).then(function () {
+                var p = Prefs.get().wallpaper;
+                var visible = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
+                    Wallpaper.bundled();
+                if (visible.length) {
+                    p.photo = visible[0].key;
+                    Prefs.save();
+                    Wallpaper.apply();
                 }
-            }
-        ], {
+                bgState.gridMode = '';
+                bgState.photosKeys = {};
+                UI.toast('Saved pins cleared');
+                // Atmosphere list label + Background storage note both bake size at render.
+                if (typeof SettingsCore.renderAtmosphere === 'function') SettingsCore.renderAtmosphere();
+                if ($('bg-settings') && !$('bg-settings').classList.contains('hidden')) {
+                    if (SettingsBackground.redraw) SettingsBackground.redraw();
+                    else {
+                        renderBackground();
+                        UI.refresh();
+                    }
+                } else {
+                    UI.refresh();
+                }
+            });
+        }, {
             detail: size
                 ? 'Deletes every permanently saved photo (' + size + ').'
                 : 'Deletes every permanently saved photo.'
@@ -228,6 +287,10 @@
         afterPinChange: afterPinChange,
         removeOnePin: removeOnePin,
         hideOneBundled: hideOneBundled,
+        confirmDanger: confirmDanger,
+        confirmRemovePin: confirmRemovePin,
+        confirmHideBundled: confirmHideBundled,
+        confirmDiscardTemp: confirmDiscardTemp,
         restoreBundledPhotos: restoreBundledPhotos,
         usePhotoKey: usePhotoKey,
         useLiveNow: useLiveNow,

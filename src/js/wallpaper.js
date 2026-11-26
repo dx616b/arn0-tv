@@ -786,15 +786,21 @@
     }
 
     // Called when Home appears (launch or return from another app).
+    // Keep the already-painted frame; defer ensureLive / next so resume is not fighting decode.
     function homeShown() {
         var p = Prefs.get().wallpaper;
-        if (p.mode === 'live') {
-            ensureLive(false).then(function () {
-                if (p.interval === 'open' || due()) next();
-            });
-            return;
-        }
-        if (p.mode === 'rotate' && (p.interval === 'open' || due())) next();
+        if (p.mode !== 'live' && p.mode !== 'rotate') return;
+        setTimeout(function () {
+            if (document.hidden) return;
+            if (p.mode === 'live') {
+                ensureLive(false).then(function () {
+                    if (document.hidden) return;
+                    if (p.interval === 'open' || due()) next();
+                });
+                return;
+            }
+            if (p.interval === 'open' || due()) next();
+        }, 400);
     }
 
     function afterPaint(fn) {

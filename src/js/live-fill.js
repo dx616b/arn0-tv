@@ -307,6 +307,9 @@
             }
 
             function step() {
+                // Another app owns the screen: stop topping up. Home show / ensureLive will
+                // kick backgroundFill again when we return.
+                if (document.hidden) return;
                 if (reached()) return;
                 if (guard++ > 80) return;
                 return pullFresh(name).then(function (res) {

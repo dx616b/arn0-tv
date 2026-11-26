@@ -338,7 +338,8 @@
         var brand = findBrand(input.brand || '') || { bg: '#2a2f3a', fg: '#fff', mark: null };
         var wrap = el('div', 'input');
         var tile = el('div', 'tile');
-        tile.style.background = glassBg(consoleTileBg(input, brand.bg), 0.38);
+        // Stronger brand glass than before (0.38) so consoles sit closer to solid app tiles.
+        tile.style.background = glassBg(consoleTileBg(input, brand.bg), 0.62);
         // Logo panel (centred mark) + name / HDMI on the right.
         var logo = el('div', 'input-logo');
         if (brand.mark) logo.appendChild(markEl(brand));
@@ -353,13 +354,15 @@
         meta.appendChild(name);
         var port = el('div', 'port');
         var dot = el('span', 'dot');
+        var portLabel = document.createTextNode('HDMI ' + input.hdmi);
         port.appendChild(dot);
-        port.appendChild(document.createTextNode('HDMI ' + input.hdmi));
+        port.appendChild(portLabel);
         meta.appendChild(port);
         tile.appendChild(meta);
         wrap.appendChild(tile);
         wrap._item = { kind: 'input', hdmi: input.hdmi, label: input.label, method: input.method };
         wrap._dot = dot;
+        wrap._portLabel = portLabel;
         wrap._name = name;
         return wrap;
     }
@@ -763,34 +766,59 @@
         return pick;
     }
 
-    function rearrangeRemove() {
-        if (!rearrange.active || !rearrange.items) return true;
+    function rearrangeRemoveApply() {
+        if (!rearrange.active || !rearrange.items) return;
         var items = rearrange.items;
         if (rearrange.kind === 'app') {
-            if (items.length <= 1) {
-                UI.toast('Home needs at least one app');
-                if (window.Sound) Sound.play('edge');
-                return true;
-            }
+            if (items.length <= 1) return;
             var next = rearrange.index;
             items.splice(rearrange.index, 1);
             if (next >= items.length) next = items.length - 1;
             rearrange.index = next;
         } else {
             var pos = rearrange.index;
-            if (pos < 0 || pos >= items.length) return true;
+            if (pos < 0 || pos >= items.length) return;
             items.splice(pos, 1);
             rearrange.index = pickVisibleIndex(items, pos);
             if (rearrange.index < 0) {
                 renderHome();
                 if (UI.refreshHints) UI.refreshHints();
                 if (window.Sound) Sound.play('ok');
-                return true;
+                return;
             }
         }
         renderHome();
         focusRearrangeTile();
         if (window.Sound) Sound.play('ok');
+    }
+
+    // ▼ while rearranging — Cancel-first confirm (same shape as console Options → Remove).
+    function rearrangeRemove() {
+        if (!rearrange.active || !rearrange.items) return true;
+        var items = rearrange.items;
+        var idx = rearrange.index;
+        if (idx < 0 || idx >= items.length) return true;
+        if (rearrange.kind === 'app') {
+            if (items.length <= 1) {
+                UI.toast('Home needs at least one app');
+                if (window.Sound) Sound.play('edge');
+                return true;
+            }
+        }
+        var item = items[idx];
+        var name = (item && (item.label || item.name || item.title)) ||
+            (rearrange.kind === 'app' ? 'this app' : 'this console');
+        var title = rearrange.kind === 'app'
+            ? ('Remove ' + name + ' from Home?')
+            : ('Remove ' + name + '?');
+        UI.menu(title, [
+            { label: 'Cancel', kind: 'action', current: true },
+            {
+                label: 'Remove',
+                kind: 'danger',
+                run: rearrangeRemoveApply
+            }
+        ]);
         return true;
     }
 
@@ -858,8 +886,15 @@
 
     function applyInputStatus() {
         UI.children($('inputs-row')).forEach(function (tile) {
-            if (!tile._dot || !tile._item) return;
-            tile._dot.classList.toggle('on', state.hdmi[tile._item.hdmi] === true);
+            if (!tile._item) return;
+            var on = state.hdmi[tile._item.hdmi] === true;
+            if (tile._dot) tile._dot.classList.toggle('on', on);
+            tile.classList.toggle('input-on', on);
+            if (tile._portLabel) {
+                tile._portLabel.textContent = on
+                    ? ('Connected · HDMI ' + tile._item.hdmi)
+                    : ('HDMI ' + tile._item.hdmi);
+            }
         });
     }
 
@@ -1311,11 +1346,17 @@
                 if (state.tvMode) exitTvMode();
                 return;
             }
+            // Cheap DOM first so the compositor can show the existing Home frame.
             updateClock();
             updateWeather();
-            if (window.Weather) Weather.refresh();
             refreshInputStatus();
-            if (UI.isVisible('home')) Wallpaper.homeShown();
+            // Network / wallpaper rotate after a beat — competing with resume was linked to
+            // multi-second Home activate and FPS 0 while Unsplash/media work ran.
+            setTimeout(function () {
+                if (document.hidden) return;
+                if (window.Weather) Weather.refresh();
+                if (UI.isVisible('home')) Wallpaper.homeShown();
+            }, 250);
             if (Date.now() - state.lastFetch > REFRESH_AFTER_MS) setTimeout(loadApps, 1500);
         });
         // With a cache, let the first frames and key presses through before the slow app list.

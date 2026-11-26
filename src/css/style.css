@@ -44,6 +44,13 @@
     font-weight: 100 1000;
 }
 
+/* Screen saver clock — Space Grotesk for large thin numerals on photos. */
+@font-face {
+    font-family: "Space Grotesk";
+    src: url("../fonts/space-grotesk.woff2") format("woff2");
+    font-weight: 300 700;
+}
+
 :root {
     --bg: #090b10;
     --fg: #f4f5f7;
@@ -567,7 +574,7 @@ html.tiles-compact #home.home-apps-multi #apps-row.home-apps-grid .app .label {
 
 #home.home-apps-multi .input .meta {
     width: 50%;
-    padding: 0 16px 0 6px;
+    padding: 0 14px;
 }
 
 #home.home-apps-multi .input .name {
@@ -576,13 +583,13 @@ html.tiles-compact #home.home-apps-multi #apps-row.home-apps-grid .app .label {
 
 #home.home-apps-multi .input .port {
     margin-top: 8px;
-    font-size: 20px;
+    font-size: 17px;
 }
 
 #home.home-apps-multi .dot {
-    width: 12px;
-    height: 12px;
-    margin-right: 10px;
+    width: 9px;
+    height: 9px;
+    margin-right: 8px;
 }
 
 #home.home-apps-multi .input.add-console .add-tile svg {
@@ -605,7 +612,7 @@ html.tiles-compact #home.home-apps-multi .input-logo .wordmark {
 }
 
 html.tiles-compact #home.home-apps-multi .input .meta {
-    padding: 0 16px 0 6px;
+    padding: 0 12px;
 }
 
 html.tiles-compact #home.home-apps-multi .input .name {
@@ -613,7 +620,7 @@ html.tiles-compact #home.home-apps-multi .input .name {
 }
 
 html.tiles-compact #home.home-apps-multi .input .port {
-    font-size: 18px;
+    font-size: 16px;
 }
 
 /* App tiles — five fit the same 1680px as three consoles (5×w + 4×36). */
@@ -787,8 +794,9 @@ html.tiles-compact #home.home-apps-multi .input .port {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 18px;
+    padding: 18px 16px;
     box-sizing: border-box;
+    border-right: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 /* Kill app-tile absolute .mark / .wordmark so the glyph centres in the zone. */
@@ -832,10 +840,10 @@ html.tiles-compact #home.home-apps-multi .input .port {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    align-items: flex-start;
-    padding: 0 20px 0 8px;
+    align-items: center;
+    padding: 0 16px;
     box-sizing: border-box;
-    text-align: left;
+    text-align: center;
 }
 
 .input .name {
@@ -843,17 +851,27 @@ html.tiles-compact #home.home-apps-multi .input .port {
     font-weight: 700;
     color: #fff;
     line-height: 1.15;
+    letter-spacing: -0.02em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
 }
 
 .input .port {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin-top: 10px;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.52);
+    letter-spacing: 0.01em;
+}
+
+.input.input-on .port {
+    color: rgba(255, 255, 255, 0.78);
 }
 
 .input.add-console .tile {
@@ -866,15 +884,18 @@ html.tiles-compact #home.home-apps-multi .input .port {
 
 .dot {
     display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-right: 12px;
+    width: 10px;
+    height: 10px;
+    margin-right: 10px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.28);
     vertical-align: 1px;
 }
 
-.dot.on { background: #4ade80; }
+.dot.on {
+    background: #4ade80;
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.55);
+}
 
 
 /* Gear (Settings) */
@@ -1165,7 +1186,7 @@ html.tiles-compact #home.home-apps-multi .input .port {
 }
 
 .tiles-compact .input .meta {
-    padding: 0 22px 0 10px;
+    padding: 0 14px;
 }
 
 .tiles-compact .input .name {
@@ -1174,13 +1195,13 @@ html.tiles-compact #home.home-apps-multi .input .port {
 
 .tiles-compact .input .port {
     margin-top: 8px;
-    font-size: 18px;
+    font-size: 16px;
 }
 
 .tiles-compact .dot {
-    width: 12px;
-    height: 12px;
-    margin-right: 10px;
+    width: 9px;
+    height: 9px;
+    margin-right: 8px;
 }
 
 /* ---------- Settings ---------- */
@@ -2355,7 +2376,9 @@ html.preview, html.preview body {
 }
 
 #screensaver.chrome-off.caption-peek .ss-caption,
-#screensaver.chrome-off.caption-peek .ss-scrim {
+#screensaver.chrome-off.caption-peek .ss-scrim,
+#screensaver.chrome-off.music-peek .ss-music,
+#screensaver.chrome-off.music-peek .ss-scrim {
     opacity: 1;
 }
 
@@ -2363,6 +2386,7 @@ html.preview, html.preview body {
 .ss-music-title,
 .ss-date {
     height: var(--ss-line);
+    font-family: "Space Grotesk", var(--font);
     font-size: 26px;
     font-weight: 500;
     line-height: var(--ss-line);
@@ -2394,6 +2418,15 @@ html.preview, html.preview body {
 
 #screensaver .marquee {
     text-overflow: clip;
+}
+
+/* Calmer than Home’s 14s — long Mix captions / station lines on the photo. */
+#screensaver .marquee.scroll .marquee-track {
+    animation: marquee-x 24s linear 3 forwards;
+}
+
+#screensaver .marquee.marquee-loop.scroll .marquee-track {
+    animation: marquee-x 24s linear infinite;
 }
 
 #screensaver.tone-dark .ss-title,
@@ -2554,8 +2587,9 @@ html.preview, html.preview body {
     justify-content: center;
     width: fit-content;
     height: var(--ss-time);
+    font-family: "Space Grotesk", var(--font);
     font-size: var(--ss-time);
-    font-weight: 200;
+    font-weight: 300;
     letter-spacing: -2px;
     line-height: var(--ss-time);
     font-variant-numeric: tabular-nums;
@@ -2565,8 +2599,9 @@ html.preview, html.preview body {
 
 .ss-time-suffix {
     margin-left: 10px;
+    font-family: "Space Grotesk", var(--font);
     font-size: var(--ss-suffix);
-    font-weight: 300;
+    font-weight: 400;
     letter-spacing: 0.04em;
     line-height: var(--ss-suffix);
 }

@@ -14,8 +14,9 @@
 
     var pinStorageLabel = SettingsBackgroundPins.pinStorageLabel;
     var afterPinChange = SettingsBackgroundPins.afterPinChange;
-    var removeOnePin = SettingsBackgroundPins.removeOnePin;
-    var hideOneBundled = SettingsBackgroundPins.hideOneBundled;
+    var confirmRemovePin = SettingsBackgroundPins.confirmRemovePin;
+    var confirmHideBundled = SettingsBackgroundPins.confirmHideBundled;
+    var confirmDiscardTemp = SettingsBackgroundPins.confirmDiscardTemp;
     var restoreBundledPhotos = SettingsBackgroundPins.restoreBundledPhotos;
     var usePhotoKey = SettingsBackgroundPins.usePhotoKey;
     var useLiveNow = SettingsBackgroundPins.useLiveNow;
@@ -657,60 +658,41 @@
                 useLiveNow(item.entry || (Wallpaper.tempPhotoEntry && Wallpaper.tempPhotoEntry()));
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Temporary photo', [
-                {
-                    label: 'Save permanently', run: function () {
-                        saveLivePermanent(item.entry || Wallpaper.tempPhotoEntry());
-                    }
-                },
-                {
-                    label: 'Discard', run: function () {
-                        if (Wallpaper.clearTempPhoto) Wallpaper.clearTempPhoto();
-                        var next = Prefs.get().wallpaper.photo;
-                        if (next === item.key) {
-                            var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
-                            var ship = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
-                                Wallpaper.bundled();
-                            next = (pins[0] && pins[0].key) || (ship[0] && ship[0].key) || next;
-                            Prefs.get().wallpaper.photo = next;
-                            Prefs.save();
-                            Wallpaper.apply();
+            var tempEntry = item.entry || (Wallpaper.tempPhotoEntry && Wallpaper.tempPhotoEntry());
+            var tempTitle = (tempEntry && tempEntry.title) || 'Temporary photo';
+            function openTempMenu() {
+                UI.menu(tempTitle, [
+                    {
+                        label: 'Save permanently',
+                        kind: 'action',
+                        run: function () { saveLivePermanent(tempEntry); }
+                    },
+                    {
+                        label: 'Discard',
+                        kind: 'danger',
+                        run: function () {
+                            confirmDiscardTemp(tempEntry, { onBack: openTempMenu });
                         }
-                        UI.toast('Discarded');
-                        afterPinChange(Prefs.get().wallpaper.photo);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+                    },
+                    { label: 'Cancel', kind: 'action' }
+                ]);
+            }
+            openTempMenu();
             return;
         } else if (item.kind === 'photoPin') {
-            // First OK selects; OK again on the selected one opens remove menu.
+            // First OK selects; OK again on the selected one opens remove confirm.
             if (p.photo !== item.key) {
                 usePhotoKey(item.key);
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Saved photo', [
-                {
-                    label: 'Remove', run: function () {
-                        removeOnePin(item.key);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+            confirmRemovePin(item.key);
             return;
         } else if (item.kind === 'photoBundled') {
             if (p.photo !== item.key) {
                 usePhotoKey(item.key);
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Bundled photo', [
-                {
-                    label: 'Remove', run: function () {
-                        hideOneBundled(item.key);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+            confirmHideBundled(item.key);
             return;
         } else if (item.kind === 'photo') {
             usePhotoKey(item.key);

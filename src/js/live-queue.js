@@ -129,6 +129,7 @@
 
         function step() {
             if (g !== LiveState.generation) return Promise.resolve();
+            if (document.hidden) return Promise.resolve();
             if (LiveState.stream.plan.length >= planSize()) {
                 LiveState.planUniqueExhausted = false;
                 return Promise.resolve();
@@ -158,7 +159,7 @@
         LiveState.stream.filling = new Promise(function (resolve) {
             setTimeout(resolve, wait);
         }).then(function () {
-            if (g !== LiveState.generation) return;
+            if (g !== LiveState.generation || document.hidden) return;
             // Queue top-up is background — do not block plan slots on a full ahead fill.
             warmSources();
             return step();
@@ -320,6 +321,9 @@
     // Mix: boot shallow, then grow slightly (still capped — not livePool ahead).
     function backgroundFill() {
         if (needsSetup()) return;
+        // With background-support enabled the process stays alive behind other apps —
+        // do not keep hitting Unsplash/Immich/… until Home is visible again.
+        if (document.hidden) return;
         warmSources();
         if (provider() === 'mix' && LiveState.mixWarmPhase === 'boot' && !LiveState.mixGrowTimer) {
             LiveState.mixGrowTimer = setTimeout(function () {

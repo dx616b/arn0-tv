@@ -99,7 +99,7 @@
                                 UI.toast('Weather: ' + Weather.summary());
                             }
                         };
-                    }).concat([{ label: 'Cancel' }]));
+                    }).concat([{ label: 'Cancel', kind: 'action' }]));
                 });
             }, { title: 'City name', maxLength: 64 });
             return;
@@ -155,6 +155,7 @@
     function openPlaceMenu() {
         var p = Prefs.get().weather;
         var label = Weather.placeLabel();
+        // Selections first, then actions (same shape as console menus).
         var options = [
             {
                 label: p.place === 'auto' && label ? ('Automatic · ' + label) : 'Automatic',
@@ -162,15 +163,16 @@
                 run: function () { activateWeather({ kind: 'place', value: 'auto' }); }
             },
             {
-                label: 'Enter city…',
-                run: function () { activateWeather({ kind: 'search' }); }
-            },
-            {
                 label: 'Off',
                 checked: p.place === 'off',
                 run: function () { activateWeather({ kind: 'place', value: 'off' }); }
             },
-            { label: 'Cancel' }
+            {
+                label: 'Enter city…',
+                kind: 'action',
+                run: function () { activateWeather({ kind: 'search' }); }
+            },
+            { label: 'Cancel', kind: 'action' }
         ];
         UI.menu('Weather', options);
     }

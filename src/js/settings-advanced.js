@@ -67,9 +67,11 @@
             kind: 'danger',
             run: function () {
                 UI.menu('Reset all settings?', [
-                    { label: 'Cancel', current: true },
+                    { label: 'Cancel', kind: 'action', current: true },
                     {
-                        label: 'Reset everything', run: function () {
+                        label: 'Reset everything',
+                        kind: 'danger',
+                        run: function () {
                             Prefs.reset();
                             location.reload();
                         }

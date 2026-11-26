@@ -57,7 +57,7 @@
                 delay: '5m',            // see Screensaver.DELAYS
                 photoEvery: '75s',      // see Screensaver.PHOTO_EVERY
                 dark: '15m',            // see Screensaver.DARK_AFTER
-                chromeHide: '20s',      // see Screensaver.CHROME_HIDE (caption/clock fade)
+                chromeHide: '20s',      // see Screensaver.CHROME_HIDE (caption/music/legend fade; clock stays)
                 pan: true,              // Ken Burns drift / portrait zoom
                 panSpeed: 'normal',     // 'slow' | 'normal' | 'fast' (amount is auto from image vs stage)
                 blur: true              // letterbox blur fill (portrait contain)
