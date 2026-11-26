@@ -340,7 +340,7 @@
         var tile = el('div', 'tile');
         // Stronger brand glass than before (0.38) so consoles sit closer to solid app tiles.
         tile.style.background = glassBg(consoleTileBg(input, brand.bg), 0.62);
-        // Logo panel (centred mark) + name / HDMI on the right.
+        // Logo-led: large mark above, thin name / HDMI strip below.
         var logo = el('div', 'input-logo');
         if (brand.mark) logo.appendChild(markEl(brand));
         else if (brand.text) {

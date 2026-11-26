@@ -564,31 +564,35 @@ html.tiles-compact #home.home-apps-multi #apps-row.home-apps-grid .app .label {
 }
 
 #home.home-apps-multi .input-logo {
-    width: 50%;
-    padding: 14px;
+    padding: 10px 16px 4px;
+}
+
+#home.home-apps-multi .input-logo .mark,
+#home.home-apps-multi .input-logo .wordmark {
+    max-width: 132px;
+    max-height: 104px;
 }
 
 #home.home-apps-multi .input-logo .wordmark {
-    font-size: 52px;
+    font-size: 56px;
 }
 
 #home.home-apps-multi .input .meta {
-    width: 50%;
-    padding: 0 14px;
+    padding: 6px 16px 12px;
 }
 
 #home.home-apps-multi .input .name {
-    font-size: 26px;
+    font-size: 24px;
 }
 
 #home.home-apps-multi .input .port {
-    margin-top: 8px;
-    font-size: 17px;
+    margin-top: 4px;
+    font-size: 15px;
 }
 
 #home.home-apps-multi .dot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     margin-right: 8px;
 }
 
@@ -604,23 +608,29 @@ html.tiles-compact #home.home-apps-multi .input .tile {
 }
 
 html.tiles-compact #home.home-apps-multi .input-logo {
-    padding: 12px;
+    padding: 8px 14px 2px;
+}
+
+html.tiles-compact #home.home-apps-multi .input-logo .mark,
+html.tiles-compact #home.home-apps-multi .input-logo .wordmark {
+    max-width: 112px;
+    max-height: 84px;
 }
 
 html.tiles-compact #home.home-apps-multi .input-logo .wordmark {
-    font-size: 44px;
+    font-size: 46px;
 }
 
 html.tiles-compact #home.home-apps-multi .input .meta {
-    padding: 0 12px;
+    padding: 4px 14px 10px;
 }
 
 html.tiles-compact #home.home-apps-multi .input .name {
-    font-size: 24px;
+    font-size: 22px;
 }
 
 html.tiles-compact #home.home-apps-multi .input .port {
-    font-size: 16px;
+    font-size: 14px;
 }
 
 /* App tiles — five fit the same 1680px as three consoles (5×w + 4×36). */
@@ -778,25 +788,26 @@ html.tiles-compact #home.home-apps-multi .input .port {
     position: relative;
     height: 190px;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     padding: 0;
-    text-align: left;
+    text-align: center;
     box-sizing: border-box;
     overflow: hidden;
 }
 
+/* Hero mark fills most of the card; meta is a thin strip under it. */
 .input-logo {
     position: relative;
-    flex: none;
-    width: 50%;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 18px 16px;
+    padding: 16px 24px 6px;
     box-sizing: border-box;
-    border-right: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 /* Kill app-tile absolute .mark / .wordmark so the glyph centres in the zone. */
@@ -808,8 +819,8 @@ html.tiles-compact #home.home-apps-multi .input .port {
     bottom: auto;
     width: 100%;
     height: 100%;
-    max-width: 148px;
-    max-height: 148px;
+    max-width: 196px;
+    max-height: 136px;
     margin: 0;
     object-fit: contain;
     object-position: center center;
@@ -826,28 +837,28 @@ html.tiles-compact #home.home-apps-multi .input .port {
     justify-content: center;
     width: 100%;
     height: 100%;
-    max-width: 148px;
-    max-height: 148px;
+    max-width: 196px;
+    max-height: 136px;
     margin: 0;
-    font-size: 64px;
+    font-size: 80px;
     letter-spacing: -0.5px;
 }
 
 .input .meta {
     flex: none;
-    width: 50%;
+    width: 100%;
     min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 0 16px;
+    padding: 8px 20px 16px;
     box-sizing: border-box;
     text-align: center;
 }
 
 .input .name {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 700;
     color: #fff;
     line-height: 1.15;
@@ -863,8 +874,8 @@ html.tiles-compact #home.home-apps-multi .input .port {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-top: 10px;
-    font-size: 18px;
+    margin-top: 5px;
+    font-size: 16px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.52);
     letter-spacing: 0.01em;
@@ -876,6 +887,7 @@ html.tiles-compact #home.home-apps-multi .input .port {
 
 .input.add-console .tile {
     justify-content: center;
+    align-items: center;
 }
 
 .input.add-console .input-logo {
@@ -1172,30 +1184,30 @@ html.tiles-compact #home.home-apps-multi .input .port {
 }
 
 .tiles-compact .input-logo {
-    padding: 14px;
+    padding: 12px 18px 4px;
 }
 
 .tiles-compact .input-logo .mark,
 .tiles-compact .input-logo .wordmark {
-    max-width: 120px;
-    max-height: 120px;
+    max-width: 152px;
+    max-height: 108px;
 }
 
 .tiles-compact .input-logo .wordmark {
-    font-size: 52px;
+    font-size: 64px;
 }
 
 .tiles-compact .input .meta {
-    padding: 0 14px;
+    padding: 4px 16px 12px;
 }
 
 .tiles-compact .input .name {
-    font-size: 26px;
+    font-size: 24px;
 }
 
 .tiles-compact .input .port {
-    margin-top: 8px;
-    font-size: 16px;
+    margin-top: 4px;
+    font-size: 14px;
 }
 
 .tiles-compact .dot {
