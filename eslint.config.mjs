@@ -7,9 +7,10 @@ const projectGlobals = Object.fromEntries([
     'Appearance', 'Apps', 'BRANDS', 'DevLog', 'Home', 'Http', 'Inputs', 'LAUNCHER_CONFIG',
     'LAUNCHER_LOCAL', 'LiveCore', 'LiveEvents', 'LiveHooks', 'LiveParsers', 'LiveQueue', 'LiveHistory', 'LiveRoster', 'SettingsBackgroundLive', 'SomaFM', 'RadioRecord', 'RadioPlan', 'SettingsMusicPickers', 'SettingsBackgroundPins', 'LiveFill', 'LivePool', 'LiveSources', 'LiveStores', 'LiveState', 'LiveWallpaper', 'Music', 'PanMath', 'PhotoUtil',
     'PlatformProbe', 'Prefs', 'RenderProbe', 'Screensaver', 'Settings', 'SettingsAdvanced',
-    'SettingsAppearance', 'SettingsApps', 'SettingsBackground', 'SettingsConsoles', 'SettingsCore',
+    'SettingsAppearance', 'SettingsBackground', 'SettingsConsoles', 'SettingsCore',
     'SettingsMusic', 'SettingsRename', 'SettingsScreensaver', 'SettingsSound', 'SettingsWeather',
     'Sound', 'Subsonic', 'UI', 'WALLPAPERS', 'Wallpaper', 'Weather', '__TIZEN_MOCK__', 'findBrand',
+    'brandKeyFromLabel', 'CONSOLE_COLORS', 'CONSOLE_NAME_MAX', 'consoleTileBg', 'findConsoleColor',
     'tizen'
 ].map((name) => [name, 'readonly']));
 

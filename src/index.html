@@ -17,7 +17,7 @@
 
         <section id="home" class="view">
             <header class="clock">
-                <div class="clock-main">
+                <div id="home-clock" class="clock-main">
                     <div id="time"><span id="time-main"></span><span id="time-suffix"></span></div>
                     <div id="date"></div>
                 </div>
@@ -36,6 +36,9 @@
                     <div id="home-music-sep" class="home-music-sep hidden" aria-hidden="true"></div>
                     <div id="music-bar" class="music-bar hidden">
                         <div id="music-controls" class="music-controls">
+                            <div id="music-btn-prev" class="music-btn" tabindex="-1">
+                                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6L18 6v12l-8.5-6z"/></svg>
+                            </div>
                             <div id="music-btn-play" class="music-btn" tabindex="-1">
                                 <svg class="music-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                                 <svg class="music-icon-pause hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
@@ -60,10 +63,16 @@
             <div id="apps-section" class="shelf">
                 <h2>Apps</h2>
                 <div class="row-viewport"><div id="apps-row" class="row-track"></div></div>
+                <div class="row-more" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.29 6.71L13.58 11l-4.29 4.29L10.7 16.7l6-6-6-6z"/></svg>
+                </div>
             </div>
             <div id="inputs-section" class="shelf">
                 <h2>Consoles</h2>
                 <div class="row-viewport"><div id="inputs-row" class="row-track"></div></div>
+                <div class="row-more" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.29 6.71L13.58 11l-4.29 4.29L10.7 16.7l6-6-6-6z"/></svg>
+                </div>
             </div>
         </section>
 
@@ -147,11 +156,6 @@
             </div>
         </section>
 
-        <section id="consoles" class="view page settings-detail hidden">
-            <header class="page-head"><h1>Consoles</h1></header>
-            <ul class="settings-list scroll-y"></ul>
-        </section>
-
         <section id="appearance" class="view page settings-detail hidden">
             <header class="page-head"><h1>Appearance</h1></header>
             <div id="appearance-body" class="settings-body compact scroll-y"></div>
@@ -160,20 +164,6 @@
         <section id="sound-settings" class="view page settings-detail hidden">
             <header class="page-head"><h1>Navigation sound</h1></header>
             <div id="sound-body" class="settings-body compact scroll-y"></div>
-        </section>
-
-        <section id="homeapps" class="view page settings-detail hidden">
-            <header class="page-head">
-                <h1>Apps on Home</h1>
-            </header>
-            <div class="ed-col ed-left">
-                <h2 id="ed-home-title"></h2>
-                <div class="vport"><div id="ed-home" class="vtrack"></div></div>
-            </div>
-            <div class="ed-col ed-right">
-                <h2 id="ed-other-title"></h2>
-                <div class="vport"><div id="ed-other" class="vtrack"></div></div>
-            </div>
         </section>
 
         <section id="lab" class="view page settings-detail hidden">
@@ -218,21 +208,32 @@
                 <img class="ss-photo-img" alt="">
             </div>
             <div class="ss-scrim"></div>
-            <div id="ss-caption" class="ss-caption">
-                <div id="ss-title" class="ss-title marquee"></div>
-                <div id="ss-sub" class="ss-sub marquee"></div>
-            </div>
-            <div id="ss-music" class="ss-music hidden">
-                <div id="ss-music-title" class="ss-music-title marquee"></div>
-                <div id="ss-music-artist" class="ss-music-artist marquee"></div>
-            </div>
-            <div id="ss-clock" class="ss-clock">
-                <div class="ss-clock-main">
-                    <div id="ss-time" class="ss-time"></div>
-                    <div id="ss-date" class="ss-date"></div>
+            <div class="ss-bottom">
+                <div class="ss-slot ss-slot-left">
+                    <div class="ss-meta">
+                        <div id="ss-music" class="ss-music hidden">
+                            <div id="ss-music-title" class="ss-music-title marquee"></div>
+                            <div id="ss-music-artist" class="ss-music-artist marquee"></div>
+                        </div>
+                        <div id="ss-caption" class="ss-caption">
+                            <div id="ss-title" class="ss-title marquee"></div>
+                            <div id="ss-sub" class="ss-sub marquee"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="ss-legend" class="ss-legend" aria-hidden="true"></div>
+                <div class="ss-slot ss-slot-right">
+                    <div id="ss-clock" class="ss-clock">
+                        <div class="ss-clock-main">
+                            <div id="ss-time" class="ss-time"><span id="ss-time-main"></span><span id="ss-time-suffix" class="ss-time-suffix"></span></div>
+                            <div class="ss-date-row">
+                                <div id="ss-date" class="ss-date"></div>
+                                <span id="ss-wx-icon" class="ss-wx-icon hidden" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div id="ss-legend" class="ss-legend" aria-hidden="true"></div>
             <div id="ss-shortcuts" class="ss-shortcuts" aria-hidden="true"></div>
             <div id="ss-weather-top" class="ss-weather-top hidden" aria-hidden="true"></div>
             <div id="ss-provider" class="ss-provider" aria-hidden="true"></div>
@@ -320,7 +321,6 @@
     <script src="js/settings-music-pickers.js"></script>
     <script src="js/settings-music.js"></script>
     <script src="js/settings-advanced.js"></script>
-    <script src="js/settings-apps.js"></script>
     <script src="js/settings-consoles.js"></script>
     <script src="js/settings.js"></script>
     <script src="js/boot.js"></script>

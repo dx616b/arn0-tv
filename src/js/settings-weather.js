@@ -17,9 +17,11 @@
         p.latitude = resolved.latitude;
         p.longitude = resolved.longitude;
         p.label = resolved.label;
+        p.timezone = resolved.timezone || null;
         Prefs.save();
         Weather.applySettings();
         SettingsCore.withFocusRestore($('weather-body'), renderWeather);
+        if (window.Home && Home.updateClock) Home.updateClock();
     }
 
     function redrawWeather() {
@@ -58,8 +60,11 @@
         unitBlock.appendChild(unitChips);
         body.appendChild(unitBlock);
 
+        var tz = Weather.timeZone && Weather.timeZone();
         var note = el('p', 'setting-note muted',
-            'Shown on Home and the screen saver.');
+            tz
+                ? ('Home clock follows this place (' + tz + ').')
+                : 'Home clock follows this place when set; Off uses the TV clock.');
         body.appendChild(note);
     }
 
@@ -87,7 +92,9 @@
                             label: r.label,
                             run: function () {
                                 applyWeatherPlace(
-                                    Weather.resolvePlace(r.latitude, r.longitude, r.label)
+                                    Weather.resolvePlace(
+                                        r.latitude, r.longitude, r.label, r.timezone
+                                    )
                                 );
                                 UI.toast('Weather: ' + Weather.summary());
                             }
@@ -105,6 +112,7 @@
                 p.latitude = null;
                 p.longitude = null;
                 p.label = null;
+                p.timezone = null;
                 Prefs.save();
                 Weather.applySettings();
                 weatherBusy = true;
@@ -120,6 +128,7 @@
                     }
                     Weather.applyDetected(loc);
                     redrawWeather();
+                    if (window.Home && Home.updateClock) Home.updateClock();
                     UI.toast('Weather: ' + Weather.summary());
                 });
                 return;
@@ -129,6 +138,7 @@
             p.latitude = null;
             p.longitude = null;
             p.label = null;
+            p.timezone = null;
         } else if (item.kind === 'unit') {
             p.unit = item.value;
         } else {
@@ -137,8 +147,37 @@
         Prefs.save();
         Weather.applySettings();
         redrawWeather();
+        if (window.Home && Home.updateClock) Home.updateClock();
     }
 
 
-    window.SettingsWeather = { render: renderWeather, activate: activateWeather };
+    // Compact place picker for Home (Automatic / city / Off).
+    function openPlaceMenu() {
+        var p = Prefs.get().weather;
+        var label = Weather.placeLabel();
+        var options = [
+            {
+                label: p.place === 'auto' && label ? ('Automatic · ' + label) : 'Automatic',
+                checked: p.place === 'auto',
+                run: function () { activateWeather({ kind: 'place', value: 'auto' }); }
+            },
+            {
+                label: 'Enter city…',
+                run: function () { activateWeather({ kind: 'search' }); }
+            },
+            {
+                label: 'Off',
+                checked: p.place === 'off',
+                run: function () { activateWeather({ kind: 'place', value: 'off' }); }
+            },
+            { label: 'Cancel' }
+        ];
+        UI.menu('Weather', options);
+    }
+
+    window.SettingsWeather = {
+        render: renderWeather,
+        activate: activateWeather,
+        openPlaceMenu: openPlaceMenu
+    };
 })();

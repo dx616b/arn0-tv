@@ -68,6 +68,7 @@
                 latitude: null,
                 longitude: null,
                 label: null,            // display name when place === 'custom' / after auto detect
+                timezone: null,         // IANA tz from place (Open-Meteo / geocode); clock follows when set
                 unit: 'celsius'         // 'celsius' | 'fahrenheit'
             },
             // Ambient player: curated Radio and/or Subsonic (creds in Subsonic store).
@@ -100,10 +101,11 @@
                 names: 'always',        // app names under tiles: 'always' | 'focused' | 'never'
                 // Curated presets: scale+ring, scale only, or ring only.
                 focus: 'both',          // 'both' | 'scale' | 'ring'
-                tiles: 'comfortable'    // 'comfortable' | 'compact'
+                tiles: 'comfortable',   // 'comfortable' | 'compact'
+                homeRows: 1             // 1 = one row; 2 = two rows (Compact tiles only)
             },
             home: null,                 // [{ id, label, brand }] once edited; null = config.js apps
-            inputs: null                // [{ hdmi, label, brand, method, hidden }] once edited; null = config.js
+            inputs: null                // [{ hdmi, label, brand, color, method, hidden }] once edited; null = TV HDMI list
         };
     }
 

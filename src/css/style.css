@@ -170,7 +170,7 @@ h1, h2 {
  */
 #home {
     /* Soft plate under clock / weather / music / gear — lighter so the wallpaper reads through. */
-    --home-plate: rgba(32, 38, 52, 0.30);
+    --home-plate: rgba(32, 38, 52, 0.12);
 }
 
 .clock {
@@ -218,7 +218,10 @@ h1, h2 {
 .home-weather {
     flex-direction: column;
     text-align: center;
+    border-radius: 16px;
+    transition: background 40ms linear, box-shadow 40ms linear;
 }
+
 
 #time {
     font-size: 132px;
@@ -282,32 +285,32 @@ h1, h2 {
     display: block;
     width: 32px;
     height: 36px;
-    color: rgba(243, 244, 246, 0.9);
+    color: var(--fg);
 }
 
 .home-wx-temp {
     font-size: 36px;
     font-weight: 300;
     line-height: 1;
-    color: rgba(243, 244, 246, 0.95);
+    color: var(--fg);
 }
 
 .home-wx-pipe {
     font-size: 22px;
     font-weight: 300;
-    color: rgba(220, 224, 232, 0.35);
+    color: rgba(244, 245, 247, 0.45);
 }
 
 .home-wx-range {
     font-size: 22px;
     font-weight: 400;
-    color: rgba(220, 224, 232, 0.55);
+    color: rgba(244, 245, 247, 0.78);
 }
 
 .home-wx-detail {
     margin-top: 8px;
     font-size: 22px;
-    color: rgba(220, 224, 232, 0.6);
+    color: rgba(244, 245, 247, 0.78);
     text-align: center;
 }
 
@@ -330,7 +333,7 @@ h1, h2 {
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: rgba(220, 224, 232, 0.5);
+    color: rgba(244, 245, 247, 0.7);
 }
 
 .home-wx-day-icon svg {
@@ -338,18 +341,18 @@ h1, h2 {
     width: 22px;
     height: 24px;
     margin: 6px 0;
-    color: rgba(243, 244, 246, 0.85);
+    color: var(--fg);
 }
 
 .home-wx-day-temps {
     font-size: 16px;
     font-weight: 500;
-    color: rgba(220, 224, 232, 0.7);
+    color: rgba(244, 245, 247, 0.85);
     white-space: nowrap;
 }
 
 .home-wx-day-temps span {
-    color: rgba(220, 224, 232, 0.4);
+    color: rgba(244, 245, 247, 0.55);
 }
 
 /* Appearance options */
@@ -364,8 +367,8 @@ h1, h2 {
     right: 0;
 }
 
-#apps-section { top: 350px; }
-#inputs-section { top: 690px; }
+#apps-section { top: 380px; }
+#inputs-section { top: 720px; }
 
 .shelf h2 {
     margin-bottom: 26px;
@@ -376,8 +379,17 @@ h1, h2 {
     color: rgba(244, 245, 247, 0.72);
 }
 
+/*
+ * Overflow clips half-tiles past the shelf. Equal pad + negative margin so
+ * focus scale/ring can paint on both edges; content width stays 1680 (1628 compact).
+ */
 .row-viewport {
-    width: 1680px;
+    position: relative;
+    width: 1708px;
+    margin-left: -14px;
+    padding: 14px;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .row-track {
@@ -385,6 +397,223 @@ h1, h2 {
     display: flex;
     will-change: transform;
     transition: transform 0.18s ease-out;
+}
+
+.tiles-compact .row-viewport {
+    width: 1656px;
+}
+
+/*
+ * Small ▶ in the gear column, vertically centred on the tile rectangle
+ * (h2 + viewport top pad, height = tile).
+ */
+.shelf > .row-more {
+    display: none;
+    position: absolute;
+    top: 66px; /* ~52px h2 block + 14px viewport pad */
+    left: calc(1680px + (100% - 1680px - 76px) / 2);
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 174px;
+    pointer-events: none;
+    color: rgba(243, 244, 246, 0.78);
+    z-index: 2;
+}
+
+.tiles-compact .shelf > .row-more {
+    left: calc(1628px + (100% - 1628px - 76px) / 2);
+}
+
+#inputs-section > .row-more {
+    height: 190px;
+}
+
+.tiles-compact #apps-section > .row-more {
+    height: 140px;
+}
+
+.tiles-compact #inputs-section > .row-more {
+    height: 156px;
+}
+
+#home.home-apps-multi .shelf > .row-more {
+    top: 52px; /* ~38px h2 block + 14px viewport pad */
+}
+
+#home.home-apps-multi #apps-section > .row-more {
+    height: 150px;
+}
+
+#home.home-apps-multi #inputs-section > .row-more {
+    height: 168px;
+}
+
+html.tiles-compact #home.home-apps-multi #apps-section > .row-more {
+    height: 128px;
+}
+
+html.tiles-compact #home.home-apps-multi #inputs-section > .row-more {
+    height: 144px;
+}
+
+.shelf.more-right > .row-more {
+    display: flex;
+}
+
+.shelf > .row-more svg {
+    width: 28px;
+    height: 28px;
+}
+
+/*
+ * Two Home rows (Compact only): same clock/gear as one-row; shelves a bit lower.
+ * Modest tile shrink; pads for scale + ring.
+ */
+#home.home-apps-multi #apps-section {
+    top: 340px;
+}
+
+#home.home-apps-multi #apps-section h2,
+#home.home-apps-multi #inputs-section h2 {
+    margin-bottom: 12px;
+}
+
+#home.home-apps-multi #inputs-section {
+    top: 788px;
+}
+
+#home.home-apps-multi #apps-section .row-viewport {
+    width: 1652px;
+    margin-left: -12px;
+    height: 392px;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+#apps-row.home-apps-grid {
+    display: grid;
+    width: 1680px;
+    grid-template-columns: repeat(5, calc((1680px - 4 * 36px) / 5));
+    column-gap: 36px;
+    row-gap: 26px;
+    will-change: transform;
+    transition: transform 0.18s ease-out;
+}
+
+html.tiles-compact #apps-row.home-apps-grid {
+    width: 1628px;
+    grid-template-columns: repeat(6, 248px);
+    column-gap: 28px;
+    row-gap: 22px;
+}
+
+#apps-row.home-apps-grid .app {
+    margin-right: 0;
+}
+
+/* Closer to one-row size — only a modest shrink for two rows. */
+#home.home-apps-multi #apps-row.home-apps-grid .tile {
+    height: 150px;
+    border-radius: 20px;
+    will-change: transform;
+    transition: transform 0.1s ease-out;
+}
+
+#home.home-apps-multi #apps-row.home-apps-grid .app .label {
+    margin-top: 14px;
+    font-size: 22px;
+}
+
+#home.home-apps-multi #apps-row.home-apps-grid .wordmark {
+    font-size: 52px;
+}
+
+#home.home-apps-multi #apps-row.home-apps-grid .mono {
+    font-size: 54px;
+}
+
+#home.home-apps-multi #apps-row.home-apps-grid .all-tile svg {
+    width: 56px;
+    height: 56px;
+    margin: -28px 0 0 -28px;
+}
+
+html.tiles-compact #home.home-apps-multi #apps-row.home-apps-grid .tile {
+    height: 128px;
+    border-radius: 18px;
+}
+
+html.tiles-compact #home.home-apps-multi #apps-row.home-apps-grid .app .label {
+    margin-top: 12px;
+    font-size: 20px;
+}
+
+/* Consoles in two-row mode. */
+#home.home-apps-multi .input .tile {
+    height: 168px;
+    border-radius: 20px;
+}
+
+#home.home-apps-multi .input-logo {
+    width: 50%;
+    padding: 14px;
+}
+
+#home.home-apps-multi .input-logo .wordmark {
+    font-size: 52px;
+}
+
+#home.home-apps-multi .input .meta {
+    width: 50%;
+    padding: 0 16px 0 6px;
+}
+
+#home.home-apps-multi .input .name {
+    font-size: 26px;
+}
+
+#home.home-apps-multi .input .port {
+    margin-top: 8px;
+    font-size: 20px;
+}
+
+#home.home-apps-multi .dot {
+    width: 12px;
+    height: 12px;
+    margin-right: 10px;
+}
+
+#home.home-apps-multi .input.add-console .add-tile svg {
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+}
+
+html.tiles-compact #home.home-apps-multi .input .tile {
+    height: 144px;
+    border-radius: 18px;
+}
+
+html.tiles-compact #home.home-apps-multi .input-logo {
+    padding: 12px;
+}
+
+html.tiles-compact #home.home-apps-multi .input-logo .wordmark {
+    font-size: 44px;
+}
+
+html.tiles-compact #home.home-apps-multi .input .meta {
+    padding: 0 16px 0 6px;
+}
+
+html.tiles-compact #home.home-apps-multi .input .name {
+    font-size: 24px;
+}
+
+html.tiles-compact #home.home-apps-multi .input .port {
+    font-size: 18px;
 }
 
 /* App tiles — five fit the same 1680px as three consoles (5×w + 4×36). */
@@ -422,10 +651,30 @@ h1, h2 {
     text-overflow: ellipsis;
 }
 
-.app.focused .tile,
-.input.focused .tile {
+.app.focused .tile {
     transform: scale(1.07);
     box-shadow: 0 0 0 5px var(--ring), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* Consoles are wide — keep focus scale small so the shelf edge does not clip them. */
+.input.focused .tile {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 5px var(--ring), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* Hold-OK rearrange on Home: accent ring while the tile is being moved. */
+.app.moving .tile,
+.app.moving.focused .tile {
+    transform: scale(1.07);
+    box-shadow: 0 0 0 5px var(--accent), 0 0 0 10px rgba(62, 142, 255, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.input.moving .tile,
+.input.moving.focused .tile {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 5px var(--accent), 0 0 0 10px rgba(62, 142, 255, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .app.focused .label {
@@ -481,11 +730,13 @@ h1, h2 {
     object-fit: contain;
 }
 
-.all-tile {
+.all-tile,
+.add-tile {
     background: rgba(255, 255, 255, 0.12);
 }
 
-.all-tile svg {
+.all-tile svg,
+.add-tile svg {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -494,7 +745,21 @@ h1, h2 {
     margin: -32px 0 0 -32px;
 }
 
-/* Input tiles */
+.input.add-console .tile {
+    position: relative;
+}
+
+.input.add-console .add-tile svg {
+    width: 72px;
+    height: 72px;
+    margin: -36px 0 0 -36px;
+}
+
+/*
+ * Input tiles — two zones, no overlap:
+ * left (50%): large logo centred in that zone
+ * right (50%): name + HDMI (name is one line; JS shrinks font to fit)
+ */
 
 .input {
     flex: none;
@@ -503,29 +768,74 @@ h1, h2 {
 }
 
 .input .tile {
+    position: relative;
     height: 190px;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 0 28px;
-    text-align: center;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
+    text-align: left;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
-.input .mark {
+.input-logo {
     position: relative;
+    flex: none;
+    width: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    box-sizing: border-box;
+}
+
+/* Kill app-tile absolute .mark / .wordmark so the glyph centres in the zone. */
+.input-logo .mark {
+    position: static;
     top: auto;
     left: auto;
-    flex: none;
-    width: 64px;
-    height: 64px;
-    margin: 0 0 12px;
+    right: auto;
+    bottom: auto;
+    width: 100%;
+    height: 100%;
+    max-width: 148px;
+    max-height: 148px;
+    margin: 0;
+    object-fit: contain;
+    object-position: center center;
+}
+
+.input-logo .wordmark {
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    max-width: 148px;
+    max-height: 148px;
+    margin: 0;
+    font-size: 64px;
+    letter-spacing: -0.5px;
 }
 
 .input .meta {
+    flex: none;
+    width: 50%;
     min-width: 0;
-    width: 100%;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 0 20px 0 8px;
+    box-sizing: border-box;
+    text-align: left;
 }
 
 .input .name {
@@ -536,13 +846,22 @@ h1, h2 {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .input .port {
-    margin-top: 8px;
+    margin-top: 10px;
     font-size: 22px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.75);
+}
+
+.input.add-console .tile {
+    justify-content: center;
+}
+
+.input.add-console .input-logo {
+    display: none;
 }
 
 .dot {
@@ -699,8 +1018,12 @@ h1, h2 {
  * Gear / music ignore scale in every preset; both use the same invert/ring language.
  */
 .focus-ring .app.focused .tile,
-.focus-ring .input.focused .tile,
-.focus-ring .thumb.focused img {
+.focus-ring .input.focused .tile {
+    transform: none;
+}
+
+.focus-ring .app.moving .tile,
+.focus-ring .input.moving .tile {
     transform: none;
 }
 
@@ -716,14 +1039,20 @@ h1, h2 {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
+.focus-scale .app.moving .tile,
+.focus-scale .input.moving .tile,
+.focus-scale .app.moving.focused .tile,
+.focus-scale .input.moving.focused .tile {
+    box-shadow: 0 0 0 5px var(--accent), 0 0 0 10px rgba(62, 142, 255, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 .focus-scale .music-btn.focused,
 .focus-scale .gear.focused {
     box-shadow: none;
 }
 
-.focus-scale .thumb.focused img {
-    box-shadow: none;
-}
+/* Settings thumbs keep a clear ring in every focus preset (Home-only scale must not strip it). */
 
 /* ---------- Pages (everything except Home) ---------- */
 
@@ -818,22 +1147,33 @@ h1, h2 {
 
 .tiles-compact .input .tile {
     height: 156px;
-    padding: 0 22px;
     border-radius: 18px;
 }
 
-.tiles-compact .input .mark {
-    width: 52px;
-    height: 52px;
-    margin: 0 0 10px;
+.tiles-compact .input-logo {
+    padding: 14px;
+}
+
+.tiles-compact .input-logo .mark,
+.tiles-compact .input-logo .wordmark {
+    max-width: 120px;
+    max-height: 120px;
+}
+
+.tiles-compact .input-logo .wordmark {
+    font-size: 52px;
+}
+
+.tiles-compact .input .meta {
+    padding: 0 22px 0 10px;
 }
 
 .tiles-compact .input .name {
-    font-size: 24px;
+    font-size: 26px;
 }
 
 .tiles-compact .input .port {
-    margin-top: 6px;
+    margin-top: 8px;
     font-size: 18px;
 }
 
@@ -846,8 +1186,7 @@ h1, h2 {
 /* ---------- Settings ---------- */
 
 /* List pages: title left-aligned with the list column. */
-#settings .page-head,
-#consoles .page-head {
+#settings .page-head {
     left: 50%;
     right: auto;
     width: 1040px;
@@ -1014,9 +1353,7 @@ h1, h2 {
     box-sizing: border-box;
 }
 
-.settings-detail#consoles .settings-list,
-.settings-detail#music-pick .settings-list,
-.settings-detail#homeapps .ed-col {
+.settings-detail#music-pick .settings-list {
     top: 168px;
     bottom: 120px;
 }
@@ -1064,8 +1401,7 @@ h1, h2 {
     margin-bottom: 14px;
 }
 
-.setting-block h2,
-.ed-col h2 {
+.setting-block h2 {
     margin-bottom: 18px;
     font-size: 24px;
     letter-spacing: 0.16em;
@@ -1257,79 +1593,15 @@ h1, h2 {
 }
 
 .thumb.focused img {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 5px var(--ring);
+    transform: scale(1.03);
+    box-shadow: 0 0 0 5px var(--ring), 0 0 0 10px rgba(255, 255, 255, 0.18);
 }
 
-/* Apps on Home editor */
-
-.ed-col {
-    position: absolute;
-    top: 220px;
-    bottom: 120px;
-    width: 780px;
+.thumb.focused .thumb-title {
+    color: var(--fg);
 }
 
-.ed-left { left: var(--edge); }
-.ed-right { left: 1020px; }
-
-.settings-detail#homeapps .ed-col h2 {
-    margin: 0 0 14px;
-    padding: 0 4px;
-    font-size: 22px;
-    letter-spacing: 0.18em;
-}
-
-.vport {
-    position: absolute;
-    top: 56px;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    overflow: hidden;
-    padding-top: 6px;
-    padding-bottom: 24px;
-    box-sizing: border-box;
-}
-
-.vtrack {
-    position: relative;
-    transition: transform 0.18s ease-out;
-}
-
-.ed-item {
-    display: flex;
-    align-items: center;
-    min-height: 76px;
-    padding: 14px 22px;
-    margin-bottom: 10px;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-    font-size: 30px;
-    font-weight: 600;
-    color: var(--muted);
-    box-sizing: border-box;
-}
-
-.ed-item.focused {
-    background: var(--fg);
-    color: var(--bg);
-}
-
-.ed-item.moving {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 4px rgba(62, 142, 255, 0.35);
-}
-
-.ed-move {
-    margin-left: auto;
-    font-size: 34px;
-}
-
-/* Consoles / music pick lists match hub/detail row language. */
-#consoles .settings-list,
+/* Music pick list matches hub/detail row language. */
 #music-pick .settings-list {
     top: 168px;
     bottom: 120px;
@@ -1339,13 +1611,11 @@ h1, h2 {
     overflow-y: auto;
 }
 
-#consoles .setting-row,
 #music-pick .setting-row {
     justify-content: flex-start;
     text-align: left;
 }
 
-#consoles .setting-row .setting-label,
 #music-pick .setting-row .setting-label {
     flex: 1;
     min-width: 0;
@@ -1354,7 +1624,6 @@ h1, h2 {
     white-space: nowrap;
 }
 
-#consoles .setting-value,
 #music-pick .setting-value {
     flex: none;
     max-width: 280px;
@@ -1459,6 +1728,129 @@ h1, h2 {
     text-overflow: ellipsis;
 }
 
+/* Logo (and similar) menus: coloured tile preview beside the name. */
+.menu-box.menu-with-minis {
+    width: 720px;
+}
+
+/* Console Options: same row language as Settings (label | value | ›). */
+.menu-box.menu-with-settings {
+    width: 640px;
+    padding: 28px 24px 22px;
+    background: rgba(12, 14, 20, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.menu-box.menu-with-settings #menu-title {
+    margin-bottom: 18px;
+    font-size: 28px;
+    font-weight: 600;
+}
+
+.menu-box.menu-with-settings #menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+#menu-list li.menu-setting {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 18px;
+    min-height: 56px;
+    margin: 0 0 8px;
+    padding: 12px 22px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    font-size: 26px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--fg);
+    box-sizing: border-box;
+}
+
+#menu-list li.menu-setting .setting-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#menu-list li.menu-setting .setting-value {
+    flex: none;
+    max-width: 48%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+#menu-list li.menu-setting .setting-chevron {
+    flex: none;
+    font-size: 30px;
+    font-weight: 400;
+    color: var(--faint);
+    line-height: 1;
+}
+
+#menu-list li.menu-setting.focused {
+    background: var(--fg);
+    color: var(--bg);
+    font-weight: 700;
+}
+
+#menu-list li.menu-setting.focused .setting-value,
+#menu-list li.menu-setting.focused .setting-chevron {
+    color: rgba(9, 11, 16, 0.55);
+}
+
+/* Checked submenu rows keep the Settings card look without a chevron. */
+#menu-list li.menu-setting.checked::before {
+    content: "✓";
+    margin-right: 4px;
+    flex: none;
+}
+
+/* Action / danger rows — same cards as Settings hub. */
+#menu-list li.menu-setting-action {
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+#menu-list li.menu-setting-danger {
+    color: rgba(255, 170, 160, 0.9);
+}
+
+#menu-list li.menu-setting-action.focused,
+#menu-list li.menu-setting-danger.focused {
+    background: var(--fg);
+    color: var(--bg);
+}
+
+#menu-list li.has-mini {
+    display: flex;
+    align-items: center;
+    text-align: left;
+    padding: 10px 16px;
+}
+
+#menu-list li.has-mini .mini {
+    margin-right: 18px;
+}
+
+#menu-list li.has-mini .menu-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Selection = brighter text only. */
 #menu-list li.focused {
     color: var(--fg);
@@ -1467,6 +1859,11 @@ h1, h2 {
 
 #menu-list li.checked::before {
     content: "✓\00a0\00a0";
+}
+
+#menu-list li.has-mini.checked::before {
+    content: "✓";
+    margin-right: 10px;
 }
 
 .dialog-title {
@@ -1626,20 +2023,29 @@ html.preview, html.preview body {
 }
 
 /*
- * Remote hints along the bottom: what OK and Back do on the current screen.
- *
- * Cheap by construction: flat borders and text, no shadow and no gradient, which keeps it clear
- * of the one effect measured as ruinous on this hardware.
+ * Remote hints — centred like the screensaver legend (same key-pill language).
+ * Flat borders and text only; no shadow/gradient (ruinous on this hardware).
  */
 .hints {
     position: absolute;
-    left: var(--edge);
-    right: var(--edge);
-    bottom: 48px;
+    left: 50%;
+    right: auto;
+    bottom: 22px;
+    width: 760px;
+    margin-left: -380px;
     display: flex;
-    gap: 40px;
-    font-size: 22px;
-    color: #a3a8b3;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 22px;
+    height: 36px;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 36px;
+    color: rgba(220, 224, 232, 0.75);
+    pointer-events: none;
 }
 
 .hints.hidden { display: none; }
@@ -1647,15 +2053,32 @@ html.preview, html.preview body {
 .hint {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    height: 36px;
+    white-space: nowrap;
 }
 
 .hint-key {
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 8px;
-    padding: 4px 12px;
-    color: #e6e8ee;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 52px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 16px;
     font-weight: 600;
+    line-height: 1;
+    color: rgba(243, 244, 246, 0.78);
+}
+
+.hint-label {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    line-height: 36px;
 }
 
 /*
@@ -1723,8 +2146,19 @@ html.preview, html.preview body {
  * frames dropped; a photo fills that role here. The one gradient left is the scrim, which is
  * static and painted once.
  */
+/*
+ * Three rectangles on 1920:
+ *   [ side 400, centred in left 1fr ] [ mid 760, screen centre ] [ side 400, centred in right 1fr ]
+ */
 #screensaver {
     background: #05060a;
+    --ss-mid: 760px;
+    --ss-side: 400px;
+    --ss-stack: 12px;
+    --ss-line: 36px;
+    --ss-time: 96px;
+    --ss-suffix: 32px;
+    --ss-floor: 48px;
 }
 
 /*
@@ -1852,24 +2286,58 @@ html.preview, html.preview body {
     background: linear-gradient(180deg, rgba(3, 4, 7, 0), rgba(3, 4, 7, 0.55));
 }
 
-/* Bottom-left caption; lines centred under each other, box hugs content at --edge. */
-.ss-caption {
+.ss-bottom {
     position: absolute;
-    left: var(--edge);
-    bottom: 96px;
-    /* ~560px reserved for clock + gap; never reach center legend. */
-    width: fit-content;
-    max-width: min(720px, calc(100% - var(--edge) - 560px));
-    overflow: hidden;
+    left: 0;
+    right: 0;
+    bottom: var(--ss-floor);
+    display: grid;
+    grid-template-columns: 1fr var(--ss-mid) 1fr;
+    align-items: end;
     box-sizing: border-box;
+    transform: translateX(24px);
+    pointer-events: none;
+}
+
+/* Side zones: centre the equal rectangles in the leftover space. */
+.ss-slot {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    min-width: 0;
+}
+
+.ss-slot-left { grid-column: 1; }
+.ss-slot-right { grid-column: 3; }
+
+.ss-meta,
+.ss-clock {
+    width: var(--ss-side);
+    flex: none;
+    box-sizing: border-box;
+}
+
+.ss-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
+    gap: var(--ss-stack);
+}
+
+.ss-music,
+.ss-caption {
+    width: 100%;
+    height: var(--ss-line);
+    overflow: hidden;
     text-align: center;
     transition: opacity 900ms linear;
 }
 
-/* Idle: fade all writings; first remote key brings them back without other actions. */
+.ss-music.hidden { display: none; }
+
 #screensaver .ss-scrim,
 #screensaver .ss-music,
-#screensaver .ss-clock,
 #screensaver .ss-legend,
 #screensaver .ss-provider {
     transition: opacity 900ms linear;
@@ -1878,7 +2346,6 @@ html.preview, html.preview body {
 #screensaver.chrome-off .ss-caption,
 #screensaver.chrome-off .ss-scrim,
 #screensaver.chrome-off .ss-music,
-#screensaver.chrome-off .ss-clock,
 #screensaver.chrome-off .ss-legend,
 #screensaver.chrome-off .ss-shortcuts,
 #screensaver.chrome-off .ss-weather-top,
@@ -1887,45 +2354,58 @@ html.preview, html.preview body {
     pointer-events: none;
 }
 
-/* Picture change / polish: show description only while the rest of chrome stays off. */
 #screensaver.chrome-off.caption-peek .ss-caption,
 #screensaver.chrome-off.caption-peek .ss-scrim {
     opacity: 1;
 }
 
+.ss-title,
+.ss-music-title,
+.ss-date {
+    height: var(--ss-line);
+    font-size: 26px;
+    font-weight: 500;
+    line-height: var(--ss-line);
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.ss-title,
+.ss-music-title {
+    width: 100%;
+}
+
 .ss-title {
-    font-size: 28px;
-    font-weight: 600;
-    line-height: 1.25;
     text-align: center;
     color: rgba(243, 244, 246, 0.92);
-    max-width: 100%;
 }
 
-.ss-sub {
-    margin-top: 6px;
-    font-size: 24px;
-    font-weight: 500;
-    line-height: 1.25;
+.ss-music-title {
     text-align: center;
-    color: rgba(220, 224, 232, 0.6);
-    max-width: 100%;
+    font-weight: 600;
+    color: rgba(243, 244, 246, 0.92);
 }
 
-/* Screensaver: scroll long lines; clip when idle — never paint … over the clock. */
+.ss-sub,
+.ss-music-artist {
+    display: none;
+}
+
 #screensaver .marquee {
     text-overflow: clip;
 }
 
-/* Dark text where the photo is bright behind the caption; chosen in js/screensaver.js. */
 #screensaver.tone-dark .ss-title,
 #screensaver.tone-dark .ss-time,
+#screensaver.tone-dark .ss-time-suffix,
 #screensaver.tone-dark .ss-date,
 #screensaver.tone-dark .ss-music-title,
 #screensaver.tone-dark .ss-music-artist,
 #screensaver.tone-dark .ss-wx-temp,
 #screensaver.tone-dark .ss-wx-detail,
 #screensaver.tone-dark .ss-legend,
+#screensaver.tone-dark .ss-shortcuts,
 #screensaver.tone-dark .ss-legend-key {
     color: #0b0d12;
 }
@@ -1934,108 +2414,42 @@ html.preview, html.preview body {
     border-color: rgba(11, 13, 18, 0.35);
 }
 
+#screensaver.tone-dark .ss-date-row .ss-wx-icon svg,
 #screensaver.tone-dark .ss-wx-icon svg {
     color: #0b0d12;
 }
 
-/* Top-left music; lines centred under each other, box hugs content at --edge. */
-.ss-music {
-    position: absolute;
-    left: var(--edge);
-    top: 28px;
-    width: fit-content;
-    max-width: min(560px, 30vw);
-    overflow: hidden;
-    box-sizing: border-box;
-    text-align: center;
-    transition: opacity 900ms linear;
-}
-
-/* Compact remote legend — center bottom, clear of caption and clock. */
+/* Middle rectangle — fixed width, nudged slightly right of true centre. */
 .ss-legend {
-    position: absolute;
-    left: 50%;
-    bottom: 28px;
-    transform: translateX(-50%);
+    grid-column: 2;
+    width: var(--ss-mid);
+    transform: translateX(48px);
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
     align-items: center;
-    gap: 12px 22px;
-    max-width: calc(100% - 96px);
+    gap: 18px;
+    height: var(--ss-line);
     box-sizing: border-box;
-    font-size: 18px;
+    overflow: hidden;
+    font-size: 17px;
     font-weight: 500;
+    line-height: var(--ss-line);
     color: rgba(220, 224, 232, 0.75);
     pointer-events: none;
 }
 
-.ss-legend.hidden { display: none; }
+.ss-legend.hidden {
+    visibility: hidden;
+}
 
+/* Hold hints are folded into .ss-legend as “tap / hold”. */
 .ss-shortcuts {
-    position: absolute;
-    top: 28px;
-    right: var(--edge);
-    display: grid;
-    grid-template-columns: auto auto;
-    align-items: center;
-    gap: 8px 14px;
-    font-size: 18px;
-    transition: opacity 900ms linear;
+    display: none;
 }
 
-/* Top centre weather. */
 .ss-weather-top {
-    position: absolute;
-    top: 28px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    max-width: min(720px, calc(100% - 2 * (var(--edge) + 200px)));
-    min-height: 34px;
-    overflow: hidden;
-    box-sizing: border-box;
-    font-size: 22px;
-    font-weight: 600;
-    line-height: 1.35;
-    color: rgba(243, 244, 246, 0.98);
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
-    white-space: nowrap;
-    transition: opacity 900ms linear;
-}
-
-.ss-weather-top.hidden { display: none; }
-
-.ss-weather-top .ss-wx-top-icon {
-    flex: none;
-    display: flex;
-    align-items: center;
-    line-height: 0;
-}
-
-.ss-weather-top .ss-wx-top-icon svg {
-    display: block;
-    width: 26px;
-    height: 26px;
-    color: rgba(243, 244, 246, 0.98);
-}
-
-.ss-weather-top > span:last-child {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-#screensaver.tone-dark .ss-weather-top {
-    color: #0b0d12;
-    text-shadow: 0 1px 4px rgba(255, 255, 255, 0.35);
-}
-
-#screensaver.tone-dark .ss-weather-top .ss-wx-top-icon svg {
-    color: #0b0d12;
+    display: none;
 }
 
 .ss-shortcut-label {
@@ -2046,20 +2460,40 @@ html.preview, html.preview body {
 .ss-legend-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    height: var(--ss-line);
     white-space: nowrap;
 }
 
 .ss-legend-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 52px;
+    height: 28px;
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 6px;
-    padding: 2px 8px;
+    padding: 0 10px;
     font-size: 16px;
     font-weight: 600;
+    line-height: 1;
     color: rgba(243, 244, 246, 0.78);
 }
 
-/* Provider name flash on ↑↓ — plain text, screen center, no plate. */
+.ss-legend-label {
+    display: inline-flex;
+    align-items: center;
+    height: var(--ss-line);
+    line-height: var(--ss-line);
+}
+
+.ss-legend-sep {
+    margin: 0 0.15em;
+    color: rgba(220, 224, 232, 0.45);
+    font-weight: 400;
+}
+
 .ss-provider {
     position: absolute;
     left: 50%;
@@ -2070,9 +2504,12 @@ html.preview, html.preview body {
     border: 0;
     background: none;
     box-shadow: none;
+    width: 640px;
     font-size: 52px;
     font-weight: 500;
+    line-height: 64px;
     letter-spacing: 0.04em;
+    text-align: center;
     color: rgba(243, 244, 246, 0.92);
     text-shadow: 0 1px 18px rgba(0, 0, 0, 0.55);
     opacity: 0;
@@ -2089,50 +2526,94 @@ html.preview, html.preview body {
     text-shadow: 0 1px 18px rgba(255, 255, 255, 0.35);
 }
 
-.ss-music-title {
-    font-size: 26px;
-    font-weight: 600;
-    color: rgba(243, 244, 246, 0.92);
-    max-width: 100%;
-    text-align: center;
-}
-
-.ss-music-artist {
-    margin-top: 6px;
-    font-size: 20px;
-    font-weight: 500;
-    color: rgba(220, 224, 232, 0.6);
-    max-width: 100%;
-    text-align: center;
-}
-
-/* Fixed bottom-right — clear of the caption; photo drift covers burn-in motion. */
+/* Transform is set inline for chrome-off horizontal burn-in drift (X only). */
 .ss-clock {
-    position: absolute;
-    right: var(--edge);
-    bottom: 96px;
+    z-index: 5;
     display: flex;
-    /* Bottom-aligned so the weather detail and the date share a baseline. */
-    align-items: flex-end;
-    gap: 36px;
+    justify-content: center;
+    pointer-events: none;
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
+/* width/max-width shared with .ss-meta above */
+
+/* Hug time / date+icon; centre that stack in the side rectangle. */
 .ss-clock-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
     text-align: center;
 }
 
-/* Only drawn when there is a reading to divide it from. */
 .ss-time {
-    font-size: 72px;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    width: fit-content;
+    height: var(--ss-time);
+    font-size: var(--ss-time);
+    font-weight: 200;
+    letter-spacing: -2px;
+    line-height: var(--ss-time);
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55), 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.ss-time-suffix {
+    margin-left: 10px;
+    font-size: var(--ss-suffix);
     font-weight: 300;
-    line-height: 1;
-    color: rgba(243, 244, 246, 0.95);
+    letter-spacing: 0.04em;
+    line-height: var(--ss-suffix);
+}
+
+/* Date + weather as one group, centred under the time glyphs (nudged right optically). */
+.ss-date-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: var(--ss-stack);
+    margin-left: 12px;
+    width: fit-content;
+    max-width: 100%;
+    height: var(--ss-line);
 }
 
 .ss-date {
-    margin-top: 10px;
-    font-size: 30px;
-    color: rgba(220, 224, 232, 0.75);
+    flex: none;
+    width: auto;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: 0 1px 16px rgba(0, 0, 0, 0.5);
+}
+
+.ss-date-row .ss-wx-icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    width: 30px;
+    height: var(--ss-line);
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.ss-date-row .ss-wx-icon.hidden {
+    display: none;
+}
+
+.ss-date-row .ss-wx-icon svg {
+    display: block;
+    width: 26px;
+    height: 28px;
+}
+
+#screensaver.tone-dark .ss-time,
+#screensaver.tone-dark .ss-date {
+    text-shadow: 0 2px 24px rgba(255, 255, 255, 0.35), 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .ss-weather {

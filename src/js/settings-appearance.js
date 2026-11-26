@@ -30,6 +30,11 @@
                 title: 'Tiles',
                 key: 'tiles',
                 options: [['comfortable', 'Comfortable'], ['compact', 'Compact']]
+            },
+            {
+                title: 'Home rows',
+                key: 'homeRows',
+                options: [[1, 'One'], [2, 'Two']]
             }
         ];
         if (appearanceSection === 'look') return look;
@@ -72,15 +77,31 @@
                 block.appendChild(el('p', 'setting-note muted',
                     'Home tiles only. Settings and menus keep a fixed simple highlight.'));
             }
+            if (b.key === 'homeRows') {
+                block.appendChild(el('p', 'setting-note muted',
+                    'Two rows needs Compact tiles (Comfortable stays one row).'));
+            }
+            if (b.key === 'clock') {
+                var tz = window.Weather && Weather.timeZone && Weather.timeZone();
+                block.appendChild(el('p', 'setting-note muted',
+                    tz
+                        ? ('Time zone follows Weather place (' + tz + ').')
+                        : 'Time zone follows Weather place when set; otherwise the TV clock.'));
+            }
             body.appendChild(block);
         });
     }
 
     function activateAppearance(item) {
-        Prefs.get().appearance[item.key] = item.value;
+        var p = Prefs.get().appearance;
+        p[item.key] = item.value;
+        // Two rows is Compact-only; Comfortable always uses one row.
+        if (item.key === 'tiles' && item.value === 'comfortable') p.homeRows = 1;
+        if (item.key === 'homeRows' && Number(item.value) === 2) p.tiles = 'compact';
         Prefs.save();
         Appearance.apply();
         Home.updateClock();
+        if (item.key === 'tiles' || item.key === 'homeRows') Home.render();
         SettingsCore.withFocusRestore($('appearance-body'), renderAppearance);
     }
 

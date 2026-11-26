@@ -148,6 +148,24 @@
         return b.left + b.width / 2;
     }
 
+    function rowIsThumbs(row) {
+        return !!(row && row[0] && row[0].classList && row[0].classList.contains('thumb'));
+    }
+
+    function firstThumbRow(rowsList) {
+        for (var i = 0; i < rowsList.length; i++) {
+            if (rowIsThumbs(rowsList[i])) return i;
+        }
+        return -1;
+    }
+
+    function lastThumbRow(rowsList) {
+        for (var i = rowsList.length - 1; i >= 0; i--) {
+            if (rowIsThumbs(rowsList[i])) return i;
+        }
+        return -1;
+    }
+
     function move(dr, dc) {
         var r = rows();
         if (!r.length) return;
@@ -161,8 +179,31 @@
         if (dc) {
             var nc = f.c + dc;
             var rowLen = r[f.r].length;
-            // Wrap within the row (Home apps / consoles, Settings chip rows).
-            if (views[current] && views[current].wrap && rowLen > 1) {
+            // Photo grids: ◀/▶ snake through every thumb; last → first and first → last.
+            if (views[current] && views[current].wrap && rowIsThumbs(r[f.r])) {
+                if (nc < 0) {
+                    var pr = f.r - 1;
+                    while (pr >= 0 && !rowIsThumbs(r[pr])) pr--;
+                    if (pr < 0) pr = lastThumbRow(r);
+                    if (pr >= 0) {
+                        f.last[f.r] = f.c;
+                        f.r = pr;
+                        f.c = r[pr].length - 1;
+                    }
+                } else if (nc >= rowLen) {
+                    var nrThumb = f.r + 1;
+                    while (nrThumb < r.length && !rowIsThumbs(r[nrThumb])) nrThumb++;
+                    if (nrThumb >= r.length) nrThumb = firstThumbRow(r);
+                    if (nrThumb >= 0) {
+                        f.last[f.r] = f.c;
+                        f.r = nrThumb;
+                        f.c = 0;
+                    }
+                } else {
+                    f.c = nc;
+                }
+            } else if (views[current] && views[current].wrap && rowLen > 1) {
+                // Wrap within the row (Home apps / consoles, Settings chip rows).
                 if (nc < 0) {
                     nc = rowLen - 1;
                     wrapJump = 'end';
@@ -170,10 +211,10 @@
                     nc = 0;
                     wrapJump = 'start';
                 }
+                f.c = nc;
             } else {
-                nc = clamp(nc, 0, rowLen - 1);
+                f.c = clamp(nc, 0, rowLen - 1);
             }
-            f.c = nc;
         }
         if (dr) {
             var nr = f.r + dr;
@@ -215,7 +256,11 @@
         if (!item) return;
         var scroller = item.closest && item.closest('.scroll-y');
         if (scroller) {
-            scroller.scrollTop = jump === 'start' ? 0 : scroller.scrollHeight;
+            // Thumb wraps stay mid-page — only nudge the item. Yanking scrollTop to 0/max
+            // made the whole Background page jump when wrapping on row 2+.
+            if (!(item.classList && item.classList.contains('thumb'))) {
+                scroller.scrollTop = jump === 'start' ? 0 : scroller.scrollHeight;
+            }
             ensureVisible(item);
             return;
         }
@@ -239,18 +284,23 @@
         var scroller = item.closest && item.closest('.scroll-y');
         if (scroller) {
             // Prefer the whole setting block so the h2 is not clipped above On/Off chips.
-            // A block taller than the view (a long photo grid) scrolls to the focused item instead.
+            // Photo thumbs and other tall grids scroll the focused item only — never the whole
+            // block, and never yank the h2 back (that made the gallery jump on every move).
             var p = scroller.getBoundingClientRect();
             var block = item.closest && item.closest('.setting-block');
-            var target = (block && block.getBoundingClientRect().height <= p.height) ? block : item;
+            var isThumb = item.classList && item.classList.contains('thumb');
+            var target = (!isThumb && block && block.getBoundingClientRect().height <= p.height)
+                ? block
+                : item;
+            // Measure the thumb box (img scale does not expand the parent's border box).
             var r = target.getBoundingClientRect();
             // Room for focus rings + sticky section titles; keep clear of the hints bar.
-            var padTop = 64;
-            var padBottom = 56;
+            var padTop = isThumb ? 16 : 64;
+            var padBottom = isThumb ? 20 : 56;
             if (r.bottom > p.bottom - padBottom) scroller.scrollTop += r.bottom - (p.bottom - padBottom);
             else if (r.top < p.top + padTop) scroller.scrollTop -= (p.top + padTop) - r.top;
-            // Tall blocks: if the section heading scrolled off above, pull it back when possible.
-            if (block && target === item) {
+            // Short chip blocks only: keep the section heading on screen with the controls.
+            if (!isThumb && block && target === item) {
                 var head = block.querySelector('h2');
                 if (head) {
                     p = scroller.getBoundingClientRect();
@@ -272,21 +322,27 @@
         var vertical = track.classList.contains('grid') || track.classList.contains('vtrack');
         if (!horizontal && !vertical) return;
         var port = track.parentNode;
-        var size = horizontal ? port.clientWidth
-            : port.clientHeight - (parseInt(getComputedStyle(port).paddingTop, 10) || 0);
+        var cs = getComputedStyle(port);
+        var size = horizontal
+            ? port.clientWidth - (parseInt(cs.paddingLeft, 10) || 0) - (parseInt(cs.paddingRight, 10) || 0)
+            : port.clientHeight - (parseInt(cs.paddingTop, 10) || 0);
         var start = horizontal ? item.offsetLeft : item.offsetTop;
         var len = horizontal ? item.offsetWidth : item.offsetHeight;
         var pos = track._pos || 0;
         if (start < pos) pos = start;
         else if (start + len > pos + size) pos = start + len - size;
-        if (pos === track._pos) return;
-        track._pos = pos;
-        track.style.transform = horizontal ? 'translateX(' + (-pos) + 'px)' : 'translateY(' + (-pos) + 'px)';
+        if (pos !== track._pos) {
+            track._pos = pos;
+            track.style.transform = horizontal ? 'translateX(' + (-pos) + 'px)' : 'translateY(' + (-pos) + 'px)';
+        }
+        if (port && port._syncMore) port._syncMore();
     }
 
     function resetScroll(track) {
         track._pos = 0;
         track.style.transform = '';
+        var port = track && track.parentNode;
+        if (port && port._syncMore) port._syncMore();
     }
 
     var keyHook = null;   // e.g. HDMI shown inside the launcher swallows keys
@@ -378,7 +434,28 @@
         var i;
         for (i = menuStart; i < end; i++) {
             var o = menuOpts[i];
-            var li = el('li', o.checked ? 'checked' : '', o.label);
+            var cls = o.checked ? 'checked' : '';
+            if (o.mini) cls = (cls ? cls + ' ' : '') + 'has-mini';
+            // Settings-style rows: value set, or kind action/danger (Rename / Remove / …).
+            var isSetting = o.value != null || o.kind === 'action' || o.kind === 'danger';
+            if (isSetting) {
+                cls = (cls ? cls + ' ' : '') + 'menu-setting';
+                if (o.kind === 'action') cls += ' menu-setting-action';
+                if (o.kind === 'danger') cls += ' menu-setting-action menu-setting-danger';
+            }
+            var li = el('li', cls);
+            if (o.mini) {
+                li.appendChild(o.mini);
+                li.appendChild(el('span', 'menu-label', o.label));
+            } else if (isSetting) {
+                li.appendChild(el('span', 'setting-label', o.label));
+                if (o.value) li.appendChild(el('span', 'setting-value', o.value));
+                if (!o.checked && o.kind !== 'action' && o.kind !== 'danger') {
+                    li.appendChild(el('span', 'setting-chevron', '\u203A'));
+                }
+            } else {
+                li.textContent = o.label;
+            }
             li._item = o;
             list.appendChild(li);
         }
@@ -389,9 +466,8 @@
         focus.menu = { r: menuFocus - menuStart, c: 0, last: {} };
     }
 
-    // options: [{ label, run, checked }]
-    // opts.onBack: what Back does from this menu, when it should return to a menu that was closed
-    // to open this one (instead of the screen underneath).
+    // options: [{ label, run, checked, mini, kind, value }]
+    // opts.onBack: ◀ one-level-up callback (reopen parent). Back key always cancels the stack.
     // opts.detail: second prompt row under the title (muted supporting text).
     var menuBack = null;
 
@@ -416,6 +492,15 @@
             detailEl.textContent = detail;
             detailEl.classList.toggle('hidden', !detail);
             titleEl.classList.toggle('menu-title-solo', !detail);
+        }
+        var box = $('menu-list') && $('menu-list').parentNode;
+        if (box) {
+            var hasMini = menuOpts.some(function (o) { return !!o.mini; });
+            var hasSetting = menuOpts.some(function (o) {
+                return o.value != null || o.kind === 'action' || o.kind === 'danger';
+            });
+            box.classList.toggle('menu-with-minis', hasMini);
+            box.classList.toggle('menu-with-settings', hasSetting && !hasMini);
         }
         renderMenuList();
         show('menu');
@@ -464,21 +549,19 @@
         register('menu', {
             el: $('menu'),
             overlay: true,
+            // Back = cancel the whole menu stack (do not reopen a parent submenu).
             onBack: function () {
-                if (!menuBack) return false;
-                var back = menuBack;
                 menuBack = null;
-                show(views.menu.from, { back: true });
-                back();
-                return true;
+                return false;
             },
             hints: function () {
                 var cur = menuOpts[menuFocus] || {};
                 var keys = menuOpts.length > MENU_PAGE ? [['▲ ▼', 'Scroll']] : [];
-                keys.push(cur.keep ? ['OK', 'Play / pause'] : ['OK', 'Select']);
+                keys.push(cur.keep ? ['OK', 'Play / pause'] : ['OK', 'Confirm']);
                 if (cur.alt) keys.push(['Right', cur.altLabel || 'More']);
-                if (cur.alt2) keys.push(['Left', cur.alt2Label || 'More']);
-                keys.push(['Back', 'Close']);
+                if (cur.alt2 && !menuBack) keys.push(['Left', cur.alt2Label || 'More']);
+                else keys.push(['◀', menuBack ? 'Back' : 'Close']);
+                keys.push(['Back', 'Cancel']);
                 return keys;
             },
             rows: function () { return children($('menu-list')).map(function (li) { return [li]; }); },
@@ -487,7 +570,24 @@
                 if (k === KEY.DOWN) return menuMove(1);
                 var cur = menuOpts[menuFocus];
                 if (cur && cur.alt && k === KEY.RIGHT) { cur.alt(); return true; }
-                if (cur && cur.alt2 && k === KEY.LEFT) { cur.alt2(); return true; }
+                // ◀: one level back when nested; otherwise close the menu.
+                if (k === KEY.LEFT) {
+                    if (cur && cur.alt2 && !menuBack) { cur.alt2(); return true; }
+                    if (menuBack) {
+                        var up = menuBack;
+                        menuBack = null;
+                        show(views.menu.from, { back: true });
+                        up();
+                        return true;
+                    }
+                    show(views.menu.from, { back: true });
+                    return true;
+                }
+                // ▶ opens the focused row when it has a run (Settings-style drill-in).
+                if (k === KEY.RIGHT && cur && cur.run && !cur.keep && !cur.alt) {
+                    if (views.menu.activate) views.menu.activate(cur);
+                    return true;
+                }
                 return false;
             },
             activate: function (o) {

@@ -12,7 +12,8 @@
  *                                     (native icons are auto-cropped; rarely needed)
  * Entries that match nothing are skipped (except built-in actions).
  *
- * inputs: HDMI ports shown in the second row. Set `hdmi` to the port each device is plugged into.
+ * inputs: optional static HDMI seed if the TV list is unavailable. By default Home shows every
+ * HDMI port the TV reports until the user edits the consoles row (then prefs.inputs).
  */
 window.LAUNCHER_CONFIG = {
     apps: [
@@ -33,11 +34,9 @@ window.LAUNCHER_CONFIG = {
         { match: 'moonlight', label: 'Moonlight' }
     ],
 
-    inputs: [
-        { hdmi: 1, label: 'Nintendo Switch 2', brand: 'switch' },
-        { hdmi: 2, label: 'PlayStation 5', brand: 'playstation' },
-        { hdmi: 4, label: 'Xbox Series X', brand: 'xbox' }
-    ],
+    // Home lists every HDMI the TV reports until the user edits the row (then prefs.inputs).
+    // Optional static seed if discovery fails (desktop without mock, etc.):
+    inputs: [],
 
     // How an input tile switches the TV. See README "HDMI inputs".
     //   'switch+viewer'  set the TV source, then open Samsung's TV viewer (default)

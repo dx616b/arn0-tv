@@ -10,7 +10,6 @@
     var registerList = SettingsCore.registerList;
     var registerChipPage = SettingsCore.registerChipPage;
     var chipDetailHints = SettingsCore.chipDetailHints;
-    var backPair = SettingsCore.backPair;
     var pinStorageLabel = SettingsBackground.pinStorageLabel;
     var clearSavedPins = SettingsBackground.clearSavedPins;
     var restoreBundledPhotos = SettingsBackground.restoreBundledPhotos;
@@ -102,22 +101,8 @@
     }
 
     function hubEntries() {
-        var apps = Home.homeItems ? Home.homeItems().length : 0;
-        var consoles = Home.inputs ? Home.inputs().filter(function (i) { return !i.hidden; }).length : 0;
-        return [{ section: 'Home screen' }]
-            .concat([
-                {
-                    label: 'Apps on Home',
-                    value: String(apps),
-                    run: function () { UI.show('homeapps'); }
-                },
-                {
-                    label: 'Consoles',
-                    value: consoles ? String(consoles) : 'None',
-                    run: function () { UI.show('consoles'); }
-                }
-            ])
-            .concat([{ section: 'Atmosphere' }])
+        // Apps and consoles are managed on Home (hold OK / + tile); Settings starts at Atmosphere.
+        return [{ section: 'Atmosphere' }]
             .concat(atmosphereEntries())
             .concat([{ section: 'Samsung' }])
             .concat([
@@ -163,9 +148,6 @@
     function init() {
         SettingsCore.renderHub = registerList('settings', hubEntries, hubHints);
         SettingsCore.renderAtmosphere = SettingsCore.renderHub;
-
-        SettingsConsoles.setRender(registerList('consoles', SettingsConsoles.entries,
-            function () { return [['OK / ▶', 'Options'], ['◀', 'Back'], backPair()]; }));
 
         if (window.LiveWallpaper) {
             LiveWallpaper.onChange(SettingsBackground.onLiveChange);
@@ -236,7 +218,6 @@
             });
         }
 
-        SettingsApps.register();
         SettingsRename.register();
     }
 

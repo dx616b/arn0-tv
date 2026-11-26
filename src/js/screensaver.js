@@ -9,8 +9,10 @@
  *   OK       play / pause music
  *   Back     exit (chrome hidden or black: first key only reveals / wakes)
  *
- * Caption, clock, weather, music, and legend fade out after idle; the next key
- * shows them again without changing photo or track.
+ * Caption, music, and legend (tap / hold) fade out after idle; the clock stays on.
+ * While chrome is off the clock drifts horizontally with the photo (no vertical) for
+ * burn-in; when chrome returns it snaps home. The next key shows chrome again without
+ * changing photo or track.
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -19,8 +21,8 @@
  * so through `transform` and `opacity`, which the compositor animates with no JavaScript per
  * frame. The poll below ticks once a second and only decides what is due.
  *
- * Burn-in is why the photo drifts (and eventually fades to black). Clock + weather stay fixed
- * bottom-right — opposite the caption — so the chrome does not jump around.
+ * Burn-in is why the photo drifts (and eventually fades to black). With chrome visible the
+ * clock stays put in its rectangle; with chrome off it shares the photo’s horizontal pan.
  */
 (function () {
     'use strict';
@@ -51,7 +53,7 @@
         { key: 'never', label: 'Never', ms: 0 }
     ];
 
-    // Caption / clock / weather / music / legend idle fade.
+    // Caption / music / legend idle fade (clock stays).
     var CHROME_HIDE = [
         { key: '10s', label: '10 s', ms: 10 * 1000 },
         { key: '20s', label: '20 s', ms: 20 * 1000 },
@@ -95,7 +97,7 @@
     var panSign = 1;            // flipped on each leg, so the drift alternates direction
     var lastClockText = '';
     var dark = false;
-    var chromeHidden = false;   // writings faded; next key only reveals them
+    var chromeHidden = false;   // caption/music/legend faded; clock stays; next key reveals chrome
     var lastChromeAt = 0;       // last time chrome was shown or touched
     var captionPeekTimer = 0;   // brief description-only reveal while chrome-off
     var advancing = false;      // one in-flight live takeNext (timer or remote)
@@ -296,6 +298,7 @@
                 sharp0.style.transition = 'none';
                 sharp0.style.transform = 'translate3d(0,0,0)';
             }
+            syncClockDrift();
             return;
         }
         var from = currentU();
@@ -310,6 +313,58 @@
         return panSign;
     }
 
+    // Horizontal-only X for the clock — same budget as the photo’s X, never coverY/containY.
+    function clockXAt(layer, u) {
+        if (!layer) return 0;
+        var d = driftOf(layer);
+        if (layer.classList.contains('contain')) {
+            var t = (1 - u) / 2;
+            return Math.round(-t * (d.containX || 0));
+        }
+        return Math.round(u * (d.coverX || 0));
+    }
+
+    function clockHome() {
+        var el = $('ss-clock');
+        if (!el) return;
+        el.style.transition = 'none';
+        el.style.transform = 'translate3d(0,0,0)';
+        void el.offsetWidth;
+    }
+
+    /*
+     * Chrome visible / pan off / dark: clock parked at 0.
+     * Chrome off: clock X follows photo pose u (and optionally animates to `toU`).
+     */
+    function syncClockDrift(opts) {
+        opts = opts || {};
+        var el = $('ss-clock');
+        if (!el) return;
+        if (!open || !chromeHidden || !panOn() || dark) {
+            clockHome();
+            return;
+        }
+        var layer = layers && layers[front];
+        if (!layer) {
+            clockHome();
+            return;
+        }
+        var fromU = opts.fromU;
+        var toU = opts.toU != null ? opts.toU : currentU();
+        var anim = opts.animMs || 0;
+        if (anim > 0 && fromU != null) {
+            el.style.transition = 'none';
+            el.style.transform = 'translate3d(' + clockXAt(layer, fromU) + 'px,0,0)';
+            void el.offsetWidth;
+            el.style.transition = 'transform ' + anim + 'ms linear';
+            el.style.transform = 'translate3d(' + clockXAt(layer, toU) + 'px,0,0)';
+            return;
+        }
+        el.style.transition = 'none';
+        el.style.transform = 'translate3d(' + clockXAt(layer, toU) + 'px,0,0)';
+        void el.offsetWidth;
+    }
+
     // Animate from fromU toward the corner/zoom for panSign. flipMs is when the next leg
     // starts; animMs is how long this leg's transition runs (portrait zoom runs longer).
     function runPanLeg(flipMs, fromU, animMs) {
@@ -317,6 +372,7 @@
         var sharp = sharpEl(layer);
         if (!panOn() || !layer) {
             nextPanAt = 0;
+            syncClockDrift();
             return;
         }
         var now = Date.now();
@@ -339,10 +395,12 @@
                 sharp.style.transition = 'transform ' + anim + 'ms linear';
                 sharp.style.transform = pose(layer, panSign);
             }
+            syncClockDrift({ fromU: fromU, toU: panSign, animMs: anim });
             return;
         }
         layer.style.transition = 'transform ' + anim + 'ms linear';
         layer.style.transform = pose(layer, panSign);
+        syncClockDrift({ fromU: fromU, toU: panSign, animMs: anim });
     }
 
     // Logical mid-leg pose for the current photo (same key → restore + continue).
@@ -569,17 +627,28 @@
     function updateClock() {
         var d = new Date();
         var t = Appearance.time(d);
-        var text = t.time + (t.suffix ? ' ' + t.suffix : '');
+        var text = t.time + '|' + (t.suffix || '') + '|' + (Prefs.get().appearance.showDate ? '1' : '0');
         if (text === lastClockText) return;
         lastClockText = text;
-        $('ss-time').textContent = text;
+        var main = $('ss-time-main');
+        var suffix = $('ss-time-suffix');
+        if (main) main.textContent = t.time;
+        else $('ss-time').textContent = t.time + (t.suffix ? ' ' + t.suffix : '');
+        if (suffix) {
+            suffix.textContent = t.suffix || '';
+            suffix.classList.toggle('hidden', !t.suffix);
+        }
         $('ss-date').textContent = Prefs.get().appearance.showDate ? shortDate(d) : '';
+        renderClockWeather();
     }
 
-    function fillLine(el, text, animate) {
+    function fillLine(el, text, animate, loop) {
         if (!el) return;
-        if (window.Music && Music.fillMarquee) Music.fillMarquee(el, text, !!animate);
-        else el.textContent = text || '';
+        if (window.Music && Music.fillMarquee) {
+            Music.fillMarquee(el, text, !!animate, loop ? { loop: true } : undefined);
+        } else {
+            el.textContent = text || '';
+        }
     }
 
     // Clean caption text; keep full length — fillLine marquees overflow (no ellipsis).
@@ -587,30 +656,44 @@
         return String(text || '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
     }
 
-    function caption(w) {
-        // Title + date/credit from live metadata (title/sub/credit on each wallpaper entry).
-        captionText = w ? cleanCaption(w.title || w.credit || '') : '';
-        captionSub = '';
-        if (w) {
-            if (w.sub && w.credit && w.credit !== w.title) captionSub = w.sub + ' · ' + w.credit;
-            else captionSub = w.sub || (w.credit && w.credit !== captionText ? w.credit : '') || '';
-            captionSub = cleanCaption(captionSub);
-        }
-        // Fixed-width slot + horizontal scroll when the line is longer (does not cover legend).
-        fillLine($('ss-title'), captionText, true);
-        fillLine($('ss-sub'), captionSub, true);
-        $('ss-caption').classList.toggle('hidden', !w || (!captionText && !captionSub));
+    // "Provider - detail" on one line; either side alone if the other is empty.
+    function metaLine(provider, detail) {
+        provider = String(provider || '').trim();
+        detail = String(detail || '').trim();
+        if (provider && detail) return provider + ' - ' + detail;
+        return provider || detail;
     }
 
-    // Small weather line centred at the top, like the legend at the bottom.
+    function caption(w) {
+        var detail = w ? cleanCaption(w.title || w.credit || '') : '';
+        captionText = metaLine(pictureMenuLabel(), detail);
+        captionSub = '';
+        fillLine($('ss-title'), captionText, true);
+        fillLine($('ss-sub'), '', false);
+        $('ss-caption').classList.toggle('hidden', !captionText);
+    }
+
+    // Weather icon sits after the date under the clock (top strip stays unused).
     function renderWeatherTop() {
-        var el = $('ss-weather-top');
+        var top = $('ss-weather-top');
+        if (top) {
+            top.classList.add('hidden');
+            top.innerHTML = '';
+        }
+        renderClockWeather();
+    }
+
+    function renderClockWeather() {
+        var el = $('ss-wx-icon');
         if (!el) return;
         var w = window.Weather && Weather.current();
-        el.classList.toggle('hidden', !w);
-        if (!w) return;
-        el.innerHTML = '<span class="ss-wx-top-icon">' + w.icon + '</span><span></span>';
-        el.lastChild.textContent = w.temp + ' · ' + w.detail;
+        if (!w || !w.icon) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+        el.innerHTML = w.icon;
+        el.classList.remove('hidden');
     }
 
     function musicReady() {
@@ -624,20 +707,25 @@
         el.classList.toggle('hidden', !show);
         if (show) {
             var song = Music.current();
-            var sig = song
-                ? ('play:' + (song.title || '') + '\0' + (song.artist || song.album || ''))
-                : 'idle';
-            // Only rebuild marquees when the line text changes (play/pause must not restart scroll).
-            // No scroll animation while blacked out — keeps CPU free for audio.
+            var provider = Music.providerLabel ? Music.providerLabel() : '';
+            // Full line: provider - station, or provider - track · artist.
+            var detail = '';
+            if (Music.isRadio && Music.isRadio()) {
+                detail = (Music.sourceLabel && Music.sourceLabel()) || (song && song.title) || '';
+            } else if (song) {
+                detail = song.title || '';
+                if (song.artist) detail = detail ? (detail + ' · ' + song.artist) : song.artist;
+            } else {
+                detail = 'Not playing';
+            }
+            var line = metaLine(provider, detail);
+            var sig = 'play:' + line + (dark ? '|dark' : '');
+            // Rebuild when text or dark state changes. Loop on screensaver so the full
+            // line keeps rotating in the fixed side column.
             if (sig !== lastMusicSig) {
                 lastMusicSig = sig;
-                if (song) {
-                    fillLine($('ss-music-title'), song.title, !dark);
-                    fillLine($('ss-music-artist'), song.artist || song.album || '', !dark);
-                } else {
-                    fillLine($('ss-music-title'), 'Not playing', false);
-                    fillLine($('ss-music-artist'), '', false);
-                }
+                fillLine($('ss-music-title'), line, !dark, true);
+                fillLine($('ss-music-artist'), '', false);
             }
         } else {
             lastMusicSig = '';
@@ -645,31 +733,30 @@
         renderLegend();
     }
 
-    function legendItem(key, label) {
+    // key + tap label, optional hold after “ / ”.
+    function legendItem(key, tap, hold) {
+        var label = hold
+            ? (tap + '<span class="ss-legend-sep"> / </span>' + hold)
+            : tap;
         return '<span class="ss-legend-item"><span class="ss-legend-key">' + key +
-            '</span>' + label + '</span>';
+            '</span><span class="ss-legend-label">' + label + '</span></span>';
     }
 
-    // Small center legend; only the actions that apply right now.
+    // Legend centred on screen; tap / hold on the same key.
     function renderLegend() {
         var el = $('ss-legend');
         if (!el) return;
         var parts = [];
-        if (canAdvance()) parts.push(legendItem('←→', 'Photo'));
-        if (musicReady()) parts.push(legendItem('↑↓', 'Station'));
-        parts.push(legendItem('OK', 'Pause'));
+        if (canAdvance()) parts.push(legendItem('←→', 'Photo', 'Pictures'));
+        if (musicReady()) parts.push(legendItem('↑↓', 'Track', 'Music'));
+        parts.push(legendItem('OK', 'Pause', 'Menu'));
         parts.push(legendItem('Back', 'Exit'));
         el.innerHTML = parts.join('');
         el.classList.toggle('hidden', !parts.length);
         var shortcuts = $('ss-shortcuts');
         if (shortcuts) {
-            shortcuts.innerHTML = [
-                ['Hold →', 'Pictures'],
-                ['Hold ↑', 'Music'],
-                ['Hold OK', 'Menu']
-            ].map(function (r) {
-                return '<span class="ss-legend-key">' + r[0] + '</span><span class="ss-shortcut-label">' + r[1] + '</span>';
-            }).join('');
+            shortcuts.innerHTML = '';
+            shortcuts.classList.add('hidden');
         }
     }
 
@@ -1130,6 +1217,7 @@
         clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.remove('chrome-off');
+        clockHome();
     }
 
     function hideChrome() {
@@ -1138,6 +1226,20 @@
         clearCaptionPeek();
         var root = $('screensaver');
         if (root) root.classList.add('chrome-off');
+        // Join the in-flight pan leg so the clock tracks the photo from here.
+        var layer = layers && layers[front];
+        var leg = layer && layer._leg;
+        if (leg && panOn()) {
+            var now = Date.now();
+            var left = Math.max(0, leg.start + leg.dur - now);
+            syncClockDrift({
+                fromU: legU(leg, now),
+                toU: leg.to,
+                animMs: left
+            });
+        } else {
+            syncClockDrift();
+        }
     }
 
     function touchChrome() {
@@ -1172,6 +1274,7 @@
             // Visible layer stays up; the other stays hidden (no leftover crossfade).
             layer.style.opacity = (i === front) ? '1' : '0';
         });
+        syncClockDrift();
     }
 
 
@@ -1281,7 +1384,10 @@
         var until = darkAfter().ms;
         if (!dark && until && now - openedAt >= until) goDark();
         // Behind an opaque black layer there is nothing worth moving.
-        if (dark) return;
+        if (dark) {
+            clockHome();
+            return;
+        }
         var hideAfter = chromeHide().ms;
         if (hideAfter && !chromeHidden && now - lastChromeAt >= hideAfter) hideChrome();
         if (!paused && rotating() && now >= nextPhotoAt) {
@@ -1318,6 +1424,7 @@
         enterTimer = null;
         chromeHidden = false;
         dark = false;
+        clockHome();
         var keepKey = shownKey;
         // Snap mid-leg matrix, then store pose for the next saver open on this key.
         freezePan();

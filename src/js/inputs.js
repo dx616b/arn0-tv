@@ -39,6 +39,25 @@
         });
     }
 
+    // Every HDMI port the TV exposes (connected + disconnected), sorted.
+    function hdmiPorts() {
+        return sources().then(function (info) {
+            var seen = {};
+            var ports = [];
+            function add(s) {
+                if (!s || s.type !== 'HDMI') return;
+                var n = s.number;
+                if (seen[n] || typeof n !== 'number') return;
+                seen[n] = true;
+                ports.push(n);
+            }
+            (info.connected || []).forEach(add);
+            (info.disconnected || []).forEach(add);
+            ports.sort(function (a, b) { return a - b; });
+            return ports;
+        });
+    }
+
     function findHdmi(n) {
         return sources().then(function (info) {
             var all = (info.connected || []).concat(info.disconnected || []);
@@ -78,6 +97,7 @@
     window.Inputs = {
         sources: sources,
         hdmiStatus: hdmiStatus,
+        hdmiPorts: hdmiPorts,
         current: current,
         describeSource: describeSource,
         open: open,

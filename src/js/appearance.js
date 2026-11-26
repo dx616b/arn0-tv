@@ -25,8 +25,39 @@
 
     function pad(n) { return String(n).padStart(2, '0'); }
 
+    // Weather place timezone when set; otherwise the TV's local zone.
+    function clockZone() {
+        return (window.Weather && Weather.timeZone && Weather.timeZone()) || undefined;
+    }
+
     // Returns { time: '16:05', suffix: '' } or { time: '4:05', suffix: 'PM' }.
     function time(d) {
+        var tz = clockZone();
+        if (tz) {
+            try {
+                var twelve = prefs().clock === '12h';
+                var parts = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: tz,
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hourCycle: twelve ? 'h12' : 'h23'
+                }).formatToParts(d);
+                var hour = '';
+                var minute = '';
+                var period = '';
+                parts.forEach(function (p) {
+                    if (p.type === 'hour') hour = p.value;
+                    else if (p.type === 'minute') minute = p.value;
+                    else if (p.type === 'dayPeriod') period = p.value;
+                });
+                if (twelve) {
+                    return { time: hour + ':' + minute, suffix: (period || '').toUpperCase() };
+                }
+                return { time: pad(parseInt(hour, 10)) + ':' + minute, suffix: '' };
+            } catch (e) {
+                // Fall through to TV-local time if the zone string is unknown.
+            }
+        }
         if (prefs().clock === '12h') {
             var h = d.getHours() % 12 || 12;
             return { time: h + ':' + pad(d.getMinutes()), suffix: d.getHours() < 12 ? 'AM' : 'PM' };
@@ -36,7 +67,10 @@
 
     function date(d) {
         try {
-            var text = d.toLocaleDateString(prefs().locale, { weekday: 'long', day: 'numeric', month: 'long' });
+            var opts = { weekday: 'long', day: 'numeric', month: 'long' };
+            var tz = clockZone();
+            if (tz) opts.timeZone = tz;
+            var text = d.toLocaleDateString(prefs().locale, opts);
             return text.charAt(0).toUpperCase() + text.slice(1);
         } catch (e) {
             return d.toDateString();
@@ -52,8 +86,20 @@
         return prefs().tiles === 'compact' ? 6 : 5;
     }
 
+    // Two rows only with Compact tiles — Comfortable stays a single shelf row.
+    function homeRows() {
+        var p = prefs();
+        if (p.tiles !== 'compact') return 1;
+        return Number(p.homeRows) === 2 ? 2 : 1;
+    }
+
     function apply() {
         var p = prefs();
+        // Comfortable + two rows is invalid; keep Comfortable as one row.
+        if (p.tiles !== 'compact' && Number(p.homeRows) === 2) {
+            p.homeRows = 1;
+            if (window.Prefs && Prefs.save) Prefs.save();
+        }
         document.documentElement.style.setProperty('--font', font(p.font).family + FALLBACK);
         var home = document.getElementById('home');
         home.classList.toggle('names-focused', p.names === 'focused');
@@ -75,6 +121,7 @@
         LOCALES: LOCALES,
         font: font,
         gridCols: gridCols,
+        homeRows: homeRows,
         time: time,
         date: date,
         apply: apply
