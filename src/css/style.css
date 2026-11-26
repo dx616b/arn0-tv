@@ -169,7 +169,8 @@ h1, h2 {
  * (536 + 36 gutter + 536 + 36 + 536 = 1680, same as .row-viewport).
  */
 #home {
-    --home-plate: rgba(18, 22, 30, 0.48);
+    /* Soft plate under clock / weather / music / gear — lighter so the wallpaper reads through. */
+    --home-plate: rgba(32, 38, 52, 0.30);
 }
 
 .clock {
@@ -590,12 +591,12 @@ h1, h2 {
     height: 44px;
 }
 
-/* Gear: white icon inside + ring outside — no fill invert. */
+/* Gear: same invert + ring as music play/next. */
 .gear.focused {
-    background: var(--home-plate);
-    color: #fff;
+    background: var(--fg);
+    color: var(--bg);
     transform: none;
-    box-shadow: 0 0 0 6px #fff, inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 4px var(--ring);
 }
 
 /* ---------- Home music (beside weather) ---------- */
@@ -695,7 +696,7 @@ h1, h2 {
 /*
  * Appearance → Focus (Home only). Settings / pop-up menus stay fixed and simple.
  * Both = scale + ring. Scale = grow only. Ring = outline only.
- * Gear / music ignore scale in every preset; gear never inverts.
+ * Gear / music ignore scale in every preset; both use the same invert/ring language.
  */
 .focus-ring .app.focused .tile,
 .focus-ring .input.focused .tile,
@@ -703,7 +704,8 @@ h1, h2 {
     transform: none;
 }
 
-.focus-ring .music-btn.focused {
+.focus-ring .music-btn.focused,
+.focus-ring .gear.focused {
     background: rgba(255, 255, 255, 0.08);
     color: var(--fg);
     box-shadow: 0 0 0 4px var(--ring);
@@ -714,11 +716,10 @@ h1, h2 {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
-.focus-scale .music-btn.focused {
+.focus-scale .music-btn.focused,
+.focus-scale .gear.focused {
     box-shadow: none;
 }
-
-/* Gear has no scale — keep the ring in Scale mode so focus stays obvious. */
 
 .focus-scale .thumb.focused img {
     box-shadow: none;
@@ -1014,6 +1015,7 @@ h1, h2 {
 }
 
 .settings-detail#consoles .settings-list,
+.settings-detail#music-pick .settings-list,
 .settings-detail#homeapps .ed-col {
     top: 168px;
     bottom: 120px;
@@ -1326,8 +1328,9 @@ h1, h2 {
     font-size: 34px;
 }
 
-/* Consoles list matches hub/detail row language. */
-#consoles .settings-list {
+/* Consoles / music pick lists match hub/detail row language. */
+#consoles .settings-list,
+#music-pick .settings-list {
     top: 168px;
     bottom: 120px;
     justify-content: flex-start;
@@ -1336,18 +1339,25 @@ h1, h2 {
     overflow-y: auto;
 }
 
-#consoles .setting-row {
+#consoles .setting-row,
+#music-pick .setting-row {
     justify-content: flex-start;
     text-align: left;
 }
 
-#consoles .setting-row .setting-label {
+#consoles .setting-row .setting-label,
+#music-pick .setting-row .setting-label {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-#consoles .setting-value {
-    max-width: 420px;
+#consoles .setting-value,
+#music-pick .setting-value {
+    flex: none;
+    max-width: 280px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

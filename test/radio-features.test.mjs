@@ -91,6 +91,68 @@ test('Next goes through: only the three choices are kept', function () {
     assert.equal(vm.runInContext(`Prefs.get().music.radioNav`, ctx), 'all');
 });
 
+test('Favourites Next: station then playlist, without skipping the playlist', async function () {
+    const ctx = radioSandbox();
+    const sid = vm.runInContext('Music.STATIONS[0].id', ctx);
+    vm.runInContext(`
+        window.Audio = function () {
+            this.play = function () { return Promise.resolve(); };
+            this.pause = function () {};
+            this.load = function () {};
+            this.removeAttribute = function () {};
+            this.addEventListener = function () {};
+        };
+        document.body = { appendChild: function () {} };
+        document.getElementById = function () { return null; };
+        window.Subsonic = {
+            configured: function () { return true; },
+            cfg: function () { return { baseUrl: 'http://n.example', user: 'u', password: 'p' }; },
+            getPlaylist: function (id) {
+                return Promise.resolve({
+                    id: id, name: 'Mix',
+                    songs: [
+                        { id: 's1', title: 'One', artist: 'A' },
+                        { id: 's2', title: 'Two', artist: 'B' }
+                    ]
+                });
+            },
+            streamUrl: function (id) { return 'http://n.example/' + id; },
+            getRandomSongs: function () { return Promise.resolve([]); }
+        };
+        Prefs.get().music.favourites = [
+            { type: 'station', id: '${sid}', title: 'Station' },
+            { type: 'playlist', id: 'p1', title: 'Mix' }
+        ];
+        Prefs.get().music.radioNav = 'favourites';
+        Prefs.get().music.source = 'radio';
+        Prefs.get().music.radioId = '${sid}';
+        Prefs.get().music.enabled = true;
+        Prefs.get().music.playing = true;
+        Prefs.save();
+    `, ctx);
+
+    try {
+        await vm.runInContext(`(async function () {
+            Music.next();
+            await new Promise(function (r) { setTimeout(r, 80); });
+        })()`, ctx);
+
+        assert.equal(vm.runInContext('Prefs.get().music.source', ctx), 'playlist');
+        assert.equal(vm.runInContext('Prefs.get().music.playlistId', ctx), 'p1');
+
+        // Inside a playlist, Next / track-end stay on songs — do not jump back to radio.
+        await vm.runInContext(`(async function () {
+            Music.next();
+            await new Promise(function (r) { setTimeout(r, 80); });
+        })()`, ctx);
+        assert.equal(vm.runInContext('Prefs.get().music.source', ctx), 'playlist');
+        assert.equal(vm.runInContext('Prefs.get().music.playlistId', ctx), 'p1');
+    } finally {
+        // Drop connect/watch timers so the test runner can exit.
+        vm.runInContext('Music.pause()', ctx);
+    }
+});
+
 test('Radio Record: the built-in six are used until the feed has been fetched', function () {
     const ctx = radioSandbox();
     const names = vm.runInContext(`Music.radioStations().map(function (s) { return s.id; })`, ctx);

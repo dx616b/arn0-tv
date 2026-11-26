@@ -72,8 +72,12 @@
         if (k === KEY.UP || k === KEY.DOWN) {
             var d = k === KEY.UP ? -1 : 1;
             if (moving) {
+                var n = ed.items.length;
+                if (!n) return true;
                 var to = ed.moving + d;
-                if (to < 0 || to >= ed.items.length) return true;
+                if (to < 0) to = n - 1;
+                else if (to >= n) to = 0;
+                if (to === ed.moving) return true;
                 var tmp = ed.items[to];
                 ed.items[to] = ed.items[ed.moving];
                 ed.items[ed.moving] = tmp;
@@ -81,7 +85,19 @@
                 ed.idx[0] = to;
                 edRender();
             } else {
-                ed.idx[ed.col] += d;
+                var list = [$('ed-home'), $('ed-other')][ed.col];
+                var len = list && list.children ? list.children.length : 0;
+                if (len > 1) {
+                    var prev = ed.idx[ed.col];
+                    ed.idx[ed.col] = (ed.idx[ed.col] + d + len) % len;
+                    // Wrap jumped across the list — reset the vtrack so the edge item is on screen.
+                    if ((prev === 0 && d < 0) || (prev === len - 1 && d > 0)) {
+                        list._pos = ed.idx[ed.col] === 0 ? 0 : list._pos;
+                        if (ed.idx[ed.col] === 0) list.style.transform = '';
+                    }
+                } else {
+                    ed.idx[ed.col] += d;
+                }
             }
             edRefresh();
             return true;

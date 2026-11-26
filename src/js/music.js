@@ -228,7 +228,7 @@
         queue = [];
         songHistory = [];
         prefs().songHistory = [];
-        playlistCache = { id: null, songs: [], cursor: 0 };
+        playlistCache = { id: null, songs: [], cursor: 0, original: [] };
     }
 
     function sourceLabel() {
@@ -457,6 +457,20 @@
         audio.volume = v ? v.value : 0.35;
     }
 
+    function playlistShuffleOn() {
+        return prefs().playlistShuffle !== false;
+    }
+
+    function playlistRepeatOn() {
+        return prefs().playlistRepeat !== false;
+    }
+
+    function orderPlaylistSongs(songs) {
+        var list = songs.slice();
+        if (playlistShuffleOn()) shuffleInPlace(list);
+        return list;
+    }
+
     function ensurePlaylistCache() {
         var p = prefs();
         var id = p.playlistId ? String(p.playlistId) : '';
@@ -468,7 +482,8 @@
             if (!pl.songs.length) throw new Error('Playlist is empty');
             playlistCache = {
                 id: id,
-                songs: shuffleInPlace(pl.songs.slice()),
+                original: pl.songs.slice(),
+                songs: orderPlaylistSongs(pl.songs),
                 cursor: 0
             };
             if (pl.name && p.playlistName !== pl.name) {
@@ -485,13 +500,40 @@
             var i;
             for (i = 0; i < n; i++) {
                 if (cache.cursor >= cache.songs.length) {
-                    shuffleInPlace(cache.songs);
+                    if (!playlistRepeatOn()) break;
+                    cache.songs = orderPlaylistSongs(cache.original && cache.original.length
+                        ? cache.original
+                        : cache.songs);
                     cache.cursor = 0;
                 }
+                if (cache.cursor >= cache.songs.length) break;
                 out.push(cache.songs[cache.cursor++]);
             }
             return out;
         });
+    }
+
+    // Rebuild playlist order after Shuffle toggles; Repeat only affects wrap-around.
+    function setPlaylistShuffle(on) {
+        var p = prefs();
+        p.playlistShuffle = !!on;
+        Prefs.save();
+        if (p.source !== 'playlist' || !p.playlistId) {
+            notify();
+            return;
+        }
+        playlistCache = { id: null, songs: [], cursor: 0, original: [] };
+        if (p.playing && p.enabled) {
+            queue = [];
+            nextTrack(true);
+        }
+        notify();
+    }
+
+    function setPlaylistRepeat(on) {
+        prefs().playlistRepeat = !!on;
+        Prefs.save();
+        notify();
     }
 
     function refill() {
@@ -552,7 +594,9 @@
         dropCurrentAudio();
         if (p.playing && p.enabled) {
             if (p.source === 'radio') playStation(findStation(p.radioId), false);
-            else next(true);
+            // Start the Navidrome queue directly — do not call next() (Favourites Next would
+            // immediately step to the following favourite).
+            else nextTrack(true);
         }
         notify();
     }
@@ -648,9 +692,6 @@
                 onAudioError(url);
             });
         }
-        if (announce && !barVisible()) {
-            UI.toast(st.title + (st.genre ? ' · ' + st.genre : ''));
-        }
         notify();
     }
 
@@ -672,16 +713,28 @@
     }
 
     // What Next steps through: 'all' = curated stations, custom URL, then every SomaFM channel
-    // grouped by genre; 'favourites' = only the saved favourites, in the order they were added.
+    // grouped by genre; 'favourites' = saved favourites (stations + playlists), in saved order.
     function navItems() {
         var p = prefs();
+        var favs = Array.isArray(p.favourites) ? p.favourites : [];
+        // Playlist favourites need a configured Navidrome; drop them from the Next list otherwise.
+        if (!(window.Subsonic && Subsonic.configured())) {
+            favs = favs.filter(function (f) { return f.type !== 'playlist'; });
+        }
         return RadioPlan.navList({
             mode: p.radioNav,
             stations: radioStations(),
             customs: customStations(),
             somaGroups: window.SomaFM ? SomaFM.groupByGenre(SomaFM.current()) : [],
-            favourites: Array.isArray(p.favourites) ? p.favourites : []
+            favourites: favs
         });
+    }
+
+    // Key used to find the current place in a Next list (radio id, or playlist:…).
+    function currentNavKey() {
+        var p = prefs();
+        if (p.source === 'playlist' && p.playlistId) return 'playlist:' + String(p.playlistId);
+        return p.radioId;
     }
 
     // Save a SomaFM choice (channel plus resolved mirrors) without starting playback.
@@ -711,10 +764,15 @@
             notify();
             return;
         }
-        // Play keeps the selected station. Only Next (or skipping a channel with no streams) moves on.
-        var item = list[(auto || user) ? RadioPlan.nextIndex(list, p.radioId) : RadioPlan.indexOf(list, p.radioId)];
+        // Play keeps the selected item. Only Next (or skipping a channel with no streams) moves on.
+        var item = list[(auto || user) ? RadioPlan.nextIndex(list, currentNavKey()) : RadioPlan.indexOf(list, currentNavKey())];
         var token = ++navSeq;
+        if (item.playlist) {
+            playNavItem(item);
+            return;
+        }
         if (item.station) {
+            p.source = 'radio';
             p.radioId = item.station.id;
             Prefs.save();
             radioMirror = 0;
@@ -769,20 +827,12 @@
                 notify();
             });
         }
-        // Title lives on the Home dock; toast only when that bar is not on screen.
-        if (announce && !barVisible()) {
-            UI.toast(song.title + (song.artist ? ' · ' + song.artist : ''));
-        }
         notify();
         if (queue.length < REFILL_AT) refill();
     }
 
-    function next(auto, user) {
-        if (!ready()) return;
-        if (isRadio()) {
-            nextRadio(auto, user);
-            return;
-        }
+    // Advance the Navidrome song queue (Random / Playlist). Not used for Favourites Next.
+    function nextTrack(auto) {
         if (!Subsonic.configured()) return;
         var p = prefs();
         if (!p.enabled) {
@@ -792,15 +842,34 @@
         p.playing = true;
         Prefs.save();
         if (!queue.length) {
-            // User hit Play/Next with an empty queue — wait visibly for the first fetch.
             var wait = auto ? refill() : UI.busy(refill());
             wait.then(function () {
-                if (queue.length) next(auto);
-                else notify();
+                if (queue.length) nextTrack(auto);
+                else if (prefs().source === 'playlist' && !playlistRepeatOn()) {
+                    pause();
+                    UI.toast('Playlist finished');
+                } else {
+                    notify();
+                }
             });
             return;
         }
         playSong(queue.shift(), !auto);
+    }
+
+    function next(auto, user) {
+        if (!ready()) return;
+        // Favourites Next walks stations ↔ playlists only while Radio is playing.
+        // Inside a playlist/random queue, Next (and track end) advances songs — not the radio list.
+        if (prefs().radioNav === 'favourites' && isRadio()) {
+            nextRadio(auto, user);
+            return;
+        }
+        if (isRadio()) {
+            nextRadio(auto, user);
+            return;
+        }
+        nextTrack(auto);
     }
 
     // Navidrome: back to the track played before this one; the current one goes back in the queue.
@@ -852,6 +921,7 @@
         p.playing = false;
         Prefs.save();
         stopWatch();
+        clearConnect();
         if (audio) audio.pause();
         notify();
     }
@@ -1108,14 +1178,29 @@
             prevSong();
             return;
         }
+        if (prefs().radioNav === 'favourites') {
+            var favList = navItems();
+            if (!favList.length) return;
+            var fi = RadioPlan.indexOf(favList, currentNavKey());
+            playNavItem(favList[(fi - 1 + favList.length) % favList.length]);
+            return;
+        }
         var list = navItems();
         if (!list.length) return;
         var i = RadioPlan.indexOf(list, prefs().radioId);
         playNavItem(list[(i - 1 + list.length) % list.length]);
     }
 
-    // Plays one entry of the radio list (a station, or a SomaFM channel that needs its streams).
+    // Plays one entry of the Next list (station, SomaFM channel, or Navidrome playlist).
     function playNavItem(item) {
+        if (item.playlist) {
+            var pp = prefs();
+            pp.enabled = true;
+            pp.playing = true;
+            Prefs.save();
+            setSource('playlist', { id: item.playlist.id, name: item.playlist.name });
+            return;
+        }
         if (item.station) {
             var p = prefs();
             // Same as Settings → Radio: leave Navidrome / playlist when a radio list is chosen.
@@ -1141,10 +1226,17 @@
         });
     }
 
-    // The current station as a favourite entry, or null when it cannot be saved.
+    // The current station or playlist as a favourite entry, or null when it cannot be saved.
     function currentFavouriteEntry() {
-        if (!isRadio()) return null;
         var p = prefs();
+        if (p.source === 'playlist' && p.playlistId) {
+            return {
+                type: 'playlist',
+                id: String(p.playlistId),
+                title: p.playlistName || 'Playlist'
+            };
+        }
+        if (!isRadio()) return null;
         if (String(p.radioId || '').indexOf('somafm:') === 0) {
             var sel = p.somaSelected;
             if (!sel || !sel.urls || !sel.urls.length) return null;
@@ -1157,7 +1249,8 @@
     }
 
     function favouriteIndex(list, entry) {
-        return list.findIndex(function (x) { return x.type === entry.type && x.id === entry.id; });
+        var want = String(entry.id);
+        return list.findIndex(function (x) { return x.type === entry.type && String(x.id) === want; });
     }
 
     function isCurrentFavourite() {
@@ -1262,6 +1355,8 @@
         setEnabled: setEnabled,
         setVolume: setVolume,
         setSource: setSource,
+        setPlaylistShuffle: setPlaylistShuffle,
+        setPlaylistRepeat: setPlaylistRepeat,
         setRadio: setRadio,
         setSomaChannel: setSomaChannel,
         setRadioNav: setRadioNav,

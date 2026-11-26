@@ -1361,10 +1361,12 @@
         UI.show(returnTo, { back: true });
     }
 
-    // Never over a console input or another screen, and never while the app is in the background.
+    // Any launcher screen after idle — not while HDMI/TV input is up, or the app is backgrounded.
     function eligible() {
-        return prefs().enabled && UI.isVisible('home') && !document.hidden &&
-            !(window.Home && Home.tvMode());
+        if (!prefs().enabled || document.hidden) return false;
+        if (window.Home && Home.tvMode()) return false;
+        var cur = UI.current && UI.current();
+        return !!(cur && cur !== 'screensaver');
     }
 
     /*

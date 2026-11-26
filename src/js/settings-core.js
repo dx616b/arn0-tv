@@ -15,7 +15,9 @@
         'settings-atmosphere': 'Atmosphere',
         'settings-samsung': 'Samsung',
         advanced: 'Advanced',
-        home: 'Home'
+        home: 'Home',
+        'music-settings': 'Music',
+        'music-pick': 'Music'
     };
 
     function chip(label, on, item) {
@@ -127,6 +129,7 @@
         };
         var def = {
             el: view,
+            wrap: true,
             rows: function () {
                 var items = focusableListItems(list);
                 return twoColumn ? columnRows(items) : items.map(function (li) { return [li]; });
@@ -214,6 +217,7 @@
         var hints = opts.hints || chipDetailHints(opts.okLabel || 'Select');
         UI.register(name, {
             el: opts.el,
+            wrap: true,
             rows: function () { return chipRows(body); },
             onShow: function (showOpts) {
                 if ((!showOpts || !showOpts.back) && body) body.scrollTop = 0;

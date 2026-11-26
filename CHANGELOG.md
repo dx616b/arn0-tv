@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.7.5
+
+### Music
+- Settings pickers use Settings-style lists (stations, playlists, favourites) instead of overlay menus
+- Playlists: OK play/pause in place; short ▶ next track; hold ▶ favourite; exit keeps the last played playlist
+- Favourites can include playlists; Next goes through is shared for Radio and Navidrome
+- Playlist Shuffle / Repeat (global); Favourites Next no longer steals in-playlist track advance
+- Source chips only switch the settings panel — playback stays until you pick Random, a playlist, a station, or Play
+- Success toasts removed when starting playback (errors still toast)
+
+### Screen saver / Home
+- Idle screensaver starts from any screen (not only Home); still skips HDMI / backgrounded
+- Focus wrap on Settings lists, Home apps/consoles, menus, and related screens (scroll jumps with wrap)
+- Gear focus matches music play/next (invert + ring); lighter home plate under the clock
+
 ## 0.7.4
 
 ### Home
