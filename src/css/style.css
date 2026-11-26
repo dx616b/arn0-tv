@@ -2447,6 +2447,7 @@ html.preview, html.preview body {
 #screensaver.tone-dark .ss-date,
 #screensaver.tone-dark .ss-music-title,
 #screensaver.tone-dark .ss-music-artist,
+#screensaver.tone-dark .ss-date-row .ss-wx-temp,
 #screensaver.tone-dark .ss-wx-temp,
 #screensaver.tone-dark .ss-wx-detail,
 #screensaver.tone-dark .ss-legend,
@@ -2623,7 +2624,7 @@ html.preview, html.preview body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 18px;
     margin-top: var(--ss-stack);
     margin-left: 12px;
     width: fit-content;
@@ -2639,17 +2640,26 @@ html.preview, html.preview body {
     text-shadow: 0 1px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* Icon + temp as one unit, tighter than the date gap. */
+.ss-date-wx {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: var(--ss-line);
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.ss-date-wx.hidden {
+    display: none;
+}
+
 .ss-date-row .ss-wx-icon {
     flex: none;
     display: flex;
     align-items: center;
     width: 30px;
     height: var(--ss-line);
-    color: rgba(255, 255, 255, 0.78);
-}
-
-.ss-date-row .ss-wx-icon.hidden {
-    display: none;
 }
 
 .ss-date-row .ss-wx-icon svg {
@@ -2658,8 +2668,19 @@ html.preview, html.preview body {
     height: 28px;
 }
 
+.ss-date-row .ss-wx-temp {
+    flex: none;
+    font-family: "Space Grotesk", var(--font);
+    font-size: 26px;
+    font-weight: 500;
+    line-height: var(--ss-line);
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: 0 1px 16px rgba(0, 0, 0, 0.5);
+}
+
 #screensaver.tone-dark .ss-time,
-#screensaver.tone-dark .ss-date {
+#screensaver.tone-dark .ss-date,
+#screensaver.tone-dark .ss-date-row .ss-wx-temp {
     text-shadow: 0 2px 24px rgba(255, 255, 255, 0.35), 0 0 1px rgba(255, 255, 255, 0.25);
 }
 

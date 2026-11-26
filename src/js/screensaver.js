@@ -687,7 +687,8 @@
         var detail = w ? cleanCaption(w.title || w.credit || '') : '';
         captionText = metaLine(captionProvider(w), detail);
         captionSub = '';
-        fillLine($('ss-title'), captionText, true);
+        // Loop while chrome is up — Hide text cuts it short before a freeze would matter.
+        fillLine($('ss-title'), captionText, true, true);
         fillLine($('ss-sub'), '', false);
         $('ss-caption').classList.toggle('hidden', !captionText);
     }
@@ -703,16 +704,20 @@
     }
 
     function renderClockWeather() {
-        var el = $('ss-wx-icon');
-        if (!el) return;
+        var row = $('ss-date-wx');
+        var icon = $('ss-wx-icon');
+        var temp = $('ss-wx-temp');
+        if (!row || !icon) return;
         var w = window.Weather && Weather.current();
         if (!w || !w.icon) {
-            el.classList.add('hidden');
-            el.innerHTML = '';
+            row.classList.add('hidden');
+            icon.innerHTML = '';
+            if (temp) temp.textContent = '';
             return;
         }
-        el.innerHTML = w.icon;
-        el.classList.remove('hidden');
+        icon.innerHTML = w.icon;
+        if (temp) temp.textContent = w.temp || '';
+        row.classList.remove('hidden');
     }
 
     function musicReady() {
