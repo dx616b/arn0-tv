@@ -187,9 +187,15 @@
         return rows;
     }
 
-    // ◀ at the start of a chip/thumb row returns to the Settings hub.
+    function focusedIsThumb() {
+        var el = document.querySelector('.focused');
+        return !!(el && el.classList.contains('thumb'));
+    }
+
+    // ◀ at the start of a chip row returns to the hub. Photo thumbs wrap in-row instead.
     function chipDetailOnKey(k) {
         if (k === UI.KEY.LEFT && UI.atRowStart()) {
+            if (focusedIsThumb()) return false;
             UI.back();
             return true;
         }
@@ -201,7 +207,7 @@
         return function () {
             var ok = typeof okLabel === 'function' ? okLabel() : (okLabel || 'Select');
             var hints = [['OK', ok]];
-            if (UI.atRowStart && UI.atRowStart()) hints.push(['◀', 'Back']);
+            if (!focusedIsThumb() && UI.atRowStart && UI.atRowStart()) hints.push(['◀', 'Back']);
             else hints.push(['◀ ▶', 'Move']);
             hints.push(backPair());
             return hints;

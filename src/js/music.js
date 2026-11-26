@@ -242,6 +242,19 @@
         return 'Random';
     }
 
+    // Network / server name for chrome lines: "SomaFM - Groove Salad", "Navidrome - Track".
+    function providerLabel() {
+        if (isRadio()) {
+            var st = findStation(prefs().radioId);
+            if (!st) return 'Radio';
+            if (st.custom) return 'Your list';
+            if (st.credit) return st.credit;
+            if (String(st.id || '').indexOf('somafm:') === 0) return 'SomaFM';
+            return 'Radio Record';
+        }
+        return 'Navidrome';
+    }
+
     function notify() {
         listeners.forEach(function (fn) {
             try { fn(); } catch (e) { /* ignore */ }
@@ -1000,8 +1013,8 @@
         });
     }
 
-    // While play/next is focused: keep title/artist scrolling so a long line can be read.
-    // Only (re)starts when first entering the music controls — not when moving play ↔ next.
+    // While prev/play/next is focused: keep title/artist scrolling so a long line can be read.
+    // Only (re)starts when first entering the music controls — not when moving between them.
     function showFull() {
         var bar = document.getElementById('music-bar');
         if (!bar) return;
@@ -1163,8 +1176,10 @@
                 else next(true);
             }, 1500);
         }
+        var prevBtn = document.getElementById('music-btn-prev');
         var playBtn = document.getElementById('music-btn-play');
         var nextBtn = document.getElementById('music-btn-next');
+        if (prevBtn) prevBtn._item = { kind: 'music', action: 'prev' };
         if (playBtn) playBtn._item = { kind: 'music', action: 'toggle' };
         if (nextBtn) nextBtn._item = { kind: 'music', action: 'next' };
         listeners.push(renderBar);
@@ -1365,6 +1380,7 @@
         addCustomUrl: addCustomUrl,
         removeCustomUrl: removeCustomUrl,
         sourceLabel: sourceLabel,
+        providerLabel: providerLabel,
         clearQueue: clearQueue,
         isPlaying: isPlaying,
         current: function () { return current; },

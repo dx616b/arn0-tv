@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.7.6
+
+### Home
+- Two app rows on Compact (Appearance → Home rows); consoles sit lower with a modest size tweak
+- Console tiles: large logo left, name + HDMI right; soft focus scale so edges do not clip
+- Console rename capped at 16 characters; name font shrinks to fit one line; logo follows matching names
+- Extra console marks (HDMI, Steam, Steam Deck, NVIDIA, Chromecast, Raspberry Pi, …)
+- Shelf ▶ when more apps/consoles scroll, aligned with the gear; half-tiles clipped
+- Clock plate more transparent; weather text matches clock strength
+- Bottom legend centred like the screensaver; clearer key pills
+- ▲ Settings only from gear/music; Hold OK shows Options on apps and consoles
+
+### Consoles / Settings
+- Console options as Settings-style rows (port, logo, colour, opens, rename, hide, remove)
+- Wallpaper provider photos: stronger focus ring; ◀/▶ snakes through every thumb (last ↔ first); gallery no longer jumps the page
+
 ## 0.7.5
 
 ### Music

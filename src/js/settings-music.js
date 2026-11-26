@@ -224,7 +224,6 @@
 
     function activateMusic(item) {
         var c = Subsonic.cfg();
-        var p = Prefs.get().music;
         if (item.kind === 'source') {
             // Panel only — leave whatever is playing alone until the user picks a station,
             // Random, playlist, or Play.

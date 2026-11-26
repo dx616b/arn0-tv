@@ -3,6 +3,7 @@
  *
  * Place and unit live in Prefs (Settings → Weather). config.js only supplies defaults.
  * Place is Off, Automatic (IP detect on start), or a custom lat/lon/label from search.
+ * When a place is set, its IANA timezone is stored and Home / screen saver clocks follow it.
  *
  * There is no polling. A TV launcher spends most of its life in the background with JavaScript
  * paused, so a timer would be both useless and rude; instead the reading is refreshed when
@@ -112,8 +113,26 @@
             target.latitude = null;
             target.longitude = null;
             target.label = null;
+            target.timezone = null;
         }
         return target;
+    }
+
+    // quiet: skip listeners (caller will notify), e.g. mid forecast accept.
+    function setTimezone(tz, quiet) {
+        var p = prefsWeather();
+        var next = typeof tz === 'string' && tz ? tz : null;
+        if (p.timezone === next) return false;
+        p.timezone = next;
+        Prefs.save();
+        if (!quiet) listeners.forEach(function (fn) { fn(); });
+        return true;
+    }
+
+    function timeZone() {
+        var p = prefsWeather();
+        if (p.place === 'off') return null;
+        return p.timezone || null;
     }
 
     function applyDetected(loc) {
@@ -122,6 +141,7 @@
         p.latitude = loc.latitude;
         p.longitude = loc.longitude;
         p.label = loc.label || null;
+        if (loc.timezone) p.timezone = loc.timezone;
         Prefs.save();
         clearReading();
         lastFailure = 0;
@@ -188,7 +208,10 @@
         if (!isFinite(lat) || !isFinite(lon)) return null;
         var label = formatPlaceLabel(data.city, data.region || data.region_code, data.country);
         if (!label) label = lat.toFixed(2) + ', ' + lon.toFixed(2);
-        return { latitude: lat, longitude: lon, label: label };
+        var tz = null;
+        if (typeof data.timezone === 'string') tz = data.timezone;
+        else if (data.timezone && typeof data.timezone.id === 'string') tz = data.timezone.id;
+        return { latitude: lat, longitude: lon, label: label, timezone: tz };
     }
 
     function detectLocation(done) {
@@ -238,19 +261,21 @@
                     latitude: r.latitude,
                     longitude: r.longitude,
                     label: label || r.name,
-                    name: r.name
+                    name: r.name,
+                    timezone: typeof r.timezone === 'string' ? r.timezone : null
                 });
             });
             done(null, out);
         });
     }
 
-    function resolvePlace(lat, lon, label) {
+    function resolvePlace(lat, lon, label, timezone) {
         return {
             place: 'custom',
             latitude: lat,
             longitude: lon,
-            label: label || 'Custom'
+            label: label || 'Custom',
+            timezone: typeof timezone === 'string' && timezone ? timezone : null
         };
     }
 
@@ -363,6 +388,8 @@
             min: day.temperature_2m_min[0],
             days: days
         };
+        // Forecast timezone=auto — keep the clock aligned with this place.
+        if (typeof data.timezone === 'string' && data.timezone) setTimezone(data.timezone, true);
         store();
         listeners.forEach(function (fn) { fn(); });
         return true;
@@ -404,6 +431,10 @@
     function applySettings() {
         clearReading();
         lastFailure = 0;
+        if (prefsWeather().place === 'off') {
+            setTimezone(null);
+            return;
+        }
         if (prefsWeather().place === 'auto') {
             ensureAuto();
             return;
@@ -443,6 +474,7 @@
         detectLocation: detectLocation,
         searchPlaces: searchPlaces,
         placeLabel: placeLabel,
+        timeZone: timeZone,
         applyDetected: applyDetected,
         ensureAuto: ensureAuto,
         start: start,

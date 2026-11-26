@@ -15,7 +15,8 @@
         var p = Prefs.get().appearance;
         var font = Appearance.font(p.font);
         var tiles = p.tiles === 'compact' ? 'Compact' : 'Comfortable';
-        return (font ? font.label : 'Manrope') + ' · ' + tiles;
+        var rows = (p.tiles === 'compact' && Number(p.homeRows) === 2) ? '2 rows' : '1 row';
+        return (font ? font.label : 'Manrope') + ' · ' + tiles + ' · ' + rows;
     }
 
     function weatherSummary() {
