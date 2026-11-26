@@ -87,7 +87,10 @@
                 favourites: [],
                 songHistory: [],   // Navidrome tracks played, oldest first (Down steps back through them)
                 playlistId: musicSeed.playlistId || null,
-                playlistName: musicSeed.playlistName || null
+                playlistName: musicSeed.playlistName || null,
+                // Playlist playback (Navidrome). Defaults match the old always-shuffle / always-loop behaviour.
+                playlistShuffle: musicSeed.playlistShuffle != null ? !!musicSeed.playlistShuffle : true,
+                playlistRepeat: musicSeed.playlistRepeat != null ? !!musicSeed.playlistRepeat : true
             },
             appearance: {
                 clock: '24h',           // '24h' | '12h' (default 24-hour)

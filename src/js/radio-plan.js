@@ -13,7 +13,7 @@
     //   stations   radio stations ({ id, ... })
     //   customs    Your list stations ({ id: 'custom:…', ... })
     //   somaGroups SomaFM groups ({ genre, channels: [{ id, genres, pls, ... }] })
-    //   favourites saved entries ({ type: 'station' | 'custom' | 'soma', id, pls? })
+    //   favourites saved entries ({ type: 'station' | 'custom' | 'soma' | 'playlist', id, pls?, title? })
     function navList(input) {
         var items = [];
         var stations = input.stations || [];
@@ -25,13 +25,18 @@
         if (input.mode === 'favourites') {
             (input.favourites || []).forEach(function (f) {
                 if (f.type === 'station') {
-                    var st = stations.find(function (s) { return s.id === f.id; });
+                    var st = stations.find(function (s) { return String(s.id) === String(f.id); });
                     if (st) items.push({ key: st.id, station: st });
                 } else if (f.type === 'custom') {
-                    var cf = customs.find(function (s) { return s.id === f.id; });
+                    var cf = customs.find(function (s) { return String(s.id) === String(f.id); });
                     if (cf) items.push({ key: cf.id, station: cf });
                 } else if (f.type === 'soma' && f.pls) {
                     items.push({ key: 'somafm:' + f.id, soma: { id: f.id, title: f.title, genres: [f.genre], pls: f.pls } });
+                } else if (f.type === 'playlist' && f.id) {
+                    items.push({
+                        key: 'playlist:' + String(f.id),
+                        playlist: { id: String(f.id), name: f.title || 'Playlist', songCount: f.songCount }
+                    });
                 }
             });
             return items;

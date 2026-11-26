@@ -36,11 +36,13 @@ test('favourites mode keeps saved order and skips entries that no longer exist',
             { type: 'station', id: 'b' },
             { type: 'station', id: 'gone' },
             { type: 'custom', id: 'custom:1' },
-            { type: 'soma', id: 'x', title: 'X', genre: 'ambient', pls: SOMA.pls }
+            { type: 'soma', id: 'x', title: 'X', genre: 'ambient', pls: SOMA.pls },
+            { type: 'playlist', id: 'pl9', title: 'Late night' }
         ]
     });
-    assert.deepEqual(plain(list.map(function (it) { return it.key; })), ['b', 'custom:1', 'somafm:x']);
+    assert.deepEqual(plain(list.map(function (it) { return it.key; })), ['b', 'custom:1', 'somafm:x', 'playlist:pl9']);
     assert.deepEqual(plain(list[2].soma.genres), ['ambient']);
+    assert.equal(list[3].playlist.name, 'Late night');
 });
 
 test('Next moves to the following station and wraps round', function () {

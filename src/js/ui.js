@@ -156,9 +156,39 @@
         // Remembered so the sound can tell a real move from a clamp at the edge of a row.
         var wasR = f.r;
         var wasC = f.c;
-        if (dc) f.c = clamp(f.c + dc, 0, r[f.r].length - 1);
+        // 'start' | 'end' when wrap jumps across the list — scroll must jump too, not nudge.
+        var wrapJump = '';
+        if (dc) {
+            var nc = f.c + dc;
+            var rowLen = r[f.r].length;
+            // Wrap within the row (Home apps / consoles, Settings chip rows).
+            if (views[current] && views[current].wrap && rowLen > 1) {
+                if (nc < 0) {
+                    nc = rowLen - 1;
+                    wrapJump = 'end';
+                } else if (nc >= rowLen) {
+                    nc = 0;
+                    wrapJump = 'start';
+                }
+            } else {
+                nc = clamp(nc, 0, rowLen - 1);
+            }
+            f.c = nc;
+        }
         if (dr) {
-            var nr = clamp(f.r + dr, 0, r.length - 1);
+            var nr = f.r + dr;
+            // One more Down past the bottom → top (and Up past top → bottom).
+            if (views[current] && views[current].wrap) {
+                if (nr < 0) {
+                    nr = r.length - 1;
+                    wrapJump = 'end';
+                } else if (nr >= r.length) {
+                    nr = 0;
+                    wrapJump = 'start';
+                }
+            } else {
+                nr = clamp(nr, 0, r.length - 1);
+            }
             if (nr !== f.r) {
                 f.last[f.r] = f.c;
                 var best = 0;
@@ -177,6 +207,30 @@
         }
         if (window.Sound) Sound.play(f.r === wasR && f.c === wasC ? 'edge' : 'move');
         refresh();
+        if (wrapJump) scrollAfterWrap(focusedEl(), wrapJump);
+    }
+
+    // After wrap, jump the scroller/track so the focused edge item is on screen (nudge is not enough).
+    function scrollAfterWrap(item, jump) {
+        if (!item) return;
+        var scroller = item.closest && item.closest('.scroll-y');
+        if (scroller) {
+            scroller.scrollTop = jump === 'start' ? 0 : scroller.scrollHeight;
+            ensureVisible(item);
+            return;
+        }
+        var track = item.parentNode;
+        if (!track) return;
+        var horizontal = track.classList.contains('row-track');
+        var vertical = track.classList.contains('grid') || track.classList.contains('vtrack');
+        if (!horizontal && !vertical) return;
+        if (jump === 'start') {
+            track._pos = 0;
+            track.style.transform = '';
+            ensureVisible(item);
+            return;
+        }
+        ensureVisible(item);
     }
 
     // Scrolls the focused element's track with a transform (no layout scrolling).
@@ -377,14 +431,27 @@
 
     function menuMove(delta) {
         if (!menuOpts.length) return true;
-        var next = clamp(menuFocus + delta, 0, menuOpts.length - 1);
+        var next = menuFocus + delta;
+        var wrapped = false;
+        if (next < 0) {
+            next = menuOpts.length - 1;
+            wrapped = true;
+        } else if (next >= menuOpts.length) {
+            next = 0;
+            wrapped = true;
+        }
         if (next === menuFocus) {
             if (window.Sound) Sound.play('edge');
             return true;
         }
         menuFocus = next;
-        if (menuFocus < menuStart) menuStart = menuFocus;
-        if (menuFocus >= menuStart + MENU_PAGE) menuStart = menuFocus - MENU_PAGE + 1;
+        // Wrap must reset the window — incremental slide leaves the wrong page on screen.
+        if (wrapped && delta > 0) menuStart = 0;
+        else if (wrapped && delta < 0) menuStart = Math.max(0, menuOpts.length - MENU_PAGE);
+        else {
+            if (menuFocus < menuStart) menuStart = menuFocus;
+            if (menuFocus >= menuStart + MENU_PAGE) menuStart = menuFocus - MENU_PAGE + 1;
+        }
         renderMenuList();
         renderHints(views.menu);
         refresh();

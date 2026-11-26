@@ -14,6 +14,9 @@
 
     // Soft playback updates only touch Controls when the source layout is unchanged.
     var lastLayoutSig = '';
+    // Which Source panel is open — independent of what is actually playing, so the user can
+    // edit Navidrome while Radio keeps going (and the other way round).
+    var sourcePanel = '';
 
     function iconChip(svg, on, item, label) {
         var c = el('div', 'chip icon-chip' + (on ? ' on' : ''));
@@ -37,7 +40,10 @@
             p.enabled ? 1 : 0,
             p.source || '',
             p.playlistId || '',
+            p.playlistShuffle !== false ? 1 : 0,
+            p.playlistRepeat !== false ? 1 : 0,
             p.radioNav || '',
+            sourcePanel || '',
             c.baseUrl ? 1 : 0,
             c.user ? 1 : 0,
             c.password ? 1 : 0,
@@ -45,27 +51,66 @@
         ].join('|');
     }
 
+    function panelFor(p) {
+        if (sourcePanel === 'radio' || sourcePanel === 'navidrome') return sourcePanel;
+        return p.source === 'radio' ? 'radio' : 'navidrome';
+    }
+
     function navidromeBlock(p, c) {
-        var wrap = el('div', 'setting-block');
-        wrap.appendChild(el('h2', '', 'Navidrome server'));
+        var server = el('div', 'setting-block');
+        server.appendChild(el('h2', '', 'Navidrome server'));
         var serverChips = el('div', 'chips wrap');
         serverChips.appendChild(chip('Server', !!c.baseUrl, { kind: 'server' }));
         serverChips.appendChild(chip('Username', !!c.user, { kind: 'user' }));
         serverChips.appendChild(chip('Password', !!c.password, { kind: 'password' }));
         serverChips.appendChild(chip('Test connection', false, { kind: 'test' }));
-        wrap.appendChild(serverChips);
+        server.appendChild(serverChips);
 
-        wrap.appendChild(el('h2', '', 'Play'));
+        // Own card — selected server chips used to sit on top of the Play heading in one block.
+        var play = el('div', 'setting-block');
+        play.appendChild(el('h2', '', 'Play'));
         var modeChips = el('div', 'chips wrap');
         var onPlaylist = p.source === 'playlist' && !!p.playlistId;
         modeChips.appendChild(chip('Random', p.source === 'random', { kind: 'mode', value: 'random' }));
-        modeChips.appendChild(chip(
-            onPlaylist ? (p.playlistName || 'Playlist') : 'Playlist…',
-            onPlaylist,
-            { kind: 'mode', value: 'playlist' }
-        ));
-        wrap.appendChild(modeChips);
-        return wrap;
+        // Long Navidrome names used to blow out the chip row — keep a short label.
+        var plLabel = 'Playlist…';
+        if (onPlaylist) {
+            var plName = String(p.playlistName || 'Playlist');
+            plLabel = plName.length > 22 ? plName.slice(0, 21) + '…' : plName;
+        }
+        modeChips.appendChild(chip(plLabel, onPlaylist, { kind: 'mode', value: 'playlist' }));
+        var plFavs = SettingsMusicPickers.favs().filter(function (f) { return f.type === 'playlist'; });
+        if (plFavs.length) {
+            modeChips.appendChild(chip('Favourites (' + plFavs.length + ')', false, { kind: 'openPlFavs' }));
+        }
+        play.appendChild(modeChips);
+
+        var root = el('div', '');
+        root.appendChild(server);
+        root.appendChild(play);
+
+        // Playlist order options — shown whenever a playlist is the active source.
+        if (onPlaylist) {
+            var shuffle = el('div', 'setting-block');
+            shuffle.appendChild(el('h2', '', 'Shuffle playlist'));
+            var shuffleChips = el('div', 'chips');
+            var shuffleOn = p.playlistShuffle !== false;
+            shuffleChips.appendChild(chip('On', shuffleOn, { kind: 'playlistShuffle', value: true }));
+            shuffleChips.appendChild(chip('Off', !shuffleOn, { kind: 'playlistShuffle', value: false }));
+            shuffle.appendChild(shuffleChips);
+            root.appendChild(shuffle);
+
+            var repeat = el('div', 'setting-block');
+            repeat.appendChild(el('h2', '', 'Repeat playlist'));
+            var repeatChips = el('div', 'chips');
+            var repeatOn = p.playlistRepeat !== false;
+            repeatChips.appendChild(chip('On', repeatOn, { kind: 'playlistRepeat', value: true }));
+            repeatChips.appendChild(chip('Off', !repeatOn, { kind: 'playlistRepeat', value: false }));
+            repeat.appendChild(repeatChips);
+            root.appendChild(repeat);
+        }
+
+        return root;
     }
 
     function radioBlock(p) {
@@ -78,18 +123,19 @@
         var favCount = SettingsMusicPickers.favs().length;
         if (favCount) listChips.appendChild(chip('Favourites (' + favCount + ')', false, { kind: 'openFavs' }));
         wrap.appendChild(listChips);
+        return wrap;
+    }
 
+    // Shared for Radio and Navidrome — Favourites mixes stations and playlists.
+    function appendNextGoesThrough(body, p) {
         var nextBlock = el('div', 'setting-block');
         nextBlock.appendChild(el('h2', '', 'Next goes through'));
-        var navChips = el('div', 'chips');
+        var navChips = el('div', 'chips wrap');
         Music.radioNavOptions().forEach(function (o) {
             navChips.appendChild(chip(o.label, (p.radioNav || 'all') === o.nav, { kind: 'radioNav', value: o.nav }));
         });
         nextBlock.appendChild(navChips);
-        var root = el('div', '');
-        root.appendChild(wrap);
-        root.appendChild(nextBlock);
-        return root;
+        body.appendChild(nextBlock);
     }
 
     function appendTransport(body, p) {
@@ -128,11 +174,19 @@
         return true;
     }
 
+    function showMusic() {
+        var p = Prefs.get().music;
+        sourcePanel = p.source === 'radio' ? 'radio' : 'navidrome';
+        renderMusic();
+    }
+
     function renderMusic() {
         var p = Prefs.get().music;
         var c = Subsonic.cfg();
         var body = $('music-body');
         body.innerHTML = '';
+        var panel = panelFor(p);
+        sourcePanel = panel;
         lastLayoutSig = layoutSig(p, c);
 
         var onBlock = el('div', 'setting-block');
@@ -146,13 +200,13 @@
         var srcBlock = el('div', 'setting-block');
         srcBlock.appendChild(el('h2', '', 'Source'));
         var srcChips = el('div', 'chips');
-        var onRadio = p.source === 'radio';
-        srcChips.appendChild(chip('Navidrome', !onRadio, { kind: 'source', value: 'navidrome' }));
-        srcChips.appendChild(chip('Radio', onRadio, { kind: 'source', value: 'radio' }));
+        srcChips.appendChild(chip('Navidrome', panel === 'navidrome', { kind: 'source', value: 'navidrome' }));
+        srcChips.appendChild(chip('Radio', panel === 'radio', { kind: 'source', value: 'radio' }));
         srcBlock.appendChild(srcChips);
         body.appendChild(srcBlock);
 
-        body.appendChild(onRadio ? radioBlock(p) : navidromeBlock(p, c));
+        body.appendChild(panel === 'radio' ? radioBlock(p) : navidromeBlock(p, c));
+        appendNextGoesThrough(body, p);
         appendTransport(body, p);
     }
 
@@ -172,11 +226,11 @@
         var c = Subsonic.cfg();
         var p = Prefs.get().music;
         if (item.kind === 'source') {
-            if (item.value === 'radio') {
-                Music.setSource('radio');
-            } else if (p.source === 'radio') {
-                Music.setSource('random');
-            }
+            // Panel only — leave whatever is playing alone until the user picks a station,
+            // Random, playlist, or Play.
+            sourcePanel = item.value === 'radio' ? 'radio' : 'navidrome';
+            render();
+            return;
         } else if (item.kind === 'openSoma') {
             SettingsMusicPickers.pickSomaGenre();
             return;
@@ -188,6 +242,9 @@
             return;
         } else if (item.kind === 'openFavs') {
             SettingsMusicPickers.pickFavourites();
+            return;
+        } else if (item.kind === 'openPlFavs') {
+            SettingsMusicPickers.pickFavourites({ playlistsOnly: true });
             return;
         } else if (item.kind === 'server') {
             SettingsCore.rename(c.baseUrl || 'http://', function (url) {
@@ -239,7 +296,12 @@
                 return;
             }
             Music.setSource('random');
-            UI.toast('Music: Random');
+        } else if (item.kind === 'playlistShuffle') {
+            Music.setPlaylistShuffle(!!item.value);
+            UI.toast('Shuffle: ' + (item.value ? 'On' : 'Off'));
+        } else if (item.kind === 'playlistRepeat') {
+            Music.setPlaylistRepeat(!!item.value);
+            UI.toast('Repeat: ' + (item.value ? 'On' : 'Off'));
         } else if (item.kind === 'radioNav') {
             Music.setRadioNav(item.value);
             var picked = Music.radioNavOptions().filter(function (o) { return o.nav === item.value; })[0];
@@ -262,6 +324,7 @@
     window.SettingsMusic = {
         render: render,
         renderMusic: renderMusic,
+        show: showMusic,
         activate: activateMusic
     };
 })();

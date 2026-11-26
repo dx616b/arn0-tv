@@ -219,10 +219,14 @@
         registerChipPage('music-settings', {
             el: $('music-settings'),
             body: $('music-body'),
-            onShow: SettingsMusic.renderMusic,
+            onShow: SettingsMusic.show,
             activate: SettingsMusic.activate,
             hints: chipDetailHints(musicOkLabel)
         });
+
+        if (window.SettingsMusicPickers && SettingsMusicPickers.register) {
+            SettingsMusicPickers.register();
+        }
 
         if (window.Music) {
             Music.onUpdate(function () {

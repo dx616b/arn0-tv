@@ -608,6 +608,7 @@
         UI.register('home', {
             el: $('home'),
             startRow: 1,
+            wrap: true,
             hints: function () {
                 var el = document.querySelector('#home .focused');
                 var item = el && el._item;
@@ -662,6 +663,7 @@
 
         UI.register('all', {
             el: $('all'),
+            wrap: true,
             rows: function () {
                 var cols = window.Appearance && Appearance.gridCols ? Appearance.gridCols() : GRID_COLS;
                 return UI.chunk(UI.children($('all-grid')), cols);
@@ -673,6 +675,7 @@
 
         UI.register('lab', {
             el: $('lab'),
+            wrap: true,
             rows: function () {
                 var log = $('lab-log');
                 return UI.children($('lab-list')).map(function (li) { return [li, log]; });
