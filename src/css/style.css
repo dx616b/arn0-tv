@@ -2550,6 +2550,34 @@ html.preview, html.preview body {
     color: rgba(243, 244, 246, 0.78);
 }
 
+.ss-legend-keys {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.ss-legend-key.ss-arrow-key {
+    min-width: 28px;
+    padding: 0 5px;
+}
+
+.ss-legend-key.ss-hold-direction {
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    color: var(--fg);
+    border-color: rgba(255, 255, 255, 0.65);
+}
+
+.ss-legend-hold-label {
+    font-weight: 700;
+    color: var(--fg);
+}
+
+#screensaver.tone-dark .ss-hold-direction,
+#screensaver.tone-dark .ss-legend-hold-label {
+    color: inherit;
+}
+
 .ss-legend-label {
     display: inline-flex;
     align-items: center;

@@ -12,8 +12,8 @@
  * Caption, music, and legend (tap / hold) fade out after idle; the clock stays on.
  * While chrome is off, a new photo peeks its caption and a new track/station peeks
  * now-playing for a short flash (not the full Hide-text wait), then fade again. The clock
- * drifts horizontally with the photo (no vertical) for burn-in; when chrome returns it
- * snaps home. The next key shows chrome again without changing photo or track.
+ * drifts horizontally at its own speed and range, sharing only the photo's direction.
+ * Revealing/hiding chrome does not reposition it or change the photo or track.
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -22,8 +22,8 @@
  * so through `transform` and `opacity`, which the compositor animates with no JavaScript per
  * frame. The poll below ticks once a second and only decides what is due.
  *
- * Burn-in is why the photo drifts (and eventually fades to black). With chrome visible the
- * clock stays put in its rectangle; with chrome off it shares the photo’s horizontal pan.
+ * The photo drifts and eventually fades to black. Clock motion is independent of chrome
+ * visibility and pauses at its own boundary until the photo's direction reverses.
  */
 (function () {
     'use strict';
@@ -322,26 +322,20 @@
         return panSign;
     }
 
-    // Follow the photo's travel speed, stopping at the clock's smaller boundary.
+    // Independent position and speed; only the photo's horizontal direction is shared.
     var CLOCK_DRIFT_MAX = 24;
-    function clockXAt(layer, u) {
-        if (!layer) return 0;
+    var CLOCK_DRIFT_PX_PER_SECOND = 2;
+    function clockTarget(layer, fromU, toU, currentX) {
         var d = driftOf(layer);
-        var x = layer.classList.contains('contain')
-            ? -(1 - u) / 2 * (d.containX || 0)
-            : u * (d.coverX || 0);
-        return Math.round(Math.max(-CLOCK_DRIFT_MAX, Math.min(CLOCK_DRIFT_MAX, x)));
-    }
-
-    // Each new leg starts at the clock's actual boundary/pose. Travel at the photo's speed,
-    // then hold; no per-frame JS or delayed catch-up when the photo reverses.
-    function clockTravelMs(layer, fromU, toU, fromX, toX, legMs) {
-        var d = driftOf(layer);
-        var travel = Math.abs(toU - fromU) * Math.abs(layer.classList.contains('contain')
+        var direction = (toU - fromU) * (layer.classList.contains('contain')
             ? (d.containX || 0) / 2
             : (d.coverX || 0));
-        if (!travel) return 0;
-        return Math.round(legMs * Math.min(1, Math.abs(toX - fromX) / travel));
+        if (!direction) return currentX;
+        return direction > 0 ? CLOCK_DRIFT_MAX : -CLOCK_DRIFT_MAX;
+    }
+
+    function clockTravelMs(fromX, toX) {
+        return Math.round(Math.abs(toX - fromX) / CLOCK_DRIFT_PX_PER_SECOND * 1000);
     }
 
     var clockLeg = null;
@@ -366,15 +360,13 @@
         // No flush needed until a new animated leg is started by syncClockDrift.
     }
 
-    /*
-     * Chrome visible / pan off / dark: clock parked at 0.
-     * Chrome off: clock X follows photo pose u (and optionally animates to `toU`).
-     */
+    // Chrome visibility never changes clock motion. A photo leg supplies direction only;
+    // pause/dark freezes the clock at its own current pose.
     function syncClockDrift(opts) {
         opts = opts || {};
         var el = $('ss-clock');
         if (!el) return;
-        if (!open || !chromeHidden || !panOn() || dark) {
+        if (!open) {
             clockHome();
             return;
         }
@@ -387,10 +379,10 @@
         var toU = opts.toU != null ? opts.toU : currentU();
         var anim = opts.animMs || 0;
         var currentX = clockPosition();
-        if (anim > 0 && fromU != null) {
-            var fromX = currentX != null ? currentX : clockXAt(layer, fromU);
-            var toX = clockXAt(layer, toU);
-            var travelMs = clockTravelMs(layer, fromU, toU, fromX, toX, anim);
+        if (anim > 0 && fromU != null && panOn() && !dark) {
+            var fromX = currentX != null ? currentX : 0;
+            var toX = clockTarget(layer, fromU, toU, fromX);
+            var travelMs = clockTravelMs(fromX, toX);
             el.style.transition = 'none';
             el.style.transform = 'translate3d(' + fromX + 'px,0,0)';
             void el.offsetWidth;
@@ -399,7 +391,7 @@
             clockLeg = { from: fromX, to: toX, start: Date.now(), dur: travelMs };
             return;
         }
-        var parkedX = currentX != null ? currentX : clockXAt(layer, toU);
+        var parkedX = currentX != null ? currentX : 0;
         el.style.transition = 'none';
         el.style.transform = 'translate3d(' + parkedX + 'px,0,0)';
         clockLeg = { from: parkedX, to: parkedX, start: Date.now(), dur: 0 };
@@ -794,10 +786,21 @@
     // key + tap label, optional hold after “ / ”.
     function legendItem(key, tap, hold) {
         var label = hold
-            ? (tap + '<span class="ss-legend-sep"> / </span>' + hold)
+            ? (tap + '<span class="ss-legend-sep"> / </span><strong class="ss-legend-hold-label">' + hold + '</strong>')
             : tap;
-        return '<span class="ss-legend-item"><span class="ss-legend-key">' + key +
-            '</span><span class="ss-legend-label">' + label + '</span></span>';
+        var keys;
+        if (key === '←→' || key === '↑↓') {
+            keys = '<span class="ss-legend-keys">';
+            for (var i = 0; i < key.length; i++) {
+                var isHold = key[i] === '→' || key[i] === '↑';
+                keys += '<span class="ss-legend-key ss-arrow-key' + (isHold ? ' ss-hold-direction' : '') + '">' + key[i] + '</span>';
+            }
+            keys += '</span>';
+        } else {
+            keys = '<span class="ss-legend-key">' + key + '</span>';
+        }
+        return '<span class="ss-legend-item">' + keys +
+            '<span class="ss-legend-label">' + label + '</span></span>';
     }
 
     // Legend centred on screen; tap / hold on the same key.
@@ -1300,7 +1303,6 @@
         clearPeeks();
         var root = $('screensaver');
         if (root) root.classList.remove('chrome-off');
-        clockHome();
     }
 
     function hideChrome() {
@@ -1309,20 +1311,7 @@
         clearPeeks();
         var root = $('screensaver');
         if (root) root.classList.add('chrome-off');
-        // Join the in-flight pan leg so the clock tracks the photo from here.
-        var layer = layers && layers[front];
-        var leg = layer && layer._leg;
-        if (leg && panOn()) {
-            var now = Date.now();
-            var left = Math.max(0, leg.start + leg.dur - now);
-            syncClockDrift({
-                fromU: legU(leg, now),
-                toU: leg.to,
-                animMs: left
-            });
-        } else {
-            syncClockDrift();
-        }
+        // Text visibility is independent of the clock's in-flight movement.
     }
 
     function touchChrome() {
