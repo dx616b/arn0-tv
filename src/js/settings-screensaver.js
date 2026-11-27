@@ -8,6 +8,18 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
+
+    var SS_NOTES = {
+        enabled: 'Starts when Home is idle with no remote input.',
+        delay: 'How long to wait on Home before the screen saver opens.',
+        photoEvery: 'Only while Background is Live or rotating photos.',
+        dark: 'Fades to black to rest the panel. Clock stays until then.',
+        chromeHide: 'Hides caption, music and hints. Clock stays; a key brings text back.',
+        pan: 'Slow move across the photo so stills do not burn in.',
+        panSpeed: 'How fast each drift pass runs.',
+        blur: 'Soft side fill for tall photos. Off shows plain bars instead.'
+    };
 
     /*
      * "Change photo" only means something while the Background is on Rotate or Live: with a
@@ -48,6 +60,7 @@
                 chips.appendChild(chip(o[1], p[b.key] === o[0], { key: b.key, value: o[0] }));
             });
             block.appendChild(chips);
+            if (SS_NOTES[b.key]) block.appendChild(note(SS_NOTES[b.key]));
             body.appendChild(block);
         });
 
@@ -56,6 +69,7 @@
         var tryChips = el('div', 'chips');
         tryChips.appendChild(chip('Show it now', false, { kind: 'preview' }));
         tryBlock.appendChild(tryChips);
+        tryBlock.appendChild(note('Opens the screen saver immediately to check the look.'));
         body.appendChild(tryBlock);
     }
 

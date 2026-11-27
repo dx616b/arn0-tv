@@ -8,6 +8,7 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
 
     var weatherBusy = false;
 
@@ -50,6 +51,12 @@
         }
         placeChips.appendChild(chip('Search city…', false, { kind: 'search' }));
         placeBlock.appendChild(placeChips);
+        var tz = Weather.timeZone && Weather.timeZone();
+        placeBlock.appendChild(note(
+            tz
+                ? ('Home and screen-saver clock follow this place (' + tz + ').')
+                : 'Home and screen-saver clock follow this place when set; Off uses the TV clock.'
+        ));
         body.appendChild(placeBlock);
 
         var unitBlock = el('div', 'setting-block');
@@ -58,14 +65,8 @@
         unitChips.appendChild(chip('Celsius', p.unit === 'celsius', { kind: 'unit', value: 'celsius' }));
         unitChips.appendChild(chip('Fahrenheit', p.unit === 'fahrenheit', { kind: 'unit', value: 'fahrenheit' }));
         unitBlock.appendChild(unitChips);
+        unitBlock.appendChild(note('Temperature on Home and under the screen-saver clock.'));
         body.appendChild(unitBlock);
-
-        var tz = Weather.timeZone && Weather.timeZone();
-        var note = el('p', 'setting-note muted',
-            tz
-                ? ('Home clock follows this place (' + tz + ').')
-                : 'Home clock follows this place when set; Off uses the TV clock.');
-        body.appendChild(note);
     }
 
     function activateWeather(item) {

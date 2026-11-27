@@ -11,6 +11,7 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
 
     // Soft playback updates only touch Controls when the source layout is unchanged.
     var lastLayoutSig = '';
@@ -65,6 +66,7 @@
         serverChips.appendChild(chip('Password', !!c.password, { kind: 'password' }));
         serverChips.appendChild(chip('Test connection', false, { kind: 'test' }));
         server.appendChild(serverChips);
+        server.appendChild(note('Your Navidrome / Subsonic URL and login.'));
 
         // Own card — selected server chips used to sit on top of the Play heading in one block.
         var play = el('div', 'setting-block');
@@ -84,6 +86,7 @@
             modeChips.appendChild(chip('Favourites (' + plFavs.length + ')', false, { kind: 'openPlFavs' }));
         }
         play.appendChild(modeChips);
+        play.appendChild(note('Random picks library tracks. Playlist stays on one list.'));
 
         var root = el('div', '');
         root.appendChild(server);
@@ -98,6 +101,7 @@
             shuffleChips.appendChild(chip('On', shuffleOn, { kind: 'playlistShuffle', value: true }));
             shuffleChips.appendChild(chip('Off', !shuffleOn, { kind: 'playlistShuffle', value: false }));
             shuffle.appendChild(shuffleChips);
+            shuffle.appendChild(note('On plays the playlist in random order.'));
             root.appendChild(shuffle);
 
             var repeat = el('div', 'setting-block');
@@ -107,6 +111,7 @@
             repeatChips.appendChild(chip('On', repeatOn, { kind: 'playlistRepeat', value: true }));
             repeatChips.appendChild(chip('Off', !repeatOn, { kind: 'playlistRepeat', value: false }));
             repeat.appendChild(repeatChips);
+            repeat.appendChild(note('On starts the list again when it ends.'));
             root.appendChild(repeat);
         }
 
@@ -123,6 +128,7 @@
         var favCount = SettingsMusicPickers.favs().length;
         if (favCount) listChips.appendChild(chip('Favourites (' + favCount + ')', false, { kind: 'openFavs' }));
         wrap.appendChild(listChips);
+        wrap.appendChild(note('Open a list to pick a station. Favourites are shortcuts you saved.'));
         return wrap;
     }
 
@@ -135,6 +141,7 @@
             navChips.appendChild(chip(o.label, (p.radioNav || 'all') === o.nav, { kind: 'radioNav', value: o.nav }));
         });
         nextBlock.appendChild(navChips);
+        nextBlock.appendChild(note('Which list Next and Previous step through.'));
         body.appendChild(nextBlock);
     }
 
@@ -147,6 +154,7 @@
         controlChips.appendChild(iconChip(ICON.pause, !playing && !!Music.current(), { kind: 'pause' }, 'Pause'));
         controlChips.appendChild(iconChip(ICON.next, false, { kind: 'next' }, 'Next'));
         controlsBlock.appendChild(controlChips);
+        controlsBlock.appendChild(note('Same transport as the Home music bar.'));
         body.appendChild(controlsBlock);
 
         var volumeBlock = el('div', 'setting-block');
@@ -156,6 +164,7 @@
         volumeChips.appendChild(iconChip(ICON.volMed, p.volume === 'med', { kind: 'volume', value: 'med' }, 'Med'));
         volumeChips.appendChild(iconChip(ICON.volHigh, p.volume === 'high', { kind: 'volume', value: 'high' }, 'High'));
         volumeBlock.appendChild(volumeChips);
+        volumeBlock.appendChild(note('Music loudness only — not TV or UI sounds.'));
         body.appendChild(volumeBlock);
     }
 
@@ -195,6 +204,7 @@
         onChips.appendChild(chip('On', p.enabled, { kind: 'enabled', value: true }));
         onChips.appendChild(chip('Off', !p.enabled, { kind: 'enabled', value: false }));
         onBlock.appendChild(onChips);
+        onBlock.appendChild(note('Shows the music bar on Home and the screen saver.'));
         body.appendChild(onBlock);
 
         var srcBlock = el('div', 'setting-block');
@@ -203,6 +213,7 @@
         srcChips.appendChild(chip('Navidrome', panel === 'navidrome', { kind: 'source', value: 'navidrome' }));
         srcChips.appendChild(chip('Radio', panel === 'radio', { kind: 'source', value: 'radio' }));
         srcBlock.appendChild(srcChips);
+        srcBlock.appendChild(note('Switch the panel below. Playback changes when you pick something to play.'));
         body.appendChild(srcBlock);
 
         body.appendChild(panel === 'radio' ? radioBlock(p) : navidromeBlock(p, c));

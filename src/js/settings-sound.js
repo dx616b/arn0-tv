@@ -8,6 +8,7 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
 
     function renderSound() {
         var p = Prefs.get().sound;
@@ -20,6 +21,7 @@
         enabledChips.appendChild(chip('On', p.enabled, { kind: 'enabled', value: true }));
         enabledChips.appendChild(chip('Off', !p.enabled, { kind: 'enabled', value: false }));
         enabledBlock.appendChild(enabledChips);
+        enabledBlock.appendChild(note('Clicks when you move focus or open menus.'));
         body.appendChild(enabledBlock);
 
         var presetBlock = el('div', 'setting-block');
@@ -30,6 +32,7 @@
                 { kind: 'preset', value: preset.key }));
         });
         presetBlock.appendChild(presetChips);
+        presetBlock.appendChild(note('Tone of the navigation clicks.'));
         body.appendChild(presetBlock);
 
         var volumeBlock = el('div', 'setting-block');
@@ -40,6 +43,7 @@
                 { kind: 'volume', value: vol.key }));
         });
         volumeBlock.appendChild(volumeChips);
+        volumeBlock.appendChild(note('Loudness of UI sounds only — not TV or Music volume.'));
         body.appendChild(volumeBlock);
 
         var previewBlock = el('div', 'setting-block');
@@ -47,6 +51,7 @@
         var previewChips = el('div', 'chips');
         previewChips.appendChild(chip('Preview selected sound', false, { kind: 'preview' }));
         previewBlock.appendChild(previewChips);
+        previewBlock.appendChild(note('Plays the current style at the current volume.'));
         body.appendChild(previewBlock);
     }
 

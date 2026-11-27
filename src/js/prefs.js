@@ -48,7 +48,8 @@
                 random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
                 // How many remote entries to buffer per source / in the upcoming plan.
                 livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)
-                // Home / Live / Rotate: when false, skip portrait (taller than wide) photos.
+                // When false, Live/Use-now skip new portraits (oh > ow) when size is known.
+                // An already-showing tall shot can stay; Home cover-crops it.
                 allowPortrait: wallSeed.allowPortrait != null ? !!wallSeed.allowPortrait : false,
                 lastChange: 0
             },

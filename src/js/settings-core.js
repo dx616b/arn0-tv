@@ -26,6 +26,11 @@
         return c;
     }
 
+    // Short muted line under chips — keep to one sentence.
+    function note(text) {
+        return el('p', 'setting-note muted', text || '');
+    }
+
     // Stable identity for restoring focus after a chip/list rebuild.
     function itemId(item) {
         if (!item) return '';
@@ -249,6 +254,7 @@
     window.SettingsCore = {
         bgState: bgState,
         chip: chip,
+        note: note,
         itemId: itemId,
         withFocusRestore: withFocusRestore,
         backHint: backHint,

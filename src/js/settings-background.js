@@ -181,8 +181,10 @@
                 });
             var provNote = $('bg-live-provider-note');
             if (provNote) {
-                provNote.classList.toggle('hidden', !browseLive || !mixOn);
-                provNote.textContent = mixOn ? 'At least one source must stay on.' : '';
+                provNote.classList.toggle('hidden', !browseLive);
+                provNote.textContent = mixOn
+                    ? 'At least one source must stay on.'
+                    : 'Which provider feeds Home and the screen saver.';
             }
         }
 
