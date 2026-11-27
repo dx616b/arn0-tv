@@ -44,11 +44,12 @@
                 tempPhoto: null,        // { key, title, file, thumb, … } | null
                 // Shipped stills the user hid from Photo / Rotate (files stay in the app).
                 hiddenBundled: [],
-                interval: wallSeed.interval || '15m',        // see Wallpaper.INTERVALS (rotate + live cycle)
+                interval: wallSeed.interval || '15m',        // preset key, 'open', or custom:<milliseconds>
                 random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
                 // How many remote entries to buffer per source / in the upcoming plan.
                 livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)
-                // Home / Live / Rotate: when false, skip portrait (taller than wide) photos.
+                // When false, Live/Use-now skip new portraits (oh > ow) when size is known.
+                // An already-showing tall shot can stay; Home cover-crops it.
                 allowPortrait: wallSeed.allowPortrait != null ? !!wallSeed.allowPortrait : false,
                 lastChange: 0
             },
@@ -57,7 +58,7 @@
                 delay: '5m',            // see Screensaver.DELAYS
                 photoEvery: '75s',      // see Screensaver.PHOTO_EVERY
                 dark: '15m',            // see Screensaver.DARK_AFTER
-                chromeHide: '20s',      // see Screensaver.CHROME_HIDE (caption/clock fade)
+                chromeHide: '20s',      // see Screensaver.CHROME_HIDE (caption/music/legend fade; clock stays)
                 pan: true,              // Ken Burns drift / portrait zoom
                 panSpeed: 'normal',     // 'slow' | 'normal' | 'fast' (amount is auto from image vs stage)
                 blur: true              // letterbox blur fill (portrait contain)

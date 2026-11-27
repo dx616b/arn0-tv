@@ -64,17 +64,54 @@
         return when.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
+    function exifNumber(value) {
+        var n = Number(value);
+        return isFinite(n) && n > 0 ? String(Math.round(n * 10) / 10) : '';
+    }
+
+    function immichCamera(a) {
+        var x = immichExif(a);
+        var make = String(x.make || '').trim();
+        var model = String(x.model || '').trim();
+        var camera = model && make && model.toLowerCase().indexOf(make.toLowerCase()) !== 0
+            ? make + ' ' + model
+            : (model || make);
+        var parts = [];
+        if (camera) parts.push(camera);
+        var lens = String(x.lensModel || '').trim();
+        if (lens && lens !== model) parts.push(lens);
+        var focal = exifNumber(x.focalLength);
+        if (focal) parts.push(focal + ' mm');
+        var aperture = exifNumber(x.fNumber);
+        if (aperture) parts.push('f/' + aperture);
+        var exposure = String(x.exposureTime || '').trim();
+        if (/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(exposure)) {
+            parts.push(exposure + ' s');
+        } else {
+            var seconds = Number(exposure);
+            if (isFinite(seconds) && seconds > 0) {
+                parts.push(seconds < 1
+                    ? ('1/' + Math.round(1 / seconds) + ' s')
+                    : (exifNumber(seconds) + ' s'));
+            }
+        }
+        var iso = Number(x.iso);
+        if (isFinite(iso) && iso > 0) parts.push('ISO ' + Math.round(iso));
+        return parts.join(' · ');
+    }
+
     function immichEntry(a, origin, query, album) {
         var base = origin + '/api/assets/' + encodeURIComponent(a.id);
         var q = '&' + query;
         var place = immichPlace(a);
         var title = immichTitle(a, album);
         var date = immichDate(a);
-        // Prefer place on the title line; keep date (+ album via credit) underneath.
-        var sub = date;
-        if (place && title !== place && title.indexOf(place) !== 0) {
-            sub = place + (date ? ' · ' + date : '');
-        }
+        var subParts = [];
+        if (place && title !== place && title.indexOf(place) !== 0) subParts.push(place);
+        if (date) subParts.push(date);
+        var camera = immichCamera(a);
+        if (camera) subParts.push(camera);
+        var sub = subParts.join(' · ');
         // Skip known portraits / tiny stills before they enter the Live queue (respects Portrait photos).
         var x = immichExif(a);
         var ew = Number(x.exifImageWidth) || Number(a.width) || 0;

@@ -6,6 +6,7 @@
     'use strict';
 
     var SOURCE_NAMES = LiveCore.SOURCE_NAMES;
+    var PICK_CATALOG_MAX = LiveCore.PICK_CATALOG_MAX;
     var normalize = LiveParsers.normalize;
 
     function backgroundFill() { return LiveHooks.backgroundFill.apply(null, arguments); }
@@ -20,13 +21,27 @@
     function pickCountFor(name) {
         var n = 0;
         Object.keys(LiveState.pickCatalog).forEach(function (k) {
-            if (LiveState.pickCatalog[k].source === name) n++;
+            var entry = LiveState.pickCatalog[k];
+            if (entry.source !== name) return;
+            if (name === 'wallhaven' && !wallhavenCurrent(entry)) return;
+            n++;
         });
         return n;
     }
 
+    function topicBatchSize() {
+        return Math.max(1, (LiveState.wallhavenTopics || []).length);
+    }
+
+    function pickTargetStep(name) {
+        var step = pickBatch();
+        if (name === 'wallhaven') step *= topicBatchSize();
+        return Math.min(step, PICK_CATALOG_MAX);
+    }
+
     function ensurePickTarget(name) {
-        if (!LiveState.pickTarget[name] || LiveState.pickTarget[name] < pickBatch()) LiveState.pickTarget[name] = pickBatch();
+        var min = pickTargetStep(name);
+        if (!LiveState.pickTarget[name] || LiveState.pickTarget[name] < min) LiveState.pickTarget[name] = min;
         return LiveState.pickTarget[name];
     }
 
@@ -72,17 +87,26 @@
         LiveState.items.forEach(function (w) { rememberPick(w, w.source); });
     }
 
+    function wallhavenCurrent(entry) {
+        return !entry || entry.source !== 'wallhaven' ||
+            !LiveSources.wallhaven || LiveSources.wallhaven.wallhavenTopicAllowed(entry.whTopic);
+    }
+
     // Active catalog for Home / SS. Solo focus hides other sources' history so Next
-    // cannot wander back into Mix leftovers.
+    // cannot wander back into Mix leftovers; Wallhaven also respects the active topic.
     function list() {
         var p = provider();
-        if (p === 'mix') return LiveState.items.slice();
-        return LiveState.items.filter(function (w) { return w && w.source === p; });
+        return LiveState.items.filter(function (w) {
+            if (!w || (p !== 'mix' && w.source !== p)) return false;
+            return wallhavenCurrent(w);
+        });
     }
 
     function find(key) {
         if (!key) return null;
-        return LiveState.items.find(function (w) { return w.key === key; }) || null;
+        return LiveState.items.find(function (w) {
+            return w.key === key && wallhavenCurrent(w);
+        }) || null;
     }
 
     // Choose as static (single providers only — Mix has no picker).
@@ -95,7 +119,7 @@
         var out = [];
         Object.keys(LiveState.pickCatalog).forEach(function (k) {
             var w = LiveState.pickCatalog[k];
-            if (!w || !w.file || w.source !== p) return;
+            if (!w || !w.file || w.source !== p || !wallhavenCurrent(w)) return;
             out.push(w);
         });
         out = out.slice(0, cap);
@@ -132,7 +156,7 @@
         if (p === 'mix' || needsSetup()) return Promise.resolve(0);
         var before = pickList().length;
         ensurePickTarget(p);
-        LiveState.pickTarget[p] += pickBatch();
+        LiveState.pickTarget[p] = Math.min(PICK_CATALOG_MAX, LiveState.pickTarget[p] + pickTargetStep(p));
         var want = LiveState.pickTarget[p];
         function done() {
             preloadPickThumbs();

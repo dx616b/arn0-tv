@@ -26,6 +26,11 @@
         return c;
     }
 
+    // Short muted line under chips — keep to one sentence.
+    function note(text) {
+        return el('p', 'setting-note muted', text || '');
+    }
+
     // Stable identity for restoring focus after a chip/list rebuild.
     function itemId(item) {
         if (!item) return '';
@@ -214,6 +219,52 @@
         };
     }
 
+    function customDuration(title, currentMs, spec, done) {
+        var allUnits = [
+            { key: 'seconds', label: 'Seconds', ms: 1000 },
+            { key: 'minutes', label: 'Minutes', ms: 60 * 1000 },
+            { key: 'hours', label: 'Hours', ms: 60 * 60 * 1000 }
+        ];
+        var allowed = spec.units || allUnits.map(function (unit) { return unit.key; });
+        var units = allUnits.filter(function (unit) {
+            var min = Math.ceil(spec.minMs / unit.ms);
+            var max = Math.floor(spec.maxMs / unit.ms);
+            return allowed.indexOf(unit.key) >= 0 && min <= max;
+        });
+        var valueMs = currentMs > 0 ? currentMs : spec.fallbackMs;
+        var selectedUnit = null;
+        for (var i = units.length - 1; i >= 0; i--) {
+            if (valueMs % units[i].ms === 0) {
+                selectedUnit = units[i];
+                break;
+            }
+        }
+        if (!selectedUnit) selectedUnit = units[0];
+        UI.menu('Custom ' + title, units.map(function (unit) {
+            return {
+                label: unit.label,
+                current: unit.key === selectedUnit.key,
+                run: function () {
+                    var min = Math.ceil(spec.minMs / unit.ms);
+                    var max = Math.floor(spec.maxMs / unit.ms);
+                    var initial = Math.round(valueMs / unit.ms);
+                    initial = Math.max(min, Math.min(max, initial));
+                    window.SettingsCore.rename(String(initial), function (value) {
+                        var amount = /^\d+$/.test(value) ? Number(value) : 0;
+                        if (amount < min || amount > max) {
+                            UI.toast('Enter ' + min + ' to ' + max + ' ' + unit.label.toLowerCase());
+                            return;
+                        }
+                        done(amount * unit.ms);
+                    }, {
+                        title: 'Custom ' + title.toLowerCase() + ' (' + unit.label.toLowerCase() + ')',
+                        maxLength: 5
+                    });
+                }
+            };
+        }), { detail: 'Choose a unit' });
+    }
+
     /*
      * Chip/thumb detail page: same focus grid as chipRows, Left-at-edge backs out.
      * opts: { el, body, onShow, activate, hints|okLabel, onFocus }
@@ -241,14 +292,13 @@
         photosKeys: {},
         liveRefreshTimer: null,
         keepLivePicker: false,
-        softSig: '',
-        // null = auto (open when non-default shuffle/queue); boolean after user toggles.
-        liveMore: null
+        softSig: ''
     };
 
     window.SettingsCore = {
         bgState: bgState,
         chip: chip,
+        note: note,
         itemId: itemId,
         withFocusRestore: withFocusRestore,
         backHint: backHint,
@@ -260,6 +310,7 @@
         chipRows: chipRows,
         chipDetailOnKey: chipDetailOnKey,
         chipDetailHints: chipDetailHints,
+        customDuration: customDuration,
         registerChipPage: registerChipPage,
         renderAtmosphere: null,
         renderHub: null

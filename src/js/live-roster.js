@@ -10,7 +10,6 @@
     var PROVIDERS = LiveCore.PROVIDERS;
     var parseImmichLink = LiveParsers.parseImmichLink;
     var RETRY_MS = LiveCore.RETRY_MS;
-    var CACHE_KEY = LiveCore.CACHE_KEY;
 
     var deps = {};
 
@@ -169,6 +168,8 @@
             wallhavenPage: 1,
             wallhavenSeed: '',
             wallhavenWrapped: false,
+            wallhavenTopicCursor: 0,
+            wallhavenTopicSearches: {},
             unsplash: 0,
             immichPage: 1,
             immichAlbum: null,
@@ -284,15 +285,23 @@
         Prefs.save();
     }
 
-    // Provider change (e.g. Bing → Mix): drop shown history + plan so Home/SS do not keep the
-    // previous photo. Solo→solo can keep the target queue; entering Mix clears every queue so
-    // the previous solo pile cannot monopolise warm picks. Settings calls ensureLive(true);
-    // SS calls takeNext — both kick plan fill after the first frame.
+    /*
+     * Provider focus change (SS Up/Down, Settings chips). Drop shown history so Home/SS do not
+     * keep the previous photo, then rebuild the plan for the new focus. Keep each source’s
+     * queue, fetch cursors, and pick catalog so returning to Bing/NASA/… continues where it
+     * left off instead of restarting at the first picture. Settings that invalidate a source
+     * (Wallhaven category, Immich link, …) still reset that source themselves.
+     * Settings calls ensureLive(true); SS calls takeNext — both kick plan fill after the first frame.
+     */
     function switchProvider() {
         var prev = '';
-        if (LiveState.items.length && LiveState.items[LiveState.items.length - 1].source) prev = LiveState.items[LiveState.items.length - 1].source;
-        else if (LiveState.cachedProvider && LiveState.cachedProvider !== 'mix') prev = LiveState.cachedProvider;
-        var toMix = provider() === 'mix';
+        if (LiveState.items.length && LiveState.items[LiveState.items.length - 1].source) {
+            prev = LiveState.items[LiveState.items.length - 1].source;
+        } else if (LiveState.cachedProvider && LiveState.cachedProvider !== 'mix') {
+            prev = LiveState.cachedProvider;
+        }
+        var want = provider();
+        var toMix = want === 'mix';
         LiveState.generation++;
         LiveState.fetching = false;
         LiveState.lastFailure = 0;
@@ -300,36 +309,31 @@
         LiveState.lastError = '';
         LiveState.items = [];
         LiveState.fetchedDay = '';
-        LiveState.cachedProvider = provider();
+        LiveState.cachedProvider = want;
         // Mix: avoid re-painting the source you just left on the first frame only.
         LiveState.avoidSource = (toMix && prev) ? prev : '';
         resetMixWarm();
-        LiveState.stream.plan = [];
         LiveState.stream.filling = null;
         LiveState.planUniqueExhausted = false;
-        // Always clear queues + pick catalog — Mix leftovers (or blank-tagged
-        // orphans once re-labelled) must not ride into a solo Immich focus.
+        // Cancel in-flight fills; keep buffered photos so resume stays warm.
         SOURCE_NAMES.forEach(function (name) {
             var q = sourceQueue(name);
-            q.filling = null;
-            q.buf = [];
+            if (q) q.filling = null;
         });
-        // Fresh cursors so a stuck Bing idx / NASA wrap cannot starve the new focus.
-        LiveState.stream.bing = 0;
-        LiveState.stream.bingWrapped = false;
-        // Keep today's Bing window across focus changes — only market/day invalidates it.
-        LiveState.stream.nasa = 0;
-        LiveState.stream.wiki = 0;
-        LiveState.stream.wallhavenPage = 1;
-        LiveState.stream.wallhavenSeed = '';
-        LiveState.stream.wallhavenWrapped = false;
-        LiveState.stream.unsplash = 0;
-        LiveState.stream.immichPage = 1;
-        LiveState.stream.immichWrapped = false;
-        LiveState.stream.sourceIndex = 0;
-        LiveState.pickCatalog = {};
-        LiveState.pickTarget = {};
-        try { localStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
+        if (toMix) {
+            // Do not immediately re-show the left source from a leftover solo plan.
+            LiveState.stream.plan = [];
+        } else {
+            LiveState.stream.plan = (LiveState.stream.plan || []).filter(function (w) {
+                return w && w.source === want;
+            });
+        }
+        // Persist queues + cursors under the new focus (do not wipe the Live cache).
+        try {
+            if (window.LiveSources && LiveSources.cache && LiveSources.cache.saveCache) {
+                LiveSources.cache.saveCache(want, true);
+            }
+        } catch (e) { /* ignore */ }
         notify(true);
     }
 

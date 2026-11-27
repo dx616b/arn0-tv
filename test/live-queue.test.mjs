@@ -78,6 +78,23 @@ test('solo sources do not enter Mix ordering', function () {
     assert.equal(L.planCount(), 0);
 });
 
+test('reseeded source queues continue after that source last showed', function () {
+    var ctx = soloBing();
+    var keys = ['bing:a', 'bing:b', 'bing:c'];
+    keys.forEach(function (key) {
+        ctx.LiveState.pickCatalog[key] = {
+            key: key,
+            file: 'https://example.test/' + key + '-long-enough.jpg',
+            source: 'bing'
+        };
+    });
+    ctx.LiveState.lastShown.bing = 'bing:b';
+    ctx.LiveFill.reseedQueueFromCatalog('bing');
+    assert.deepEqual(Array.from(ctx.LiveState.stream.queues.bing.buf).map(function (w) { return w.key; }), [
+        'bing:c', 'bing:a', 'bing:b'
+    ]);
+});
+
 test('status is empty when nothing is being fetched', function () {
     var ctx = soloBing();
     assert.equal(ctx.LiveWallpaper.status(), '');

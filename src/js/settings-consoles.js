@@ -213,14 +213,14 @@
                 kind: 'danger',
                 run: function () {
                     sub('Remove ' + c.label + '?', [
+                        { label: 'Cancel', kind: 'action', current: true, run: reopen },
                         {
                             label: 'Remove',
                             kind: 'danger',
                             run: function () {
                                 edit(function (l) { l.splice(i, 1); });
                             }
-                        },
-                        { label: 'Cancel', kind: 'action', run: reopen }
+                        }
                     ]);
                 }
             },

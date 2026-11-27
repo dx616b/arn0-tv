@@ -89,10 +89,21 @@
     function reseedQueueFromCatalog(name) {
         var q = sourceQueue(name);
         // Stable order by key; only this source (exact tag — no blank-source orphans).
-        Object.keys(LiveState.pickCatalog).sort().forEach(function (k) {
-            var w = LiveState.pickCatalog[k];
-            if (!w || w.source !== name || !w.file || queueHas(q, w)) return;
-            q.buf.push(w);
+        var entries = Object.keys(LiveState.pickCatalog).sort().map(function (k) {
+            return LiveState.pickCatalog[k];
+        }).filter(function (w) {
+            if (!w || w.source !== name || !w.file) return false;
+            if (name === 'wallhaven' && LiveSources.wallhaven &&
+                    !LiveSources.wallhaven.wallhavenTopicAllowed(w.whTopic)) return false;
+            return true;
+        });
+        // If a drained queue is rebuilt, continue after the last photo shown from this source
+        // instead of starting at the alphabetically first catalog key again.
+        var last = LiveState.lastShown && LiveState.lastShown[name];
+        var lastIndex = entries.findIndex(function (w) { return w.key === last; });
+        if (lastIndex >= 0) entries = entries.slice(lastIndex + 1).concat(entries.slice(0, lastIndex + 1));
+        entries.forEach(function (w) {
+            if (!queueHas(q, w)) q.buf.push(w);
         });
     }
 
@@ -307,6 +318,9 @@
             }
 
             function step() {
+                // Another app owns the screen: stop topping up. Home show / ensureLive will
+                // kick backgroundFill again when we return.
+                if (document.hidden) return;
                 if (reached()) return;
                 if (guard++ > 80) return;
                 return pullFresh(name).then(function (res) {

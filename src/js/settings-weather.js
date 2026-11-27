@@ -8,6 +8,7 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
 
     var weatherBusy = false;
 
@@ -50,6 +51,12 @@
         }
         placeChips.appendChild(chip('Search city…', false, { kind: 'search' }));
         placeBlock.appendChild(placeChips);
+        var tz = Weather.timeZone && Weather.timeZone();
+        placeBlock.appendChild(note(
+            tz
+                ? ('Home and screen-saver clock follow this place (' + tz + ').')
+                : 'Home and screen-saver clock follow this place when set; Off uses the TV clock.'
+        ));
         body.appendChild(placeBlock);
 
         var unitBlock = el('div', 'setting-block');
@@ -58,14 +65,8 @@
         unitChips.appendChild(chip('Celsius', p.unit === 'celsius', { kind: 'unit', value: 'celsius' }));
         unitChips.appendChild(chip('Fahrenheit', p.unit === 'fahrenheit', { kind: 'unit', value: 'fahrenheit' }));
         unitBlock.appendChild(unitChips);
+        unitBlock.appendChild(note('Temperature on Home and under the screen-saver clock.'));
         body.appendChild(unitBlock);
-
-        var tz = Weather.timeZone && Weather.timeZone();
-        var note = el('p', 'setting-note muted',
-            tz
-                ? ('Home clock follows this place (' + tz + ').')
-                : 'Home clock follows this place when set; Off uses the TV clock.');
-        body.appendChild(note);
     }
 
     function activateWeather(item) {
@@ -99,7 +100,7 @@
                                 UI.toast('Weather: ' + Weather.summary());
                             }
                         };
-                    }).concat([{ label: 'Cancel' }]));
+                    }).concat([{ label: 'Cancel', kind: 'action' }]));
                 });
             }, { title: 'City name', maxLength: 64 });
             return;
@@ -155,6 +156,7 @@
     function openPlaceMenu() {
         var p = Prefs.get().weather;
         var label = Weather.placeLabel();
+        // Selections first, then actions (same shape as console menus).
         var options = [
             {
                 label: p.place === 'auto' && label ? ('Automatic · ' + label) : 'Automatic',
@@ -162,15 +164,16 @@
                 run: function () { activateWeather({ kind: 'place', value: 'auto' }); }
             },
             {
-                label: 'Enter city…',
-                run: function () { activateWeather({ kind: 'search' }); }
-            },
-            {
                 label: 'Off',
                 checked: p.place === 'off',
                 run: function () { activateWeather({ kind: 'place', value: 'off' }); }
             },
-            { label: 'Cancel' }
+            {
+                label: 'Enter city…',
+                kind: 'action',
+                run: function () { activateWeather({ kind: 'search' }); }
+            },
+            { label: 'Cancel', kind: 'action' }
         ];
         UI.menu('Weather', options);
     }

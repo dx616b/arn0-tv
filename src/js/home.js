@@ -16,6 +16,8 @@
         apps: [],              // launchable apps from the TV (or the cache)
         appsSig: null,
         lastFetch: 0,
+        loadingApps: false,
+        pendingApps: null,
         showEverything: false, // All apps: bypass the consumer filter
         tvMode: false,         // HDMI shown inside the launcher
         hdmi: {},              // last known { port: connected }
@@ -267,7 +269,7 @@
         img.src = iconCache[path] || (path.charAt(0) === '/' ? 'file://' + path : path);
     }
 
-    function tileFace(item) {
+    function tileFace(item, deferIcon) {
         var tile = el('div', 'tile');
         if (item.brand) {
             tile.style.background = glassBg(item.brand.bg);
@@ -282,14 +284,25 @@
             tile.style.background = glassBg('hsl(' + hue(item.label) + ',32%,28%)');
             var mono = el('div', 'mono', initials(item.label).toUpperCase());
             tile.appendChild(mono);
-            if (item.iconPath) tryIcon(tile, mono, item.iconPath, item.iconPad);
+            if (item.iconPath) {
+                if (deferIcon) {
+                    tile._loadIcon = function () { tryIcon(tile, mono, item.iconPath, item.iconPad); };
+                } else {
+                    tryIcon(tile, mono, item.iconPath, item.iconPad);
+                }
+            }
         }
         return tile;
     }
 
-    function appTile(item) {
+    function appTile(item, deferIcon) {
         var wrap = el('div', 'app');
-        wrap.appendChild(tileFace(item));
+        var face = tileFace(item, deferIcon);
+        wrap.appendChild(face);
+        if (face._loadIcon) {
+            wrap._loadIcon = face._loadIcon;
+            face._loadIcon = null;
+        }
         wrap.appendChild(el('div', 'label', item.label));
         wrap._item = item;
         return wrap;
@@ -338,8 +351,9 @@
         var brand = findBrand(input.brand || '') || { bg: '#2a2f3a', fg: '#fff', mark: null };
         var wrap = el('div', 'input');
         var tile = el('div', 'tile');
-        tile.style.background = glassBg(consoleTileBg(input, brand.bg), 0.38);
-        // Logo panel (centred mark) + name / HDMI on the right.
+        // Stronger brand glass than before (0.38) so consoles sit closer to solid app tiles.
+        tile.style.background = glassBg(consoleTileBg(input, brand.bg), 0.62);
+        // Logo-led: large mark above, thin name / HDMI strip below.
         var logo = el('div', 'input-logo');
         if (brand.mark) logo.appendChild(markEl(brand));
         else if (brand.text) {
@@ -353,13 +367,15 @@
         meta.appendChild(name);
         var port = el('div', 'port');
         var dot = el('span', 'dot');
+        var portLabel = document.createTextNode('HDMI ' + input.hdmi);
         port.appendChild(dot);
-        port.appendChild(document.createTextNode('HDMI ' + input.hdmi));
+        port.appendChild(portLabel);
         meta.appendChild(port);
         tile.appendChild(meta);
         wrap.appendChild(tile);
         wrap._item = { kind: 'input', hdmi: input.hdmi, label: input.label, method: input.method };
         wrap._dot = dot;
+        wrap._portLabel = portLabel;
         wrap._name = name;
         return wrap;
     }
@@ -402,11 +418,16 @@
 
     // ---------- Home content
 
-    function inputSeed(port) {
+    function inputSeed(port, detectedName) {
+        var fallback = 'HDMI ' + port;
+        var label = String(detectedName || '').trim() || fallback;
+        var detectedBrand = label !== fallback && window.brandKeyFromLabel
+            ? brandKeyFromLabel(label)
+            : '';
         return {
             hdmi: port,
-            label: 'HDMI ' + port,
-            brand: (port >= 1 && port <= 4) ? ('hdmi' + port) : 'hdmi'
+            label: label,
+            brand: detectedBrand || ((port >= 1 && port <= 4) ? ('hdmi' + port) : 'hdmi')
         };
     }
 
@@ -492,6 +513,11 @@
         return port.clientWidth
             - (parseInt(cs.paddingLeft, 10) || 0)
             - (parseInt(cs.paddingRight, 10) || 0);
+    }
+
+    function shelfOverflows(track) {
+        if (!track || !track.parentNode) return false;
+        return (track.scrollWidth || 0) - shelfViewWidth(track.parentNode) > 32;
     }
 
     // Clip half-tiles; show gear-column ▶ only when there is real overflow (ignore subpixel).
@@ -763,34 +789,59 @@
         return pick;
     }
 
-    function rearrangeRemove() {
-        if (!rearrange.active || !rearrange.items) return true;
+    function rearrangeRemoveApply() {
+        if (!rearrange.active || !rearrange.items) return;
         var items = rearrange.items;
         if (rearrange.kind === 'app') {
-            if (items.length <= 1) {
-                UI.toast('Home needs at least one app');
-                if (window.Sound) Sound.play('edge');
-                return true;
-            }
+            if (items.length <= 1) return;
             var next = rearrange.index;
             items.splice(rearrange.index, 1);
             if (next >= items.length) next = items.length - 1;
             rearrange.index = next;
         } else {
             var pos = rearrange.index;
-            if (pos < 0 || pos >= items.length) return true;
+            if (pos < 0 || pos >= items.length) return;
             items.splice(pos, 1);
             rearrange.index = pickVisibleIndex(items, pos);
             if (rearrange.index < 0) {
                 renderHome();
                 if (UI.refreshHints) UI.refreshHints();
                 if (window.Sound) Sound.play('ok');
-                return true;
+                return;
             }
         }
         renderHome();
         focusRearrangeTile();
         if (window.Sound) Sound.play('ok');
+    }
+
+    // ▼ while rearranging — Cancel-first confirm (same shape as console Options → Remove).
+    function rearrangeRemove() {
+        if (!rearrange.active || !rearrange.items) return true;
+        var items = rearrange.items;
+        var idx = rearrange.index;
+        if (idx < 0 || idx >= items.length) return true;
+        if (rearrange.kind === 'app') {
+            if (items.length <= 1) {
+                UI.toast('Home needs at least one app');
+                if (window.Sound) Sound.play('edge');
+                return true;
+            }
+        }
+        var item = items[idx];
+        var name = (item && (item.label || item.name || item.title)) ||
+            (rearrange.kind === 'app' ? 'this app' : 'this console');
+        var title = rearrange.kind === 'app'
+            ? ('Remove ' + name + ' from Home?')
+            : ('Remove ' + name + '?');
+        UI.menu(title, [
+            { label: 'Cancel', kind: 'action', current: true },
+            {
+                label: 'Remove',
+                kind: 'danger',
+                run: rearrangeRemoveApply
+            }
+        ]);
         return true;
     }
 
@@ -858,26 +909,38 @@
 
     function applyInputStatus() {
         UI.children($('inputs-row')).forEach(function (tile) {
-            if (!tile._dot || !tile._item) return;
-            tile._dot.classList.toggle('on', state.hdmi[tile._item.hdmi] === true);
+            if (!tile._item) return;
+            var on = state.hdmi[tile._item.hdmi] === true;
+            if (tile._dot) tile._dot.classList.toggle('on', on);
+            tile.classList.toggle('input-on', on);
+            if (tile._portLabel) {
+                tile._portLabel.textContent = on
+                    ? ('Connected · HDMI ' + tile._item.hdmi)
+                    : ('HDMI ' + tile._item.hdmi);
+            }
         });
     }
 
     function refreshInputStatus() {
-        var pending = Inputs.hdmiPorts
-            ? Inputs.hdmiPorts().then(function (ports) {
-                // Only auto-fill when the user has never edited consoles (null). [] stays empty.
-                if (!inputsOwned() && ports && ports.length) {
-                    var next = ports.map(inputSeed);
-                    var prev = state.discoveredInputs;
-                    var same = prev && prev.length === next.length &&
-                        prev.every(function (p, i) { return p.hdmi === next[i].hdmi; });
-                    state.discoveredInputs = next;
-                    if (!same) renderHome();
-                }
-                return Inputs.hdmiStatus();
-            })
-            : Inputs.hdmiStatus();
+        var discovered = Inputs.hdmiInputs
+            ? Inputs.hdmiInputs()
+            : Inputs.hdmiPorts().then(function (ports) {
+                return ports.map(function (port) { return { hdmi: port, name: '' }; });
+            });
+        var pending = discovered.then(function (devices) {
+            // Only auto-fill when the user has never edited consoles (null). [] stays empty.
+            if (!inputsOwned() && devices && devices.length) {
+                var next = devices.map(function (device) { return inputSeed(device.hdmi, device.name); });
+                var prev = state.discoveredInputs;
+                var same = prev && prev.length === next.length &&
+                    prev.every(function (p, i) {
+                        return p.hdmi === next[i].hdmi && p.label === next[i].label && p.brand === next[i].brand;
+                    });
+                state.discoveredInputs = next;
+                if (!same) renderHome();
+            }
+            return Inputs.hdmiStatus();
+        });
         pending.then(function (status) {
             state.hdmi = status;
             applyInputStatus();
@@ -891,14 +954,38 @@
         grid.innerHTML = '';
         UI.resetScroll(grid);
         var items = Apps.allSorted(state.apps, state.showEverything);
-        items.forEach(function (item) { grid.appendChild(appTile(item)); });
+        items.forEach(function (item) { grid.appendChild(appTile(item, true)); });
         $('all-count').textContent = items.length + ' apps';
+    }
+
+    // All apps can contain hundreds of entries. Keep the grid available for focus navigation,
+    // but only decode/process native icons for the focused row and nearby rows.
+    function warmAllIcons(focused) {
+        var grid = $('all-grid');
+        var tiles = UI.children(grid);
+        var index = tiles.indexOf(focused);
+        if (index < 0) return;
+        var cols = window.Appearance && Appearance.gridCols ? Appearance.gridCols() : GRID_COLS;
+        var row = Math.floor(index / cols);
+        var rowCount = Math.ceil(tiles.length / cols);
+        var first = Math.max(0, row - 1);
+        var end = Math.min(rowCount, row + 3);
+        for (var r = first; r < end; r++) {
+            var from = r * cols;
+            var to = Math.min(tiles.length, from + cols);
+            for (var i = from; i < to; i++) {
+                if (tiles[i]._loadIcon) {
+                    tiles[i]._loadIcon();
+                    tiles[i]._loadIcon = null;
+                }
+            }
+        }
     }
 
     function renderLab() {
         var actions = [
             { label: 'Send installed app list to log', run: labDumpApps },
-            { label: 'Read inputs', run: labReadInputs },
+            { label: 'Read raw HDMI metadata', run: labReadInputs },
             { label: 'Open Samsung TV viewer only', run: function () { runLogged('Open TV viewer', Inputs.openViewer()); } }
         ];
         if (window.Sound) actions = actions.concat(Sound.actions());
@@ -991,9 +1078,16 @@
     function labReadInputs() {
         runLogged('Inputs', Inputs.sources()).then(function (info) {
             var fmt = function (list) { return (list || []).map(Inputs.describeSource).join(', ') || 'none'; };
+            var current = Inputs.current();
+            var rawSources;
+            var rawCurrent;
+            try { rawSources = JSON.stringify(info); } catch (e) { rawSources = String(info); }
+            try { rawCurrent = JSON.stringify(current); } catch (e2) { rawCurrent = String(current); }
+            log('VIDEOSOURCE raw: ' + rawSources);
+            log('Current source raw: ' + rawCurrent);
             log('connected: ' + fmt(info.connected));
             log('disconnected: ' + fmt(info.disconnected));
-            log('current: ' + Inputs.describeSource(Inputs.current()));
+            log('current: ' + Inputs.describeSource(current));
         }).catch(function () {});
     }
 
@@ -1071,17 +1165,28 @@
     }
 
     function loadApps() {
+        if (state.loadingApps) return Promise.resolve();
+        state.loadingApps = true;
         state.lastFetch = Date.now();
         return Apps.getInstalledApps().then(function (apps) {
             var list = Apps.launchable(apps).map(function (a) {
                 return { id: a.id, name: a.name, show: a.show, iconPath: a.iconPath || '' };
             });
             writeCache(list);
-            setApps(list);
+            if (document.hidden) state.pendingApps = list;
+            else setApps(list);
         }).catch(function (err) {
-            UI.toast('Could not list apps: ' + DevLog.errorText(err));
+            if (!document.hidden) UI.toast('Could not list apps: ' + DevLog.errorText(err));
             log('App list failed: ' + DevLog.errorText(err));
+        }).then(function () {
+            state.loadingApps = false;
         });
+    }
+
+    function refreshAppsIfDue() {
+        if (state.tvMode ||
+                (window.Screensaver && Screensaver.isOpen && Screensaver.isOpen())) return;
+        if (Date.now() - state.lastFetch >= REFRESH_AFTER_MS) loadApps();
     }
 
     function registerKeys() {
@@ -1119,6 +1224,10 @@
                 // ▲ Settings only when Up from gear/music opens Settings (not from apps/consoles).
                 var hints = [['OK', ok]];
                 if (isTopChrome(el)) hints.push(['▲', 'Settings']);
+                var rail = item && item.kind === 'input'
+                    ? $('inputs-row')
+                    : (item && ['app', 'tvsettings', 'all'].indexOf(item.kind) >= 0 ? $('apps-row') : null);
+                if (shelfOverflows(rail)) hints.push(['◀▶', 'Browse']);
                 if (canRearrange(item)) hints.splice(1, 0, ['Hold OK', 'Options']);
                 return hints;
             },
@@ -1221,6 +1330,7 @@
                 return UI.chunk(UI.children($('all-grid')), cols);
             },
             onShow: renderAll,
+            onFocus: warmAllIcons,
             activate: launchApp,
             onKey: function (k) {
                 if (k !== KEY.ENTER) return false;
@@ -1293,6 +1403,9 @@
         updateClock();
         updateWeather();
         setInterval(updateClock, 10000);
+        // Refresh the local installed-app catalog while background-support keeps the WebView warm.
+        // Avoid HDMI/screen saver; hidden results are cached and painted only when we resume.
+        setInterval(refreshAppsIfDue, 60 * 1000);
         if (window.Weather) {
             Weather.onUpdate(function () {
                 updateWeather();
@@ -1311,11 +1424,23 @@
                 if (state.tvMode) exitTvMode();
                 return;
             }
+            // Apply any app list fetched while hidden only after the launcher is visible.
+            if (state.pendingApps) {
+                var pendingApps = state.pendingApps;
+                state.pendingApps = null;
+                setApps(pendingApps);
+            }
+            // Cheap DOM first so the compositor can show the existing Home frame.
             updateClock();
             updateWeather();
-            if (window.Weather) Weather.refresh();
             refreshInputStatus();
-            if (UI.isVisible('home')) Wallpaper.homeShown();
+            // Network / wallpaper rotate after a beat — competing with resume was linked to
+            // multi-second Home activate and FPS 0 while Unsplash/media work ran.
+            setTimeout(function () {
+                if (document.hidden) return;
+                if (window.Weather) Weather.refresh();
+                if (UI.isVisible('home')) Wallpaper.homeShown();
+            }, 250);
             if (Date.now() - state.lastFetch > REFRESH_AFTER_MS) setTimeout(loadApps, 1500);
         });
         // With a cache, let the first frames and key presses through before the slow app list.

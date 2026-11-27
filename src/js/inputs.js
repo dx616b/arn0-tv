@@ -39,22 +39,46 @@
         });
     }
 
-    // Every HDMI port the TV exposes (connected + disconnected), sorted.
-    function hdmiPorts() {
+    function sourceDisplayName(source) {
+        if (!source) return '';
+        var objects = [source, source.device, source.deviceInfo, source.sourceInfo];
+        var fields = ['deviceName', 'sourceName', 'displayName', 'name', 'label', 'productName'];
+        for (var i = 0; i < objects.length; i++) {
+            var obj = objects[i];
+            if (!obj || typeof obj !== 'object') continue;
+            for (var j = 0; j < fields.length; j++) {
+                var value = obj[fields[j]];
+                if (typeof value !== 'string') continue;
+                value = value.trim();
+                if (!value || /^(HDMI\s*\d*|TV|VIDEO)$/i.test(value)) continue;
+                return value;
+            }
+        }
+        return '';
+    }
+
+    // Every HDMI port the TV exposes, with a best-effort device label if Samsung provides one.
+    function hdmiInputs() {
         return sources().then(function (info) {
-            var seen = {};
-            var ports = [];
-            function add(s) {
-                if (!s || s.type !== 'HDMI') return;
-                var n = s.number;
-                if (seen[n] || typeof n !== 'number') return;
-                seen[n] = true;
-                ports.push(n);
+            var byPort = {};
+            function add(source) {
+                if (!source || source.type !== 'HDMI' || typeof source.number !== 'number') return;
+                var input = byPort[source.number] || { hdmi: source.number, name: '' };
+                var name = sourceDisplayName(source);
+                if (name && !input.name) input.name = name;
+                byPort[source.number] = input;
             }
             (info.connected || []).forEach(add);
             (info.disconnected || []).forEach(add);
-            ports.sort(function (a, b) { return a - b; });
-            return ports;
+            return Object.keys(byPort).map(function (port) { return byPort[port]; })
+                .sort(function (a, b) { return a.hdmi - b.hdmi; });
+        });
+    }
+
+    // Every HDMI port the TV exposes (connected + disconnected), sorted.
+    function hdmiPorts() {
+        return hdmiInputs().then(function (inputs) {
+            return inputs.map(function (input) { return input.hdmi; });
         });
     }
 
@@ -98,6 +122,7 @@
         sources: sources,
         hdmiStatus: hdmiStatus,
         hdmiPorts: hdmiPorts,
+        hdmiInputs: hdmiInputs,
         current: current,
         describeSource: describeSource,
         open: open,

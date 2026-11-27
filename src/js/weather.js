@@ -5,11 +5,10 @@
  * Place is Off, Automatic (IP detect on start), or a custom lat/lon/label from search.
  * When a place is set, its IANA timezone is stored and Home / screen saver clocks follow it.
  *
- * There is no polling. A TV launcher spends most of its life in the background with JavaScript
- * paused, so a timer would be both useless and rude; instead the reading is refreshed when
- * something is about to show it, and never more than once an hour. The last reading is cached in
- * localStorage so the screen saver opens with real numbers rather than a blank corner, even after
- * the TV has been off.
+ * There is no polling. Even with background-support enabled we idle behind other apps, so a
+ * timer would be rude; the reading is refreshed when something is about to show it, and never
+ * more than once an hour. The last reading is cached in localStorage so the screen saver opens
+ * with real numbers rather than a blank corner, even after the TV has been off.
  */
 (function () {
     'use strict';

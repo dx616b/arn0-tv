@@ -158,3 +158,57 @@ test('sync does not force Mix from chip count when Mix is Off', function () {
     assert.equal(wall(ctx).liveProvider, 'bing');
     assert.equal(keys(ctx.LiveWallpaper.enabledSourceKeys().slice().sort()), 'bing,nasa');
 });
+
+test('selectLiveProvider keeps source queues and cursors (resume)', function () {
+    var ctx = createLauncherSandbox({
+        prefs: {
+            wallpaper: {
+                mode: 'live',
+                liveProvider: 'bing',
+                mixEnabled: {
+                    bing: true, nasa: true, wikimedia: false, unsplash: false, immich: false
+                },
+                liveMultiSelect: true,
+                livePool: 'small',
+                interval: '15m',
+                random: true
+            }
+        }
+    });
+    var S = ctx.LiveState;
+    var bingQ = {
+        key: 'bing:warm',
+        title: 'Warm Bing',
+        file: 'https://example.test/bing-warm-long-enough.jpg',
+        source: 'bing'
+    };
+    var nasaQ = {
+        key: 'nasa:warm',
+        title: 'Warm NASA',
+        file: 'https://example.test/nasa-warm-long-enough.jpg',
+        source: 'nasa'
+    };
+    S.stream.queues.bing.buf = [bingQ];
+    S.stream.queues.nasa.buf = [nasaQ];
+    S.stream.bing = 3;
+    S.stream.nasa = 5;
+    S.stream.plan = [bingQ, nasaQ];
+    S.pickCatalog[bingQ.key] = bingQ;
+    S.pickCatalog[nasaQ.key] = nasaQ;
+
+    assert.equal(ctx.LiveWallpaper.selectLiveProvider('nasa'), 'nasa');
+    assert.equal(S.stream.queues.bing.buf.length, 1);
+    assert.equal(S.stream.queues.nasa.buf.length, 1);
+    assert.equal(S.stream.bing, 3);
+    assert.equal(S.stream.nasa, 5);
+    assert.ok(S.pickCatalog[bingQ.key]);
+    assert.ok(S.pickCatalog[nasaQ.key]);
+    // Solo focus keeps only that source’s planned rows.
+    assert.deepEqual(S.stream.plan.map(function (w) { return w.key; }), ['nasa:warm']);
+
+    assert.equal(ctx.LiveWallpaper.selectLiveProvider('bing'), 'bing');
+    assert.equal(S.stream.queues.bing.buf.length, 1);
+    assert.equal(S.stream.bing, 3);
+    // Plan kept only the NASA row while focused there; Bing resumes from its warm queue.
+    assert.deepEqual(S.stream.plan, []);
+});

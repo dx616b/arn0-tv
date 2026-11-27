@@ -8,32 +8,60 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var note = SettingsCore.note;
 
     // Same view, two entry points: Advanced → Clock; Advanced → Appearance (font / names).
     var appearanceSection = 'clock';
 
     function appearanceBlocks() {
         var clock = [
-            { title: 'Clock', key: 'clock', options: [['24h', '24-hour'], ['12h', '12-hour']] },
-            { title: 'Date', key: 'showDate', options: [[true, 'Show'], [false, 'Hide']] },
-            { title: 'Date language', key: 'locale', options: Appearance.LOCALES.map(function (l) { return [l.key, l.label]; }) }
+            {
+                title: 'Clock',
+                key: 'clock',
+                options: [['24h', '24-hour'], ['12h', '12-hour']]
+            },
+            {
+                title: 'Date',
+                key: 'showDate',
+                note: 'Shows under the clock on Home and the screen saver.',
+                options: [[true, 'Show'], [false, 'Hide']]
+            },
+            {
+                title: 'Date language',
+                key: 'locale',
+                note: 'Weekday and month wording for the date line.',
+                options: Appearance.LOCALES.map(function (l) { return [l.key, l.label]; })
+            }
         ];
         var look = [
-            { title: 'Font', key: 'font', options: Appearance.FONTS.map(function (f) { return [f.key, f.label, f.family]; }) },
-            { title: 'App names', key: 'names', options: [['always', 'Always'], ['focused', 'When selected'], ['never', 'Never']] },
+            {
+                title: 'Font',
+                key: 'font',
+                note: 'UI typeface on Home and in Settings.',
+                options: Appearance.FONTS.map(function (f) { return [f.key, f.label, f.family]; })
+            },
+            {
+                title: 'App names',
+                key: 'names',
+                note: 'Labels under Home app and console tiles.',
+                options: [['always', 'Always'], ['focused', 'When selected'], ['never', 'Never']]
+            },
             {
                 title: 'Focus',
                 key: 'focus',
+                note: 'Home tiles only. Settings and menus keep a fixed simple highlight.',
                 options: [['both', 'Both'], ['scale', 'Scale'], ['ring', 'Ring']]
             },
             {
                 title: 'Tiles',
                 key: 'tiles',
+                note: 'Comfortable is larger. Compact fits more across the row.',
                 options: [['comfortable', 'Comfortable'], ['compact', 'Compact']]
             },
             {
                 title: 'Home rows',
                 key: 'homeRows',
+                note: 'Two rows needs Compact tiles (Comfortable stays one row).',
                 options: [[1, 'One'], [2, 'Two']]
             }
         ];
@@ -73,20 +101,15 @@
                 chips.appendChild(c);
             });
             block.appendChild(chips);
-            if (b.key === 'focus') {
-                block.appendChild(el('p', 'setting-note muted',
-                    'Home tiles only. Settings and menus keep a fixed simple highlight.'));
-            }
-            if (b.key === 'homeRows') {
-                block.appendChild(el('p', 'setting-note muted',
-                    'Two rows needs Compact tiles (Comfortable stays one row).'));
-            }
             if (b.key === 'clock') {
                 var tz = window.Weather && Weather.timeZone && Weather.timeZone();
-                block.appendChild(el('p', 'setting-note muted',
+                block.appendChild(note(
                     tz
                         ? ('Time zone follows Weather place (' + tz + ').')
-                        : 'Time zone follows Weather place when set; otherwise the TV clock.'));
+                        : 'Time zone follows Weather place when set; otherwise the TV clock.'
+                ));
+            } else if (b.note) {
+                block.appendChild(note(b.note));
             }
             body.appendChild(block);
         });

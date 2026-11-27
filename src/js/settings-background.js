@@ -13,9 +13,10 @@
     var showShuffleBlock = SettingsBackgroundLive.showShuffleBlock;
 
     var pinStorageLabel = SettingsBackgroundPins.pinStorageLabel;
-    var afterPinChange = SettingsBackgroundPins.afterPinChange;
-    var removeOnePin = SettingsBackgroundPins.removeOnePin;
-    var hideOneBundled = SettingsBackgroundPins.hideOneBundled;
+    var confirmRemovePin = SettingsBackgroundPins.confirmRemovePin;
+    var confirmHideBundled = SettingsBackgroundPins.confirmHideBundled;
+    var confirmDanger = SettingsBackgroundPins.confirmDanger;
+    var confirmDiscardTemp = SettingsBackgroundPins.confirmDiscardTemp;
     var restoreBundledPhotos = SettingsBackgroundPins.restoreBundledPhotos;
     var usePhotoKey = SettingsBackgroundPins.usePhotoKey;
     var useLiveNow = SettingsBackgroundPins.useLiveNow;
@@ -26,6 +27,7 @@
     var $ = UI.$;
     var el = UI.el;
     var chip = SettingsCore.chip;
+    var BG_INTERVAL_PRESETS = ['5m', '15m', '1h'];
 
     // ---------- Background
 
@@ -112,9 +114,28 @@
 
         var intervals = $('bg-interval');
         intervals.innerHTML = '';
-        Wallpaper.INTERVALS.forEach(function (i) {
-            intervals.appendChild(chip(i.label, p.interval === i.key, { kind: 'interval', key: i.key }));
+        BG_INTERVAL_PRESETS.forEach(function (key) {
+            var preset = Wallpaper.INTERVALS.filter(function (i) { return i.key === key; })[0];
+            if (preset) {
+                intervals.appendChild(chip(preset.label, p.interval === key, { kind: 'interval', key: key }));
+            }
         });
+        var intervalOption = Wallpaper.interval(p.interval);
+        var intervalPreset = BG_INTERVAL_PRESETS.indexOf(p.interval) >= 0;
+        var customInterval = !intervalPreset && p.interval !== 'open';
+        intervals.appendChild(chip(
+            customInterval ? ('Custom · ' + intervalOption.label) : 'Custom…',
+            customInterval,
+            { kind: 'customTiming', key: 'interval' }
+        ));
+        var openInterval = Wallpaper.INTERVALS.filter(function (i) { return i.key === 'open'; })[0];
+        if (openInterval) {
+            intervals.appendChild(chip(
+                openInterval.label,
+                p.interval === 'open',
+                { kind: 'interval', key: 'open' }
+            ));
+        }
         $('bg-interval-block').classList.toggle('hidden', !cycle);
 
         var portraitBlock = $('bg-portrait-block');
@@ -124,7 +145,7 @@
             if (portraitChips) {
                 portraitChips.innerHTML = '';
                 var allowP = !!p.allowPortrait;
-                [[false, 'No'], [true, 'Yes']].forEach(function (o) {
+                [[false, 'Skip'], [true, 'Allow']].forEach(function (o) {
                     portraitChips.appendChild(chip(o[1], allowP === o[0], { kind: 'allowPortrait', value: o[0] }));
                 });
             }
@@ -143,21 +164,8 @@
             var mixChips = $('bg-live-mix');
             if (mixChips) {
                 mixChips.innerHTML = '';
-                [[false, 'Off'], [true, 'On']].forEach(function (o) {
+                [[false, 'One source'], [true, 'Mix']].forEach(function (o) {
                     mixChips.appendChild(chip(o[1], mixOn === o[0], { kind: 'mixMode', value: o[0] }));
-                });
-            }
-        }
-
-        var rotateBlock = $('bg-photos-rotate-block');
-        if (rotateBlock) {
-            rotateBlock.classList.toggle('hidden', !(browseLive && prov === 'photos'));
-            var rotateChips = $('bg-photos-rotate');
-            if (rotateChips) {
-                rotateChips.innerHTML = '';
-                var rotateOn = p.rotateOn === true;
-                [[true, 'On'], [false, 'Off']].forEach(function (o) {
-                    rotateChips.appendChild(chip(o[1], rotateOn === o[0], { kind: 'photosRotate', value: o[0] }));
                 });
             }
         }
@@ -180,8 +188,23 @@
                 });
             var provNote = $('bg-live-provider-note');
             if (provNote) {
-                provNote.classList.toggle('hidden', !browseLive || !mixOn);
-                provNote.textContent = mixOn ? 'At least one source must stay on.' : '';
+                provNote.classList.toggle('hidden', !browseLive);
+                provNote.textContent = mixOn
+                    ? 'At least one source must stay on.'
+                    : 'Which provider feeds Home and the screen saver.';
+            }
+        }
+
+        var rotateBlock = $('bg-photos-rotate-block');
+        if (rotateBlock) {
+            rotateBlock.classList.toggle('hidden', !(browseLive && prov === 'photos'));
+            var rotateChips = $('bg-photos-rotate');
+            if (rotateChips) {
+                rotateChips.innerHTML = '';
+                var rotateOn = p.rotateOn === true;
+                [[true, 'On'], [false, 'Off']].forEach(function (o) {
+                    rotateChips.appendChild(chip(o[1], rotateOn === o[0], { kind: 'photosRotate', value: o[0] }));
+                });
             }
         }
 
@@ -213,15 +236,44 @@
         var wallhavenBlock = $('bg-live-wallhaven-block');
         if (wallhavenBlock) {
             wallhavenBlock.classList.toggle('hidden', !showWallhaven);
-            var whChips = $('bg-live-wallhaven');
-            whChips.innerHTML = '';
-            var whCats = (window.LiveWallpaper && LiveWallpaper.WALLHAVEN_CATEGORIES) || [
-                { key: 'general', label: 'General' }
+            var topicGrid = $('bg-live-wallhaven-topic');
+            topicGrid.innerHTML = '';
+            function appendTopicRow(items) {
+                var row = el('div', 'chips');
+                items.forEach(function (item) { row.appendChild(item); });
+                if (items.length) topicGrid.appendChild(row);
+            }
+            var topics = (window.LiveWallpaper && LiveWallpaper.WALLHAVEN_TOPICS) || [
+                { key: 'any', label: 'Any topic' },
+                { key: 'nature', label: 'Nature' },
+                { key: 'space', label: 'Space' },
+                { key: 'cars', label: 'Cars' }
             ];
-            var whCur = window.LiveWallpaper ? LiveWallpaper.wallhavenCategory() : 'general';
-            whCats.forEach(function (c) {
-                whChips.appendChild(chip(c.label, whCur === c.key, { kind: 'wallhavenCategory', key: c.key }));
+            var selectedTopics = window.LiveWallpaper ? LiveWallpaper.wallhavenTopics() : [];
+            var presetChips = topics.map(function (topic) {
+                var selected = topic.key === 'any'
+                    ? !selectedTopics.length
+                    : selectedTopics.indexOf(topic.key) >= 0;
+                return chip(topic.label, selected, { kind: 'wallhavenTopic', key: topic.key });
             });
+            appendTopicRow(presetChips);
+            var customTopics = window.LiveWallpaper ? LiveWallpaper.wallhavenCustomTopics() : [];
+            var customChips = customTopics.map(function (query) {
+                var key = 'custom:' + query;
+                var label = query.length > 22 ? query.slice(0, 20) + '…' : query;
+                return chip('Custom · ' + label, selectedTopics.indexOf(key) >= 0, {
+                    kind: 'wallhavenTopic',
+                    key: key
+                });
+            });
+            for (var ti = 0; ti < customChips.length; ti += 4) {
+                appendTopicRow(customChips.slice(ti, ti + 4));
+            }
+            var topicActions = [chip('Add topic', false, { kind: 'wallhavenTopicAdd' })];
+            if (customTopics.length) {
+                topicActions.push(chip('Manage custom topics', false, { kind: 'wallhavenTopicsManage' }));
+            }
+            appendTopicRow(topicActions);
         }
 
         var immichOn = mixOn
@@ -240,26 +292,9 @@
             ));
         }
 
-        var moreWanted = browseLive && (showShuffleBlock(p) || prov !== 'photos');
-        var moreOpen = bgState.liveMore;
-        if (moreOpen == null) {
-            moreOpen = !!(p.random || (p.livePool && p.livePool !== 'small' && p.livePool !== 'normal'));
-        }
-        var liveMoreBlock = $('bg-live-more-block');
-        if (liveMoreBlock) {
-            liveMoreBlock.classList.toggle('hidden', !moreWanted);
-            var moreChips = $('bg-live-more');
-            if (moreChips) {
-                moreChips.innerHTML = '';
-                [[false, 'Off'], [true, 'On']].forEach(function (o) {
-                    moreChips.appendChild(chip(o[1], moreOpen === o[0], { kind: 'liveMore', value: o[0] }));
-                });
-            }
-        }
-
         var shuffleBlock = $('bg-shuffle-block');
         if (shuffleBlock) {
-            var showShuffle = moreWanted && moreOpen && showShuffleBlock(p);
+            var showShuffle = browseLive && showShuffleBlock(p);
             shuffleBlock.classList.toggle('hidden', !showShuffle);
             if (showShuffle) {
                 var shuffleChips = $('bg-shuffle');
@@ -272,48 +307,6 @@
                     shuffleNote.textContent = shuffleNoteFor(p);
                     shuffleNote.classList.toggle('hidden', !shuffleNote.textContent);
                 }
-            }
-        }
-
-        var poolBlock = $('bg-live-pool-block');
-        if (poolBlock) {
-            // Solo Bing: 8 stays selectable; 20/40 stay visible but locked (Bing window ~8).
-            var bingSolo = browseLive && prov === 'bing';
-            poolBlock.classList.toggle('hidden', !(moreWanted && moreOpen && browseLive));
-            var poolChips = $('bg-live-pool');
-            poolChips.innerHTML = '';
-            var poolTitle = poolBlock.querySelector('h2');
-            if (browseLive && prov === 'photos') {
-                // Saved photos are all on the device: show the count only, nothing to choose.
-                var count = (window.Wallpaper && Wallpaper.savedPool) ? Wallpaper.savedPool().length : 0;
-                var shown = document.createElement('span');
-                shown.className = 'chip disabled';
-                shown.textContent = count + ' photos';
-                poolChips.appendChild(shown);
-                if (poolTitle) poolTitle.textContent = 'Photos';
-            } else {
-            var pools = (window.LiveWallpaper && LiveWallpaper.LIVE_POOLS) || {
-                small: { label: '8' },
-                normal: { label: '20' },
-                large: { label: '40' }
-            };
-            if (bingSolo && p.livePool && p.livePool !== 'small') {
-                p.livePool = 'small';
-                Prefs.save();
-            }
-            Object.keys(pools).forEach(function (key) {
-                var locked = bingSolo && key !== 'small';
-                var c = chip(
-                    pools[key].label,
-                    !locked && (p.livePool || 'small') === key,
-                    locked
-                        ? { kind: 'livePoolLocked', value: key }
-                        : { kind: 'livePool', value: key }
-                );
-                if (locked) c.classList.add('disabled');
-                poolChips.appendChild(c);
-            });
-            if (poolTitle) poolTitle.textContent = 'Queue size';
             }
         }
 
@@ -441,8 +434,37 @@
         photosBlock.classList.toggle('hidden', !showLiveThumbs && !showPhotoThumbs);
     }
 
+    function refreshWallhavenSelection() {
+        var p = Prefs.get().wallpaper;
+        p.liveKey = '';
+        p.lastChange = Date.now();
+        bgState.gridMode = '';
+        bgState.photosKeys = {};
+        Prefs.save();
+        if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
+        else LiveWallpaper.clearCache();
+        busyLiveProviderChange().then(redrawBackground, redrawBackground);
+    }
+
     function activateBackground(item) {
         var p = Prefs.get().wallpaper;
+        if (item.kind === 'customTiming' && item.key === 'interval') {
+            var currentInterval = Wallpaper.interval(p.interval);
+            SettingsCore.customDuration('change interval', currentInterval.ms, {
+                minMs: 30 * 1000,
+                maxMs: 24 * 60 * 60 * 1000,
+                fallbackMs: 15 * 60 * 1000,
+                units: ['seconds', 'minutes', 'hours']
+            }, function (ms) {
+                p.interval = 'custom:' + ms;
+                p.lastChange = Date.now();
+                Prefs.save();
+                Wallpaper.apply();
+                if (p.mode === 'live') Wallpaper.ensureLive();
+                redrawBackground();
+            });
+            return;
+        }
         if (item.kind === 'immichLink') {
             SettingsCore.rename('', function (link) {
                 if (window.LiveWallpaper) {
@@ -482,28 +504,51 @@
             }, { title: 'Unsplash collection ID', maxLength: 64, allowEmpty: true });
             return;
         }
-        if (item.kind === 'wallhavenCategory') {
+        if (item.kind === 'wallhavenTopic') {
             if (!window.LiveWallpaper) return;
-            var prevCat = LiveWallpaper.wallhavenCategory ? LiveWallpaper.wallhavenCategory() : '';
-            if (prevCat === item.key) return;
-            LiveWallpaper.setWallhavenCategory(item.key);
-            p.liveKey = '';
-            p.lastChange = Date.now();
-            bgState.gridMode = '';
-            bgState.photosKeys = {};
-            Prefs.save();
-            if (LiveWallpaper.switchProvider) LiveWallpaper.switchProvider();
-            else LiveWallpaper.clearCache();
-            busyLiveProviderChange().then(function () {
-                redrawBackground();
-            }, function () {
-                redrawBackground();
-            });
+            var selectedTopics = LiveWallpaper.wallhavenTopics();
+            if (item.key === 'any' && !selectedTopics.length) return;
+            var nextTopics;
+            if (item.key === 'any') {
+                nextTopics = [];
+            } else if (selectedTopics.indexOf(item.key) >= 0) {
+                nextTopics = selectedTopics.filter(function (key) { return key !== item.key; });
+            } else {
+                nextTopics = selectedTopics.concat([item.key]);
+            }
+            LiveWallpaper.setWallhavenTopics(nextTopics);
+            refreshWallhavenSelection();
             return;
         }
-        if (item.kind === 'liveMore') {
-            bgState.liveMore = !!item.value;
-            redrawBackground();
+        if (item.kind === 'wallhavenTopicAdd') {
+            if (!window.LiveWallpaper) return;
+            SettingsCore.rename('', function (query) {
+                if (LiveWallpaper.addWallhavenCustomTopic(query)) refreshWallhavenSelection();
+            }, { title: 'Add Wallhaven topic or tags', maxLength: 80 });
+            return;
+        }
+        if (item.kind === 'wallhavenTopicsManage') {
+            if (!window.LiveWallpaper) return;
+            var customTopics = LiveWallpaper.wallhavenCustomTopics();
+            if (!customTopics.length) {
+                UI.toast('No saved custom topics');
+                return;
+            }
+            var options = customTopics.map(function (query) {
+                var label = query.length > 32 ? query.slice(0, 29) + '…' : query;
+                return {
+                    label: 'Remove · ' + label,
+                    kind: 'danger',
+                    run: function () {
+                        confirmDanger('Remove this custom topic?', 'Remove', function () {
+                            LiveWallpaper.removeWallhavenCustomTopic(query);
+                            refreshWallhavenSelection();
+                        }, { detail: query });
+                    }
+                };
+            });
+            options.push({ label: 'Done', kind: 'action' });
+            UI.menu('Manage custom topics', options);
             return;
         }
         if (item.kind === 'allowPortrait') {
@@ -537,27 +582,6 @@
             if (p.mode === 'live' && window.LiveWallpaper && LiveWallpaper.rebuildPlan) {
                 LiveWallpaper.rebuildPlan();
             }
-        } else if (item.kind === 'livePoolLocked') {
-            UI.toast('Bing only offers 8 photos');
-            return;
-        } else if (item.kind === 'livePool') {
-            if (p.liveProvider === 'bing' && item.value !== 'small') {
-                UI.toast('Bing only offers 8 photos');
-                return;
-            }
-            if (p.livePool === item.value) return;
-            p.livePool = item.value;
-            Prefs.save();
-            // Grow/trim toward the new ahead target; rebuild plan length.
-            if (p.mode === 'live' && window.LiveWallpaper) {
-                if (LiveWallpaper.rebuildPlan) LiveWallpaper.rebuildPlan();
-                if (LiveWallpaper.warmForPicker && p.liveProvider !== 'mix' &&
-                        !(LiveWallpaper.needsSetup && LiveWallpaper.needsSetup())) {
-                    warmBgPicker();
-                }
-            }
-            redrawBackground();
-            return;
         } else if (item.kind === 'mixMode') {
             if (!window.LiveWallpaper || !LiveWallpaper.setMixMode) return;
             var wantMix = !!item.value;
@@ -657,60 +681,41 @@
                 useLiveNow(item.entry || (Wallpaper.tempPhotoEntry && Wallpaper.tempPhotoEntry()));
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Temporary photo', [
-                {
-                    label: 'Save permanently', run: function () {
-                        saveLivePermanent(item.entry || Wallpaper.tempPhotoEntry());
-                    }
-                },
-                {
-                    label: 'Discard', run: function () {
-                        if (Wallpaper.clearTempPhoto) Wallpaper.clearTempPhoto();
-                        var next = Prefs.get().wallpaper.photo;
-                        if (next === item.key) {
-                            var pins = (Wallpaper.pinsList && Wallpaper.pinsList()) || [];
-                            var ship = (Wallpaper.bundledVisible && Wallpaper.bundledVisible()) ||
-                                Wallpaper.bundled();
-                            next = (pins[0] && pins[0].key) || (ship[0] && ship[0].key) || next;
-                            Prefs.get().wallpaper.photo = next;
-                            Prefs.save();
-                            Wallpaper.apply();
+            var tempEntry = item.entry || (Wallpaper.tempPhotoEntry && Wallpaper.tempPhotoEntry());
+            var tempTitle = (tempEntry && tempEntry.title) || 'Temporary photo';
+            function openTempMenu() {
+                UI.menu(tempTitle, [
+                    {
+                        label: 'Save permanently',
+                        kind: 'action',
+                        run: function () { saveLivePermanent(tempEntry); }
+                    },
+                    {
+                        label: 'Discard',
+                        kind: 'danger',
+                        run: function () {
+                            confirmDiscardTemp(tempEntry, { onBack: openTempMenu });
                         }
-                        UI.toast('Discarded');
-                        afterPinChange(Prefs.get().wallpaper.photo);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+                    },
+                    { label: 'Cancel', kind: 'action' }
+                ]);
+            }
+            openTempMenu();
             return;
         } else if (item.kind === 'photoPin') {
-            // First OK selects; OK again on the selected one opens remove menu.
+            // First OK selects; OK again on the selected one opens remove confirm.
             if (p.photo !== item.key) {
                 usePhotoKey(item.key);
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Saved photo', [
-                {
-                    label: 'Remove', run: function () {
-                        removeOnePin(item.key);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+            confirmRemovePin(item.key);
             return;
         } else if (item.kind === 'photoBundled') {
             if (p.photo !== item.key) {
                 usePhotoKey(item.key);
                 return;
             }
-            UI.menu((item.entry && item.entry.title) || 'Bundled photo', [
-                {
-                    label: 'Remove', run: function () {
-                        hideOneBundled(item.key);
-                    }
-                },
-                { label: 'Cancel' }
-            ]);
+            confirmHideBundled(item.key);
             return;
         } else if (item.kind === 'photo') {
             usePhotoKey(item.key);

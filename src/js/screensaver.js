@@ -10,9 +10,10 @@
  *   Back     exit (chrome hidden or black: first key only reveals / wakes)
  *
  * Caption, music, and legend (tap / hold) fade out after idle; the clock stays on.
- * While chrome is off the clock drifts horizontally with the photo (no vertical) for
- * burn-in; when chrome returns it snaps home. The next key shows chrome again without
- * changing photo or track.
+ * While chrome is off, a new photo peeks its caption and a new track/station peeks
+ * now-playing for a short flash (not the full Hide-text wait), then fade again. The clock
+ * drifts horizontally with the photo (no vertical) for burn-in; when chrome returns it
+ * snaps home. The next key shows chrome again without changing photo or track.
  *
  * Adapted from a design mockup rather than ported from it. The mockup's backdrop was nine
  * radial-gradients over a linear-gradient — the exact shape the Lab render probe measured at
@@ -62,6 +63,9 @@
         { key: 'never', label: 'Never', ms: 0 }
     ];
 
+    // Photo / music peeks while chrome is off — short flash, capped by Hide text.
+    var PEEK_MS = 10 * 1000;
+
     /*
      * The photo drifts rather than zooms. A zoom changes the layer's raster scale, and this
      * engine re-rasterises a scaled 1920x1080 layer in visible steps instead of compositing it
@@ -100,11 +104,13 @@
     var chromeHidden = false;   // caption/music/legend faded; clock stays; next key reveals chrome
     var lastChromeAt = 0;       // last time chrome was shown or touched
     var captionPeekTimer = 0;   // brief description-only reveal while chrome-off
+    var musicPeekTimer = 0;     // brief now-playing reveal on song/station change
     var advancing = false;      // one in-flight live takeNext (timer or remote)
     var shownKey = '';          // live polish may update caption after the photo is up
     var providerFlashTimer = 0;
     var captionSub = '';
     var lastMusicSig = '';
+    var lastMusicLine = '';
 
     function prefs() { return Prefs.get().screensaver; }
 
@@ -112,15 +118,37 @@
 
     function blurOn() { return prefs().blur !== false; }
 
+    function durationLabel(ms) {
+        if (ms % (60 * 60 * 1000) === 0) {
+            var hours = ms / (60 * 60 * 1000);
+            return hours + (hours === 1 ? ' hour' : ' hours');
+        }
+        if (ms % (60 * 1000) === 0) return (ms / (60 * 1000)) + ' min';
+        return Math.round(ms / 1000) + ' s';
+    }
+
     function option(list, key, fallback) {
-        return list.find(function (o) { return o.key === key; }) ||
-            list.find(function (o) { return o.key === fallback; });
+        var found = list.find(function (o) { return o.key === key; });
+        if (found) return found;
+        var custom = String(key || '').match(/^custom:(\d+)$/);
+        if (custom && Number(custom[1]) > 0) {
+            var ms = Number(custom[1]);
+            return { key: key, label: durationLabel(ms), ms: ms };
+        }
+        return list.find(function (o) { return o.key === fallback; });
     }
 
     function delay() { return option(DELAYS, prefs().delay, '5m'); }
     function photoEvery() { return option(PHOTO_EVERY, prefs().photoEvery, '75s'); }
     function darkAfter() { return option(DARK_AFTER, prefs().dark, '15m'); }
     function chromeHide() { return option(CHROME_HIDE, prefs().chromeHide, '20s'); }
+
+    // Peek shorter than Hide text when that wait is long; never longer than Hide text.
+    function peekMs() {
+        var hide = chromeHide().ms;
+        if (!hide) return PEEK_MS;
+        return Math.min(PEEK_MS, hide);
+    }
     function panSpeed() { return option(PAN_SPEEDS, prefs().panSpeed, 'normal'); }
 
     function driftOf(layer) {
@@ -143,25 +171,6 @@
         layer.style.left = (-padX) + 'px';
         layer.style.width = (VIEW_W + 2 * padX) + 'px';
         layer.style.height = (VIEW_H + 2 * padY) + 'px';
-    }
-
-    // Pillar widths for portrait blur strips (oriented aspect → side gaps only).
-    function applyPortraitPillars(layer, ow, oh) {
-        var left = layer.querySelector('.ss-pillar-left');
-        var right = layer.querySelector('.ss-pillar-right');
-        if (!left || !right || !ow || !oh) return;
-        var dispW = Math.round(VIEW_H * (ow / oh));
-        if (dispW > VIEW_W) dispW = VIEW_W;
-        var side = Math.max(0, Math.floor((VIEW_W - dispW) / 2));
-        left.style.width = side + 'px';
-        right.style.width = side + 'px';
-    }
-
-    function clearPortraitPillars(layer) {
-        var left = layer.querySelector('.ss-pillar-left');
-        var right = layer.querySelector('.ss-pillar-right');
-        if (left) left.style.width = '';
-        if (right) right.style.width = '';
     }
 
     // ---------- Photos
@@ -485,8 +494,6 @@
             back.classList.toggle('portrait', portrait);
             back.classList.toggle('landscape', !portrait);
             back.classList.toggle('no-blur', contain && !wantBlur);
-            if (portrait) applyPortraitPillars(back, ow, oh);
-            else clearPortraitPillars(back);
             if (imgEl) imgEl.src = url;
             else back.style.backgroundImage = 'url("' + url + '")';
             var bi;
@@ -664,13 +671,21 @@
         return provider || detail;
     }
 
+    // Prefer the photo’s own source (Bing / NASA / …) so Mix captions are not “Mix - …”.
+    function captionProvider(w) {
+        if (w && w.source && w.source !== 'mix') return sourceLabel(w.source);
+        return pictureMenuLabel();
+    }
+
     function caption(w) {
         var detail = w ? cleanCaption(w.title || w.credit || '') : '';
-        captionText = metaLine(pictureMenuLabel(), detail);
-        captionSub = '';
-        fillLine($('ss-title'), captionText, true);
-        fillLine($('ss-sub'), '', false);
-        $('ss-caption').classList.toggle('hidden', !captionText);
+        captionText = metaLine(captionProvider(w), detail);
+        captionSub = w ? String(w.sub || '').replace(/\s+/g, ' ').trim() : '';
+        // Keep provider details on a second marquee line; Hide text cuts both off together.
+        fillLine($('ss-title'), captionText, true, true);
+        fillLine($('ss-sub'), captionSub, !!captionSub, !!captionSub);
+        $('ss-caption').classList.toggle('has-sub', !!captionSub);
+        $('ss-caption').classList.toggle('hidden', !captionText && !captionSub);
     }
 
     // Weather icon sits after the date under the clock (top strip stays unused).
@@ -684,16 +699,20 @@
     }
 
     function renderClockWeather() {
-        var el = $('ss-wx-icon');
-        if (!el) return;
+        var row = $('ss-date-wx');
+        var icon = $('ss-wx-icon');
+        var temp = $('ss-wx-temp');
+        if (!row || !icon) return;
         var w = window.Weather && Weather.current();
         if (!w || !w.icon) {
-            el.classList.add('hidden');
-            el.innerHTML = '';
+            row.classList.add('hidden');
+            icon.innerHTML = '';
+            if (temp) temp.textContent = '';
             return;
         }
-        el.innerHTML = w.icon;
-        el.classList.remove('hidden');
+        icon.innerHTML = w.icon;
+        if (temp) temp.textContent = w.temp || '';
+        row.classList.remove('hidden');
     }
 
     function musicReady() {
@@ -723,12 +742,18 @@
             // Rebuild when text or dark state changes. Loop on screensaver so the full
             // line keeps rotating in the fixed side column.
             if (sig !== lastMusicSig) {
+                var lineChanged = line !== lastMusicLine;
                 lastMusicSig = sig;
+                lastMusicLine = line;
                 fillLine($('ss-music-title'), line, !dark, true);
                 fillLine($('ss-music-artist'), '', false);
+                // Chrome idle-hidden: flash the new track/station like a photo caption peek.
+                if (lineChanged && !dark) peekMusic();
             }
         } else {
             lastMusicSig = '';
+            lastMusicLine = '';
+            clearMusicPeek();
         }
         renderLegend();
     }
@@ -1196,7 +1221,19 @@
         if (root) root.classList.remove('caption-peek');
     }
 
-    // While chrome is idle-hidden, briefly show only the picture description (not clock/music/…).
+    function clearMusicPeek() {
+        if (musicPeekTimer) clearTimeout(musicPeekTimer);
+        musicPeekTimer = 0;
+        var root = $('screensaver');
+        if (root) root.classList.remove('music-peek');
+    }
+
+    function clearPeeks() {
+        clearCaptionPeek();
+        clearMusicPeek();
+    }
+
+    // While chrome is idle-hidden, briefly show only the picture description (not clock/…).
     function peekCaption() {
         if (!open || dark || !chromeHidden) return;
         if (!captionText && !captionSub) return;
@@ -1204,17 +1241,30 @@
         if (!root) return;
         root.classList.add('caption-peek');
         if (captionPeekTimer) clearTimeout(captionPeekTimer);
-        var ms = chromeHide().ms || 12000;
         captionPeekTimer = setTimeout(function () {
             captionPeekTimer = 0;
             if (root) root.classList.remove('caption-peek');
-        }, ms);
+        }, peekMs());
+    }
+
+    // Same idea for now-playing: flash on song / station change, then fade again.
+    function peekMusic() {
+        if (!open || dark || !chromeHidden) return;
+        if (!musicReady()) return;
+        var root = $('screensaver');
+        if (!root) return;
+        root.classList.add('music-peek');
+        if (musicPeekTimer) clearTimeout(musicPeekTimer);
+        musicPeekTimer = setTimeout(function () {
+            musicPeekTimer = 0;
+            if (root) root.classList.remove('music-peek');
+        }, peekMs());
     }
 
     function showChrome() {
         chromeHidden = false;
         lastChromeAt = Date.now();
-        clearCaptionPeek();
+        clearPeeks();
         var root = $('screensaver');
         if (root) root.classList.remove('chrome-off');
         clockHome();
@@ -1223,7 +1273,7 @@
     function hideChrome() {
         if (!open || dark || chromeHidden) return;
         chromeHidden = true;
-        clearCaptionPeek();
+        clearPeeks();
         var root = $('screensaver');
         if (root) root.classList.add('chrome-off');
         // Join the in-flight pan leg so the clock tracks the photo from here.
@@ -1282,7 +1332,7 @@
         if (dark) return;
         dark = true;
         hideChrome();
-        clearCaptionPeek();
+        clearPeeks();
         freezePan();
         var root = $('screensaver');
         if (root) root.classList.add('is-dark');
@@ -1434,11 +1484,12 @@
         lastInput = Date.now();
         photoToken++;
         clearTimeout(providerFlashTimer);
-        clearCaptionPeek();
+        clearPeeks();
         captionSub = '';
         lastMusicSig = '';
+        lastMusicLine = '';
         var root = $('screensaver');
-        if (root) root.classList.remove('chrome-off', 'is-dark', 'caption-peek');
+        if (root) root.classList.remove('chrome-off', 'is-dark', 'caption-peek', 'music-peek');
         var veil = $('ss-dark');
         if (veil) veil.style.opacity = '0';
         var flash = $('ss-provider');
@@ -1455,7 +1506,6 @@
             l._leg = null;
             l._frozen = null;
             applyLayerPad(l, FALLBACK_DRIFT, true);
-            clearPortraitPillars(l);
             var imgEl = l.querySelector('.ss-photo-img');
             if (imgEl) imgEl.removeAttribute('src');
             var blurImgs = l.querySelectorAll('.ss-photo-blur');

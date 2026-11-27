@@ -47,6 +47,7 @@
     function resetImmichState() { return LiveStores.resetImmichState.apply(null, arguments); }
     function resetStream() { return LiveRoster.resetStream.apply(null, arguments); }
     function wallhavenCategoryAllowed() { return LiveSources.wallhaven.wallhavenCategoryAllowed.apply(null, arguments); }
+    function wallhavenTopicAllowed() { return LiveSources.wallhaven.wallhavenTopicAllowed.apply(null, arguments); }
     function cfg() { return LiveCore.cfg.apply(null, arguments); }
     function needsSetup() { return LiveRoster.needsSetup.apply(null, arguments); }
     function clearBingDay() { return LiveSources.bing.clearBingDay.apply(null, arguments); }
@@ -129,6 +130,7 @@
 
         function step() {
             if (g !== LiveState.generation) return Promise.resolve();
+            if (document.hidden) return Promise.resolve();
             if (LiveState.stream.plan.length >= planSize()) {
                 LiveState.planUniqueExhausted = false;
                 return Promise.resolve();
@@ -158,7 +160,7 @@
         LiveState.stream.filling = new Promise(function (resolve) {
             setTimeout(resolve, wait);
         }).then(function () {
-            if (g !== LiveState.generation) return;
+            if (g !== LiveState.generation || document.hidden) return;
             // Queue top-up is background — do not block plan slots on a full ahead fill.
             warmSources();
             return step();
@@ -248,9 +250,10 @@
                 var beforeQ = saved.buf.length;
                 sourceQueue(name).buf = saved.buf.map(normalize).filter(function (w) {
                     if (!entryMatchesSource(w, name)) return false;
-                    // Drop Wallhaven rows from another category after a settings change.
-                    if (name === 'wallhaven' && w.whCat && !wallhavenCategoryAllowed(w.whCat)) {
-                        return false;
+                    // Drop Wallhaven rows from stale category/topic searches after a settings change.
+                    if (name === 'wallhaven') {
+                        if (w.whCat && !wallhavenCategoryAllowed(w.whCat)) return false;
+                        if (!wallhavenTopicAllowed(w.whTopic)) return false;
                     }
                     return true;
                 }).map(function (w) {
@@ -320,6 +323,9 @@
     // Mix: boot shallow, then grow slightly (still capped — not livePool ahead).
     function backgroundFill() {
         if (needsSetup()) return;
+        // With background-support enabled the process stays alive behind other apps —
+        // do not keep hitting Unsplash/Immich/… until Home is visible again.
+        if (document.hidden) return;
         warmSources();
         if (provider() === 'mix' && LiveState.mixWarmPhase === 'boot' && !LiveState.mixGrowTimer) {
             LiveState.mixGrowTimer = setTimeout(function () {
@@ -378,6 +384,7 @@
         }
         LiveState.items = [];
         LiveState.seen = [];
+        LiveState.lastShown = {};
         LiveState.pickCatalog = {};
         LiveState.pickTarget = {};
         LiveState.thumbWarm = {};

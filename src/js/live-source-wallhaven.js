@@ -16,7 +16,7 @@
     function provider() { return LiveHooks.provider.apply(null, arguments); }
     function rememberPick() { return LiveHooks.rememberPick.apply(null, arguments); }
     function saveCache() { return LiveHooks.saveCache.apply(null, arguments); }
-    function wallhavenCategoryMeta() { return LiveCore.wallhavenCategoryMeta.apply(null, arguments); }
+    function wallhavenTopicMeta() { return LiveCore.wallhavenTopicMeta.apply(null, arguments); }
 
     function wallhavenApi(pathQuery) {
         var path = pathQuery.indexOf('/') === 0 ? pathQuery : '/' + pathQuery;
@@ -25,23 +25,29 @@
             : WALLHAVEN + path;
     }
 
-    // Docs: categories bit flags — general=100, anime=010, people=001 (combine, e.g. 111=all).
-    // Keep as a 3-char string; numeric coercion of "010" becomes 10 and breaks the filter.
-    function wallhavenCategoryFlags() {
-        var f = String(wallhavenCategoryMeta(LiveState.wallhavenCategory).flags || '100');
-        if (!/^[01]{3}$/.test(f)) f = '100';
-        return f;
+    // Search all Wallhaven categories; user-selected topic queries provide the subject filter.
+    function wallhavenCategoryFlags() { return '111'; }
+
+    function wallhavenCategoryAllowed() { return true; }
+
+    function wallhavenTopicKeys() {
+        return LiveState.wallhavenTopics && LiveState.wallhavenTopics.length
+            ? LiveState.wallhavenTopics.slice()
+            : ['any'];
     }
 
-    function wallhavenCategoryAllowed(apiCategory) {
-        if (LiveState.wallhavenCategory === 'all') return true;
-        var c = String(apiCategory || '').toLowerCase();
-        if (!c) return true;
-        return c === LiveState.wallhavenCategory;
+    function wallhavenTopicSignature() { return JSON.stringify(wallhavenTopicKeys()); }
+
+    function wallhavenTopicAllowed(entryTopic) {
+        var selected = LiveState.wallhavenTopics || [];
+        if (!selected.length) return true;
+        return !!entryTopic && selected.indexOf(wallhavenTopicMeta(entryTopic).key) >= 0;
     }
 
-    function wallhavenSearchPath(page, seed) {
+    function wallhavenSearchPath(page, seed, topicKey) {
         var cat = wallhavenCategoryFlags();
+        if (topicKey == null) topicKey = wallhavenTopicKeys()[0];
+        var topic = wallhavenTopicMeta(topicKey);
         // Exact 1080p only — Wallhaven has no resize CDN; `atleast` would still return 4K originals.
         // purity=100 SFW only (sketchy/nsfw need an API key per docs).
         var q =
@@ -51,6 +57,7 @@
             '&ratios=16x9' +
             '&sorting=random' +
             '&page=' + page;
+        if (topic.query) q += '&q=' + encodeURIComponent(topic.query);
         if (seed) q += '&seed=' + encodeURIComponent(seed);
         return '/search?' + q;
     }
@@ -96,7 +103,7 @@
         };
     }
 
-    function parseWallhavenImage(w) {
+    function parseWallhavenImage(w, topicKey) {
         if (!w || !w.path || !w.id) return null;
         // Honour selected category even if the API ignores a bad flags string.
         if (!wallhavenCategoryAllowed(w.category)) return null;
@@ -120,6 +127,7 @@
             source: 'wallhaven'
         });
         entry.whCat = String(w.category || LiveState.wallhavenCategory || '').toLowerCase();
+        entry.whTopic = wallhavenTopicMeta(topicKey == null ? wallhavenTopicKeys()[0] : topicKey).key;
         return entry;
     }
 
@@ -181,39 +189,65 @@
         return p;
     }
 
-    function fetchWallhavenPageNow() {
-        var page = LiveState.stream.wallhavenPage || 1;
-        var seed = LiveState.stream.wallhavenSeed || '';
-        var category = LiveState.wallhavenCategory;
-        var path = wallhavenSearchPath(page, seed);
+    function fetchWallhavenPageNow(tries) {
+        var st = LiveState.stream;
+        var topics = wallhavenTopicKeys();
+        var signature = wallhavenTopicSignature();
+        var slot = (Math.floor(Number(st.wallhavenTopicCursor) || 0) % topics.length);
+        var topicKey = topics[slot];
+        if (!st.wallhavenTopicSearches) st.wallhavenTopicSearches = {};
+        var search = st.wallhavenTopicSearches[topicKey];
+        if (!search) {
+            search = st.wallhavenTopicSearches[topicKey] = { page: 1, seed: '', wrapped: false, pendingEntries: [] };
+        }
+        while (search.pendingEntries && search.pendingEntries.length) {
+            var pending = search.pendingEntries.shift();
+            if (!pending || !wallhavenTopicAllowed(pending.whTopic)) continue;
+            st.wallhavenTopicCursor = (slot + 1) % topics.length;
+            return Promise.resolve({ entries: [pending] });
+        }
+        var page = search.page || 1;
+        var seed = search.seed || '';
+        var path = wallhavenSearchPath(page, seed, topicKey);
         DevLog.log('Live wallpaper: Wallhaven ' + path.replace(/^\//, '') +
-            ' (want ' + category + ')');
+            ' (topic ' + wallhavenTopicMeta(topicKey).label + ')');
         return xhrGet(wallhavenApi(path)).then(function (res) {
-            // The category changed while this search ran: its results belong to the old category.
-            if (category !== LiveState.wallhavenCategory) return { entries: [], stale: true };
+            // Topics changed while this search ran: discard results for the old selection.
+            if (signature !== wallhavenTopicSignature()) {
+                return { entries: [], stale: true };
+            }
+            st.wallhavenTopicCursor = (slot + 1) % topics.length;
             var list = (res && Array.isArray(res.data)) ? res.data : [];
             var meta = (res && res.meta) || {};
-            if (meta.seed && !LiveState.stream.wallhavenSeed) LiveState.stream.wallhavenSeed = String(meta.seed);
-            var entries = list.map(parseWallhavenImage).filter(Boolean);
+            if (meta.seed && !search.seed) search.seed = String(meta.seed);
+            var entries = list.map(function (w) {
+                return parseWallhavenImage(w, topicKey);
+            }).filter(Boolean);
             if (!entries.length) {
-                if (page <= 1) throw new Error('empty Wallhaven');
-                if (!LiveState.stream.wallhavenWrapped) {
-                    LiveState.stream.wallhavenWrapped = true;
-                    LiveState.stream.wallhavenPage = 1;
-                    LiveState.stream.wallhavenSeed = '';
+                if (page > 1 && !search.wrapped) {
+                    search.page = 1;
+                    search.seed = '';
+                    search.wrapped = true;
                     return { entries: [], wrapped: true };
                 }
+                if (topics.length > 1 && (tries || 0) < topics.length - 1) {
+                    return fetchWallhavenPageNow((tries || 0) + 1);
+                }
+                if (page <= 1) throw new Error('empty Wallhaven topic: ' + wallhavenTopicMeta(topicKey).label);
                 return { entries: [], done: true };
             }
-            LiveState.stream.wallhavenPage = page + 1;
-            LiveState.stream.wallhavenWrapped = false;
-            return { entries: entries };
+            search.page = page + 1;
+            search.wrapped = false;
+            search.pendingEntries = entries.slice(1);
+            return { entries: [entries[0]] };
         });
     }
 
     window.LiveSources = window.LiveSources || {};
     window.LiveSources.wallhaven = {
         wallhavenCategoryAllowed: wallhavenCategoryAllowed,
+        wallhavenTopicAllowed: wallhavenTopicAllowed,
+        wallhavenSearchPath: wallhavenSearchPath,
         polishWallhaven: polishWallhaven,
         parseWallhavenImage: parseWallhavenImage,
         fetchWallhavenDetail: fetchWallhavenDetail,
