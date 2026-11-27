@@ -2187,6 +2187,8 @@ html.preview, html.preview body {
     background: #05060a;
     --ss-mid: 760px;
     --ss-side: 400px;
+    /* Equal inset: left edge → captions box, right edge → clock box. */
+    --ss-edge: 90px;
     --ss-stack: 12px;
     --ss-line: 36px;
     --ss-time: 96px;
@@ -2325,14 +2327,14 @@ html.preview, html.preview body {
     right: 0;
     bottom: var(--ss-floor);
     display: grid;
-    grid-template-columns: 1fr var(--ss-mid) 1fr;
+    grid-template-columns: var(--ss-side) 1fr var(--ss-side);
+    padding: 0 var(--ss-edge);
     align-items: end;
     box-sizing: border-box;
-    transform: translateX(24px);
     pointer-events: none;
 }
 
-/* Side zones: centre the equal rectangles in the leftover space. */
+/* Side zones: fixed-width rectangles at equal --ss-edge insets. */
 .ss-slot {
     display: flex;
     justify-content: center;
@@ -2465,11 +2467,12 @@ html.preview, html.preview body {
     color: #0b0d12;
 }
 
-/* Middle rectangle — fixed width, nudged slightly right of true centre. */
+/* Middle rectangle — nudged right so gaps to captions / clock feel even. */
 .ss-legend {
     grid-column: 2;
+    justify-self: center;
     width: var(--ss-mid);
-    transform: translateX(48px);
+    transform: translateX(72px);
     display: flex;
     flex-wrap: nowrap;
     justify-content: center;
@@ -2576,7 +2579,9 @@ html.preview, html.preview body {
 .ss-clock {
     z-index: 5;
     display: flex;
-    justify-content: center;
+    /* Flush stack to the right inset — matching captions’ left edge at --ss-edge.
+       Centering inside the 400px column left a dead gap past the glyphs. */
+    justify-content: flex-end;
     pointer-events: none;
     will-change: transform;
     backface-visibility: hidden;
@@ -2584,7 +2589,7 @@ html.preview, html.preview body {
 
 /* width/max-width shared with .ss-meta above */
 
-/* Hug time / date+icon; centre that stack in the side rectangle. */
+/* Hug time / date+icon; keep glyphs centred on each other. */
 .ss-clock-main {
     display: flex;
     flex-direction: column;
