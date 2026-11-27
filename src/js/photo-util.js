@@ -80,7 +80,7 @@
     // The fields every wallpaper entry carries (pins, temporary photos and live pictures). The
     // caller supplies the title, because each source has its own default for a missing one.
     function entryFields(entry, title) {
-        return {
+        var out = {
             key: entry.key,
             title: title,
             sub: entry.sub || '',
@@ -90,6 +90,10 @@
             thumb: entry.thumb || entry.file,
             credit: entry.credit || ''
         };
+        // Provider-specific search identity must survive normalization and cache restore.
+        if (entry.whCat) out.whCat = entry.whCat;
+        if (entry.whTopic) out.whTopic = entry.whTopic;
+        return out;
     }
 
     window.PhotoUtil = {

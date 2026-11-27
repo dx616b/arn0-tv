@@ -323,20 +323,22 @@ h1, h2 {
 
 .home-wx-week {
     display: flex;
-    justify-content: center;
-    gap: 14px;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 6px;
     margin-top: 12px;
 }
 
 .home-wx-day {
     display: flex;
+    flex: 1 1 0;
     flex-direction: column;
     align-items: center;
-    min-width: 56px;
+    min-width: 0;
 }
 
 .home-wx-day-label {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -352,7 +354,7 @@ h1, h2 {
 }
 
 .home-wx-day-temps {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 500;
     color: rgba(244, 245, 247, 0.85);
     white-space: nowrap;
@@ -1485,6 +1487,17 @@ html.tiles-compact #home.home-apps-multi .input .port {
     gap: 14px;
 }
 
+.topic-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.topic-grid > .chips {
+    width: 100%;
+}
+
 .chips.wrap .chip {
     margin-bottom: 0;
     margin-right: 0;
@@ -2227,29 +2240,14 @@ html.preview, html.preview body {
     will-change: opacity;
 }
 
-/* Side-only blur strips for portraits (no top/bottom wash, no clip-path). */
-.ss-pillar {
+/* One blurred underlay per layer; the sharp portrait covers its centre, leaving side fill. */
+.ss-photo-blur {
     display: none;
     position: absolute;
     top: 0;
-    bottom: 0;
-    overflow: hidden;
-    pointer-events: none;
-}
-
-.ss-photo.contain:not(.no-blur) .ss-pillar {
-    display: block;
-}
-
-.ss-pillar-left { left: 0; }
-.ss-pillar-right { right: 0; }
-
-.ss-photo-blur {
-    position: absolute;
-    top: 0;
+    left: 0;
+    width: 100%;
     height: 100%;
-    width: 1920px;
-    max-width: none;
     object-fit: cover;
     object-position: center;
     image-orientation: from-image;
@@ -2258,8 +2256,9 @@ html.preview, html.preview body {
     pointer-events: none;
 }
 
-.ss-pillar-left .ss-photo-blur { left: 0; }
-.ss-pillar-right .ss-photo-blur { right: 0; }
+.ss-photo.contain:not(.no-blur) .ss-photo-blur {
+    display: block;
+}
 
 .ss-photo-img {
     position: absolute;
@@ -2363,13 +2362,22 @@ html.preview, html.preview body {
 .ss-music,
 .ss-caption {
     width: 100%;
-    height: var(--ss-line);
     overflow: hidden;
     text-align: center;
     transition: opacity 900ms linear;
 }
 
-.ss-music.hidden { display: none; }
+.ss-music { height: var(--ss-line); }
+
+.ss-caption {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: var(--ss-line);
+}
+
+.ss-music.hidden,
+.ss-caption.hidden { display: none; }
 
 #screensaver .ss-scrim,
 #screensaver .ss-music,
@@ -2428,6 +2436,18 @@ html.preview, html.preview body {
 .ss-sub,
 .ss-music-artist {
     display: none;
+}
+
+.ss-caption.has-sub .ss-sub {
+    display: block;
+    width: 100%;
+    height: var(--ss-line);
+    font-size: 22px;
+    font-weight: 400;
+    line-height: var(--ss-line);
+    color: rgba(243, 244, 246, 0.7);
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 #screensaver .marquee {

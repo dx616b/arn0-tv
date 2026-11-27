@@ -62,6 +62,25 @@
         { key: 'people', label: 'People', flags: '001' },
         { key: 'all', label: 'All', flags: '111' }
     ];
+    var WALLHAVEN_TOPICS = [
+        { key: 'any', label: 'Any topic', query: '' },
+        { key: 'nature', label: 'Nature', query: 'nature' },
+        { key: 'space', label: 'Space', query: 'space' },
+        { key: 'cars', label: 'Cars', query: 'cars' },
+        { key: 'architecture', label: 'Architecture', query: 'architecture' },
+        { key: 'animals', label: 'Animals', query: 'animals' }
+    ];
+
+    function wallhavenTopicMeta(value) {
+        var key = String(value || 'any').trim();
+        var preset = WALLHAVEN_TOPICS.find(function (topic) { return topic.key === key; });
+        if (preset) return preset;
+        if (key.indexOf('custom:') === 0) {
+            var query = key.slice(7).trim();
+            if (query) return { key: 'custom:' + query, label: query, query: query, custom: true };
+        }
+        return WALLHAVEN_TOPICS[0];
+    }
 
     var PROVIDERS = [
         { key: 'bing', label: 'Bing', needsKey: false },
@@ -120,6 +139,8 @@
         cfg: cfg,
         shuffleOn: shuffleOn,
         wallhavenCategoryMeta: wallhavenCategoryMeta,
+        wallhavenTopicMeta: wallhavenTopicMeta,
+        WALLHAVEN_TOPICS: WALLHAVEN_TOPICS,
         RETRY_MS: RETRY_MS,
         PROVIDERS: PROVIDERS,
         WALLHAVEN_CATEGORIES: WALLHAVEN_CATEGORIES,

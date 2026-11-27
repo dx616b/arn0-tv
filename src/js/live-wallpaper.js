@@ -87,6 +87,9 @@
     var clearUnsplashKey = LiveStores.clearUnsplashKey;
     var applyUnsplashStore = LiveStores.applyUnsplashStore;
     var setWallhavenCategory = LiveStores.setWallhavenCategory;
+    var setWallhavenTopics = LiveStores.setWallhavenTopics;
+    var addWallhavenCustomTopic = LiveStores.addWallhavenCustomTopic;
+    var removeWallhavenCustomTopic = LiveStores.removeWallhavenCustomTopic;
     var clearWallhavenSettings = LiveStores.clearWallhavenSettings;
     var applyWallhavenStore = LiveStores.applyWallhavenStore;
     var readImmichLink = LiveStores.readImmichLink;
@@ -328,11 +331,24 @@
             return id.length > 14 ? id.slice(0, 12) + '…' : id;
         },
         WALLHAVEN_CATEGORIES: WALLHAVEN_CATEGORIES,
+        WALLHAVEN_TOPICS: LiveCore.WALLHAVEN_TOPICS,
         wallhavenCategory: function () { return LiveState.wallhavenCategory; },
         setWallhavenCategory: setWallhavenCategory,
+        wallhavenTopics: function () { return LiveState.wallhavenTopics.slice(); },
+        wallhavenCustomTopics: function () { return LiveState.wallhavenCustomTopics.slice(); },
+        wallhavenTopicMeta: LiveCore.wallhavenTopicMeta,
+        setWallhavenTopics: setWallhavenTopics,
+        addWallhavenCustomTopic: addWallhavenCustomTopic,
+        removeWallhavenCustomTopic: removeWallhavenCustomTopic,
         clearWallhavenSettings: clearWallhavenSettings,
         wallhavenCategorySummary: function () {
             return wallhavenCategoryMeta(LiveState.wallhavenCategory).label;
+        },
+        wallhavenTopicSummary: function () {
+            var labels = LiveState.wallhavenTopics.map(function (key) {
+                return LiveCore.wallhavenTopicMeta(key).label;
+            });
+            return labels.length ? labels.join(' + ') : 'Any topic';
         }
     };
 })();

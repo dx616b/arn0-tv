@@ -52,13 +52,29 @@ test('Wallhaven: pictures above 1080p are left out', function () {
     assert.equal(WALL.parseWallhavenImage({ id: 'uhd', path: 'https://w.wallhaven.cc/full/u/uhd.jpg', dimension_x: 3840, dimension_y: 2160 }), null);
 });
 
-test('Wallhaven: a category other than the chosen one is left out', function () {
-    ctx.window.LiveState.wallhavenCategory = 'anime';
+test('Wallhaven: all site categories stay available under topic filtering', function () {
+    ctx.window.LiveState.wallhavenCategory = 'general';
+    assert.notEqual(WALL.parseWallhavenImage({ id: 'a1', path: 'https://w.wallhaven.cc/full/a/a1.jpg', category: 'anime', dimension_x: 1920, dimension_y: 1080 }), null);
+});
+
+test('Wallhaven: selected topics rotate as separate searches and custom topics persist', function () {
     try {
-        assert.equal(WALL.parseWallhavenImage({ id: 'g1', path: 'https://w.wallhaven.cc/full/g/g1.jpg', category: 'general', dimension_x: 1920, dimension_y: 1080 }), null);
-        assert.notEqual(WALL.parseWallhavenImage({ id: 'a1', path: 'https://w.wallhaven.cc/full/a/a1.jpg', category: 'anime', dimension_x: 1920, dimension_y: 1080 }), null);
+        ctx.window.LiveStores.setWallhavenTopics(['space', 'cars']);
+        assert.ok(WALL.wallhavenSearchPath(1, '', 'space').includes('&q=space'));
+        assert.ok(WALL.wallhavenSearchPath(1, '', 'cars').includes('&q=cars'));
+        assert.equal(WALL.wallhavenTopicAllowed('space'), true);
+        assert.equal(WALL.wallhavenTopicAllowed('nature'), false);
+        ctx.window.LiveStores.addWallhavenCustomTopic('night sky');
+        assert.ok(WALL.wallhavenSearchPath(1, '', 'custom:night sky').includes('&q=night%20sky'));
+        assert.equal(WALL.wallhavenTopicAllowed('custom:night sky'), true);
+        assert.deepEqual(Array.from(ctx.window.LiveStores.readWallhavenStore().topics), [
+            'space', 'cars', 'custom:night sky'
+        ]);
+        ctx.window.LiveStores.removeWallhavenCustomTopic('night sky');
+        assert.deepEqual(Array.from(ctx.window.LiveStores.readWallhavenStore().topics), ['space', 'cars']);
     } finally {
-        ctx.window.LiveState.wallhavenCategory = 'all';
+        ctx.window.LiveStores.setWallhavenTopics([]);
+        ctx.window.LiveStores.removeWallhavenCustomTopic('night sky');
     }
 });
 
@@ -131,6 +147,27 @@ test('Immich: the picture is the fullsize derivative, the preview is the thumbna
     assert.equal(entry.fileFallbacks[entry.fileFallbacks.length - 1].includes('/original?'), true, 'original comes last');
 });
 
+test('Immich: caption subtitle includes available EXIF place, date and camera details', function () {
+    const c = createLauncherSandbox();
+    const I = c.window.LiveSources.immich;
+    const entry = plain(I.immichEntry({
+        id: 'a2',
+        localDateTime: '2025-01-02T10:00:00',
+        exifInfo: {
+            city: 'Tirana', country: 'Albania', make: 'Canon', model: 'Canon EOS R6',
+            lensModel: 'RF 50mm F1.8 STM', focalLength: 50, fNumber: 1.8,
+            exposureTime: 0.004, iso: 400
+        }
+    }, 'https://photos.example', 'key=K', 'Trip'));
+    assert.match(entry.title, /Tirana, Albania/);
+    assert.match(entry.sub, /2025/);
+    assert.match(entry.sub, /Canon EOS R6/);
+    assert.match(entry.sub, /50 mm/);
+    assert.match(entry.sub, /f\/1.8/);
+    assert.match(entry.sub, /1\/250 s/);
+    assert.match(entry.sub, /ISO 400/);
+});
+
 test('Wallhaven: concurrent fills share one search request', async function () {
     const c = createLauncherSandbox();
     const calls = [];
@@ -155,7 +192,7 @@ test('Wallhaven: after a failed detail request, detail requests pause', async fu
     assert.ok(c.window.LiveState.wallhavenDetailDownUntil > Date.now());
 });
 
-test('Wallhaven: changing category drops the search still running for the old one', function () {
+test('Wallhaven: changing topics drops the search still running for the old selection', function () {
     const c = createLauncherSandbox();
     const calls = [];
     c.window.LiveCore.xhrGet = function (url) { calls.push(url); return new Promise(function () {}); };
@@ -163,10 +200,42 @@ test('Wallhaven: changing category drops the search still running for the old on
     const W = c.window.LiveSources.wallhaven;
     W.fetchWallhavenPage();
     assert.equal(calls.length, 1);
-    c.window.LiveStores.setWallhavenCategory('anime');
+    c.window.LiveStores.setWallhavenTopics(['nature', 'space']);
     W.fetchWallhavenPage();
-    assert.equal(calls.length, 2, 'the new category starts its own search');
-    assert.ok(calls[1].includes('010'), 'the new search asks for Anime');
+    assert.equal(calls.length, 2, 'the new topic selection starts a fresh search');
+    assert.ok(calls[1].includes('q=nature'), 'the first selected topic starts the query cycle');
+});
+
+test('Wallhaven: requests and tags results from multiple topics in rotation', async function () {
+    const c = createLauncherSandbox();
+    const calls = [];
+    c.window.LiveCore.xhrGet = function (url) {
+        calls.push(url);
+        const topic = new URL(url).searchParams.get('q');
+        return Promise.resolve({
+            data: [0, 1, 2].map(function (i) {
+                return {
+                    id: topic + i,
+                    path: 'https://w.wallhaven.cc/full/' + topic + i + '.jpg',
+                    category: 'general', dimension_x: 1920, dimension_y: 1080, file_size: 100000
+                };
+            }),
+            meta: { seed: 'abc123' }
+        });
+    };
+    vm.runInContext(fs.readFileSync(path.join(root, 'src/js/live-source-wallhaven.js'), 'utf8'), c, { filename: 'live-source-wallhaven.js' });
+    const W = c.window.LiveSources.wallhaven;
+    c.window.LiveStores.setWallhavenTopics(['nature', 'space']);
+
+    const first = await W.fetchWallhavenPage();
+    const second = await W.fetchWallhavenPage();
+    const third = await W.fetchWallhavenPage();
+    assert.equal(new URL(calls[0]).searchParams.get('q'), 'nature');
+    assert.equal(new URL(calls[1]).searchParams.get('q'), 'space');
+    assert.equal(calls.length, 2, 'cached results from the first topic do not need another request');
+    assert.equal(first.entries[0].whTopic, 'nature');
+    assert.equal(second.entries[0].whTopic, 'space');
+    assert.equal(third.entries[0].whTopic, 'nature');
 });
 
 test('Unsplash: a position past a short collection falls back to its first page', async function () {

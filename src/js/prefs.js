@@ -44,7 +44,7 @@
                 tempPhoto: null,        // { key, title, file, thumb, … } | null
                 // Shipped stills the user hid from Photo / Rotate (files stay in the app).
                 hiddenBundled: [],
-                interval: wallSeed.interval || '15m',        // see Wallpaper.INTERVALS (rotate + live cycle)
+                interval: wallSeed.interval || '15m',        // preset key, 'open', or custom:<milliseconds>
                 random: wallSeed.random != null ? !!wallSeed.random : true, // Shuffle: Mix provider order / Rotate photos
                 // How many remote entries to buffer per source / in the upcoming plan.
                 livePool: wallSeed.livePool || 'small', // 'small' | 'normal' | 'large' (default 8)

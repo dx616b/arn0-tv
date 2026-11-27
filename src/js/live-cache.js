@@ -9,6 +9,7 @@
     var PICK_CATALOG_MAX = LiveCore.PICK_CATALOG_MAX;
     var HISTORY_MAX = LiveCore.HISTORY_MAX;
     var SEEN_MAX = LiveCore.SEEN_MAX;
+    var SOURCE_NAMES = LiveCore.SOURCE_NAMES;
 
     function markSeen() { return LiveHooks.markSeen.apply(null, arguments); }
 
@@ -33,6 +34,12 @@
             LiveState.fetchedDay = raw.fetchedDay || '';
             LiveState.cachedProvider = raw.provider;
             LiveState.cachedMarket = raw.market || '';
+            LiveState.lastShown = {};
+            if (raw.lastShown && typeof raw.lastShown === 'object') {
+                SOURCE_NAMES.forEach(function (name) {
+                    if (typeof raw.lastShown[name] === 'string') LiveState.lastShown[name] = raw.lastShown[name];
+                });
+            }
             if (raw.bingDay && raw.bingDay.day === todayKey() &&
                     raw.bingDay.market === cfg().market &&
                     Array.isArray(raw.bingDay.entries) && raw.bingDay.entries.length) {
@@ -65,6 +72,38 @@
                 if (whp >= 1 && isFinite(whp)) LiveState.stream.wallhavenPage = whp;
             }
             if (typeof raw.wallhavenSeed === 'string') LiveState.stream.wallhavenSeed = raw.wallhavenSeed;
+            if (raw.wallhavenTopicCursor != null) {
+                var whc = Math.floor(Number(raw.wallhavenTopicCursor));
+                if (whc >= 0 && isFinite(whc)) LiveState.stream.wallhavenTopicCursor = whc;
+            }
+            if (raw.wallhavenTopicSearches && typeof raw.wallhavenTopicSearches === 'object') {
+                var activeWallhavenTopics = LiveState.wallhavenTopics.length
+                    ? LiveState.wallhavenTopics
+                    : ['any'];
+                Object.keys(raw.wallhavenTopicSearches).forEach(function (key) {
+                    var saved = raw.wallhavenTopicSearches[key];
+                    var page = Math.floor(Number(saved && saved.page));
+                    if (page < 1 || !isFinite(page) || activeWallhavenTopics.indexOf(key) < 0) return;
+                    LiveState.stream.wallhavenTopicSearches[key] = {
+                        page: page,
+                        seed: typeof saved.seed === 'string' ? saved.seed : '',
+                        wrapped: !!saved.wrapped,
+                        pendingEntries: (Array.isArray(saved.pendingEntries) ? saved.pendingEntries : [])
+                            .filter(function (entry) { return entry && entry.key && entry.file; })
+                            .map(normalize)
+                            .filter(function (entry) { return LiveSources.wallhaven.wallhavenTopicAllowed(entry.whTopic); })
+                            .slice(0, 23)
+                    };
+                });
+            } else if (raw.wallhavenPage != null) {
+                // Upgrade the pre-topic single-query cursor to its current selection.
+                var activeTopic = LiveState.wallhavenTopics.length ? LiveState.wallhavenTopics[0] : 'any';
+                LiveState.stream.wallhavenTopicSearches[activeTopic] = {
+                    page: LiveState.stream.wallhavenPage || 1,
+                    seed: LiveState.stream.wallhavenSeed || '',
+                    wrapped: false
+                };
+            }
             if (raw.unsplashPage != null) {
                 var up = Math.floor(Number(raw.unsplashPage));
                 if (up >= 1 && isFinite(up)) LiveState.stream.unsplashPage = up;
@@ -101,7 +140,8 @@
             if (Array.isArray(raw.picks)) {
                 raw.picks.forEach(function (w) {
                     if (!w || !w.key || !w.file || !w.source) return;
-                    if (!entryMatchesSource(w, w.source)) {
+                    if (!entryMatchesSource(w, w.source) ||
+                            (w.source === 'wallhaven' && !LiveSources.wallhaven.wallhavenTopicAllowed(w.whTopic))) {
                         LiveState.cacheNeedsRewrite = true;
                         return;
                     }
@@ -135,6 +175,7 @@
                 market: LiveState.cachedMarket,
                 items: LiveState.items,
                 seen: LiveState.seen,
+                lastShown: LiveState.lastShown || {},
                 picks: picksForCache(),
                 plan: queue.plan,
                 queues: queue.queues,
@@ -144,6 +185,8 @@
                     : null,
                 wallhavenPage: LiveState.stream.wallhavenPage || 1,
                 wallhavenSeed: LiveState.stream.wallhavenSeed || '',
+                wallhavenTopicCursor: LiveState.stream.wallhavenTopicCursor || 0,
+                wallhavenTopicSearches: LiveState.stream.wallhavenTopicSearches || {},
                 unsplashPage: LiveState.stream.unsplashPage || 1,
                 unsplashIndex: LiveState.stream.unsplashIndex || 0,
                 immichPage: LiveState.stream.immichPage || 1,

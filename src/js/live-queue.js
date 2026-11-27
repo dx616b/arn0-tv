@@ -47,6 +47,7 @@
     function resetImmichState() { return LiveStores.resetImmichState.apply(null, arguments); }
     function resetStream() { return LiveRoster.resetStream.apply(null, arguments); }
     function wallhavenCategoryAllowed() { return LiveSources.wallhaven.wallhavenCategoryAllowed.apply(null, arguments); }
+    function wallhavenTopicAllowed() { return LiveSources.wallhaven.wallhavenTopicAllowed.apply(null, arguments); }
     function cfg() { return LiveCore.cfg.apply(null, arguments); }
     function needsSetup() { return LiveRoster.needsSetup.apply(null, arguments); }
     function clearBingDay() { return LiveSources.bing.clearBingDay.apply(null, arguments); }
@@ -249,9 +250,10 @@
                 var beforeQ = saved.buf.length;
                 sourceQueue(name).buf = saved.buf.map(normalize).filter(function (w) {
                     if (!entryMatchesSource(w, name)) return false;
-                    // Drop Wallhaven rows from another category after a settings change.
-                    if (name === 'wallhaven' && w.whCat && !wallhavenCategoryAllowed(w.whCat)) {
-                        return false;
+                    // Drop Wallhaven rows from stale category/topic searches after a settings change.
+                    if (name === 'wallhaven') {
+                        if (w.whCat && !wallhavenCategoryAllowed(w.whCat)) return false;
+                        if (!wallhavenTopicAllowed(w.whTopic)) return false;
                     }
                     return true;
                 }).map(function (w) {
@@ -382,6 +384,7 @@
         }
         LiveState.items = [];
         LiveState.seen = [];
+        LiveState.lastShown = {};
         LiveState.pickCatalog = {};
         LiveState.pickTarget = {};
         LiveState.thumbWarm = {};

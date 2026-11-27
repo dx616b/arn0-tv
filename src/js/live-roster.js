@@ -168,6 +168,8 @@
             wallhavenPage: 1,
             wallhavenSeed: '',
             wallhavenWrapped: false,
+            wallhavenTopicCursor: 0,
+            wallhavenTopicSearches: {},
             unsplash: 0,
             immichPage: 1,
             immichAlbum: null,

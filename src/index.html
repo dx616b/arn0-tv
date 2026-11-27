@@ -105,12 +105,12 @@
                 <div id="bg-portrait-block" class="setting-block">
                     <h2>Portrait photos</h2>
                     <div id="bg-portrait" class="chips"></div>
-                    <p class="setting-note muted">Off skips new tall photos when size is known. One already on screen can stay (Home crops it).</p>
+                    <p class="setting-note muted">Skip tall photos when size is known. A portrait already on screen stays and is cropped.</p>
                 </div>
                 <div id="bg-live-mix-block" class="setting-block hidden">
-                    <h2>Mix</h2>
+                    <h2>Source mode</h2>
                     <div id="bg-live-mix" class="chips"></div>
-                    <p class="setting-note muted">On blends several sources. Off uses one source at a time.</p>
+                    <p class="setting-note muted">Choose one source, or mix the sources selected below.</p>
                 </div>
                 <div id="bg-live-provider-block" class="setting-block hidden">
                     <h2>Sources</h2>
@@ -128,29 +128,19 @@
                     <p class="setting-note muted">Needs your own Access Key from unsplash.com/developers.</p>
                 </div>
                 <div id="bg-live-wallhaven-block" class="setting-block hidden">
-                    <h2>Wallhaven</h2>
-                    <div id="bg-live-wallhaven" class="chips wrap"></div>
-                    <p class="setting-note muted">Category filter for Wallhaven searches.</p>
+                    <h2>Topics</h2>
+                    <div id="bg-live-wallhaven-topic" class="topic-grid"></div>
+                    <p class="setting-note muted">OK toggles topics; ✓ means selected. Any topic clears all. Add or manage your saved searches here.</p>
                 </div>
                 <div id="bg-live-immich-block" class="setting-block hidden">
                     <h2>Immich album</h2>
                     <div id="bg-live-immich" class="chips"></div>
                     <p class="setting-note muted">Pick which Immich album Live pulls from.</p>
                 </div>
-                <div id="bg-live-more-block" class="setting-block hidden">
-                    <h2>More options</h2>
-                    <div id="bg-live-more" class="chips"></div>
-                    <p class="setting-note muted">Shows Shuffle and Queue size when you need them.</p>
-                </div>
                 <div id="bg-shuffle-block" class="setting-block hidden">
                     <h2>Shuffle</h2>
                     <div id="bg-shuffle" class="chips"></div>
                     <p id="bg-shuffle-note" class="setting-note muted"></p>
-                </div>
-                <div id="bg-live-pool-block" class="setting-block hidden">
-                    <h2>Queue size</h2>
-                    <div id="bg-live-pool" class="chips"></div>
-                    <p class="setting-note muted">How many upcoming Live photos to keep ready.</p>
                 </div>
                 <div id="bg-live-status-block" class="setting-block hidden">
                     <p id="bg-live-status" class="setting-note"></p>
@@ -165,6 +155,7 @@
                 </div>
             </div>
         </section>
+
 
         <section id="appearance" class="view page settings-detail hidden">
             <header class="page-head"><h1>Appearance</h1></header>
@@ -208,13 +199,11 @@
         <!-- Two photo layers so one can decode while the other fades out. -->
         <section id="screensaver" class="view hidden">
             <div id="ss-photo-a" class="ss-photo">
-                <div class="ss-pillar ss-pillar-left"><img class="ss-photo-blur" alt=""></div>
-                <div class="ss-pillar ss-pillar-right"><img class="ss-photo-blur" alt=""></div>
+                <img class="ss-photo-blur" alt="">
                 <img class="ss-photo-img" alt="">
             </div>
             <div id="ss-photo-b" class="ss-photo">
-                <div class="ss-pillar ss-pillar-left"><img class="ss-photo-blur" alt=""></div>
-                <div class="ss-pillar ss-pillar-right"><img class="ss-photo-blur" alt=""></div>
+                <img class="ss-photo-blur" alt="">
                 <img class="ss-photo-img" alt="">
             </div>
             <div class="ss-scrim"></div>

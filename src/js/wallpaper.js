@@ -514,6 +514,18 @@
 
     function interval(key) {
         var findI = function (k) { return INTERVALS.find(function (i) { return i.key === k; }); };
+        var custom = String(key || '').match(/^custom:(\d+)$/);
+        if (custom) {
+            var ms = Number(custom[1]);
+            if (ms >= 30 * 1000 && ms <= 24 * 60 * 60 * 1000) {
+                var label = ms % (60 * 60 * 1000) === 0
+                    ? (ms / (60 * 60 * 1000)) + ' h'
+                    : (ms % (60 * 1000) === 0
+                        ? (ms / (60 * 1000)) + ' min'
+                        : Math.round(ms / 1000) + ' s');
+                return { key: key, label: label, ms: ms };
+            }
+        }
         return findI(key) || findI('15m');
     }
 

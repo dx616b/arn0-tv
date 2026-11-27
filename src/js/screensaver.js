@@ -118,9 +118,24 @@
 
     function blurOn() { return prefs().blur !== false; }
 
+    function durationLabel(ms) {
+        if (ms % (60 * 60 * 1000) === 0) {
+            var hours = ms / (60 * 60 * 1000);
+            return hours + (hours === 1 ? ' hour' : ' hours');
+        }
+        if (ms % (60 * 1000) === 0) return (ms / (60 * 1000)) + ' min';
+        return Math.round(ms / 1000) + ' s';
+    }
+
     function option(list, key, fallback) {
-        return list.find(function (o) { return o.key === key; }) ||
-            list.find(function (o) { return o.key === fallback; });
+        var found = list.find(function (o) { return o.key === key; });
+        if (found) return found;
+        var custom = String(key || '').match(/^custom:(\d+)$/);
+        if (custom && Number(custom[1]) > 0) {
+            var ms = Number(custom[1]);
+            return { key: key, label: durationLabel(ms), ms: ms };
+        }
+        return list.find(function (o) { return o.key === fallback; });
     }
 
     function delay() { return option(DELAYS, prefs().delay, '5m'); }
@@ -156,25 +171,6 @@
         layer.style.left = (-padX) + 'px';
         layer.style.width = (VIEW_W + 2 * padX) + 'px';
         layer.style.height = (VIEW_H + 2 * padY) + 'px';
-    }
-
-    // Pillar widths for portrait blur strips (oriented aspect → side gaps only).
-    function applyPortraitPillars(layer, ow, oh) {
-        var left = layer.querySelector('.ss-pillar-left');
-        var right = layer.querySelector('.ss-pillar-right');
-        if (!left || !right || !ow || !oh) return;
-        var dispW = Math.round(VIEW_H * (ow / oh));
-        if (dispW > VIEW_W) dispW = VIEW_W;
-        var side = Math.max(0, Math.floor((VIEW_W - dispW) / 2));
-        left.style.width = side + 'px';
-        right.style.width = side + 'px';
-    }
-
-    function clearPortraitPillars(layer) {
-        var left = layer.querySelector('.ss-pillar-left');
-        var right = layer.querySelector('.ss-pillar-right');
-        if (left) left.style.width = '';
-        if (right) right.style.width = '';
     }
 
     // ---------- Photos
@@ -498,8 +494,6 @@
             back.classList.toggle('portrait', portrait);
             back.classList.toggle('landscape', !portrait);
             back.classList.toggle('no-blur', contain && !wantBlur);
-            if (portrait) applyPortraitPillars(back, ow, oh);
-            else clearPortraitPillars(back);
             if (imgEl) imgEl.src = url;
             else back.style.backgroundImage = 'url("' + url + '")';
             var bi;
@@ -686,11 +680,12 @@
     function caption(w) {
         var detail = w ? cleanCaption(w.title || w.credit || '') : '';
         captionText = metaLine(captionProvider(w), detail);
-        captionSub = '';
-        // Loop while chrome is up — Hide text cuts it short before a freeze would matter.
+        captionSub = w ? String(w.sub || '').replace(/\s+/g, ' ').trim() : '';
+        // Keep provider details on a second marquee line; Hide text cuts both off together.
         fillLine($('ss-title'), captionText, true, true);
-        fillLine($('ss-sub'), '', false);
-        $('ss-caption').classList.toggle('hidden', !captionText);
+        fillLine($('ss-sub'), captionSub, !!captionSub, !!captionSub);
+        $('ss-caption').classList.toggle('has-sub', !!captionSub);
+        $('ss-caption').classList.toggle('hidden', !captionText && !captionSub);
     }
 
     // Weather icon sits after the date under the clock (top strip stays unused).
@@ -1511,7 +1506,6 @@
             l._leg = null;
             l._frozen = null;
             applyLayerPad(l, FALLBACK_DRIFT, true);
-            clearPortraitPillars(l);
             var imgEl = l.querySelector('.ss-photo-img');
             if (imgEl) imgEl.removeAttribute('src');
             var blurImgs = l.querySelectorAll('.ss-photo-blur');

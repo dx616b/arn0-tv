@@ -59,6 +59,18 @@
         var p = Prefs.get().screensaver;
         if (!p.enabled) return 'Off';
         var delay = (Screensaver.DELAYS || []).filter(function (d) { return d.key === p.delay; })[0];
+        if (!delay) {
+            var custom = String(p.delay || '').match(/^custom:(\d+)$/);
+            if (custom) {
+                var ms = Number(custom[1]);
+                var label = ms % (60 * 60 * 1000) === 0
+                    ? (ms / (60 * 60 * 1000)) + (ms === 60 * 60 * 1000 ? ' hour' : ' hours')
+                    : (ms % (60 * 1000) === 0
+                        ? (ms / (60 * 1000)) + ' min'
+                        : Math.round(ms / 1000) + ' s');
+                delay = { label: label };
+            }
+        }
         return delay ? ('On · ' + delay.label) : 'On';
     }
 
@@ -125,6 +137,9 @@
         var focus = document.querySelector('#bg-settings .focused');
         var item = focus && focus._item;
         if (item && item.kind === 'pinLive') return 'Use now / Save';
+        if (item && item.kind === 'wallhavenTopic') return 'Toggle topic';
+        if (item && item.kind === 'wallhavenTopicsManage') return 'Manage topics';
+        if (item && item.kind === 'wallhavenTopicAdd') return 'Add topic';
         if (item && (item.kind === 'photoPin' || item.kind === 'photoBundled' ||
                 item.kind === 'photoTemp')) {
             if (item.key === Prefs.get().wallpaper.photo) return 'Options';

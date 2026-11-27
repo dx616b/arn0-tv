@@ -78,6 +78,10 @@
         LiveState.items = LiveState.items.filter(function (w) { return w.key !== entry.key; });
         LiveState.items.push(entry);
         if (LiveState.items.length > HISTORY_MAX) LiveState.items = LiveState.items.slice(LiveState.items.length - HISTORY_MAX);
+        if (entry.source) {
+            LiveState.lastShown = LiveState.lastShown || {};
+            LiveState.lastShown[entry.source] = entry.key;
+        }
         markSeen(entry);
         rememberPick(entry, entry.source);
         setLiveKey(entry.key);

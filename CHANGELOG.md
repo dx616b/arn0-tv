@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.8.0
+
+### Home
+- Seven-day weather forecast uses the full weather panel width with clearer spacing and larger labels
+- App shelves show a Browse hint when more tiles are available; Samsung-reported HDMI device names are used when available
+- Installed-app catalog refreshes automatically while the background-enabled launcher stays warm
+- All apps defers native icon decoding and processing until nearby rows are focused
+
+### Background / Live wallpapers
+- Provider-specific settings appear inline only for selected providers; removed the extra More options and Queue size controls
+- Timing controls use three presets plus a custom duration with selectable seconds, minutes, or hours; Never and Home-open behavior remain available
+- Wallhaven supports multi-select topic presets and saved custom queries, rotating results between selected topics
+- Portrait setting labels now describe the action (Skip / Allow)
+
+### Screen saver
+- Immich captions show available location, date, and camera metadata on a second line
+- Portrait side fill uses one blurred underlay per photo layer instead of duplicated left/right blur surfaces
+- Returning to a Live provider resumes after its last shown photo
+
 ## 0.7.6
 
 ### Home
