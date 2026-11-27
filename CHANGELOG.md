@@ -5,9 +5,10 @@
 ## 0.8.1
 
 ### Screen saver
-- Clock follows photo movement within a 24px boundary, holds at the edge, and returns when direction reverses
+- Clock uses independent speed and position within a 24px boundary, sharing only the photo's direction; showing or hiding text does not reset its motion
 - Avoid redundant clock resets and layout reads; skip clock updates behind the black screen
 - Restart scrolling now-playing text when waking from black, even if the song or station is unchanged
+- Separate arrow badges and emphasize hold-enabled directions and menu labels in the remote legend
 
 ## 0.8.0
 
