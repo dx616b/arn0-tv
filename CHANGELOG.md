@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.8.1
+
+### Screen saver
+- Clock follows photo movement within a 24px boundary, holds at the edge, and returns when direction reverses
+- Avoid redundant clock resets and layout reads; skip clock updates behind the black screen
+- Restart scrolling now-playing text when waking from black, even if the song or station is unchanged
+
 ## 0.8.0
 
 ### Home

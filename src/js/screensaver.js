@@ -322,23 +322,48 @@
         return panSign;
     }
 
-    // Horizontal-only X for the clock — same budget as the photo’s X, never coverY/containY.
+    // Follow the photo's travel speed, stopping at the clock's smaller boundary.
+    var CLOCK_DRIFT_MAX = 24;
     function clockXAt(layer, u) {
         if (!layer) return 0;
         var d = driftOf(layer);
-        if (layer.classList.contains('contain')) {
-            var t = (1 - u) / 2;
-            return Math.round(-t * (d.containX || 0));
-        }
-        return Math.round(u * (d.coverX || 0));
+        var x = layer.classList.contains('contain')
+            ? -(1 - u) / 2 * (d.containX || 0)
+            : u * (d.coverX || 0);
+        return Math.round(Math.max(-CLOCK_DRIFT_MAX, Math.min(CLOCK_DRIFT_MAX, x)));
+    }
+
+    // Each new leg starts at the clock's actual boundary/pose. Travel at the photo's speed,
+    // then hold; no per-frame JS or delayed catch-up when the photo reverses.
+    function clockTravelMs(layer, fromU, toU, fromX, toX, legMs) {
+        var d = driftOf(layer);
+        var travel = Math.abs(toU - fromU) * Math.abs(layer.classList.contains('contain')
+            ? (d.containX || 0) / 2
+            : (d.coverX || 0));
+        if (!travel) return 0;
+        return Math.round(legMs * Math.min(1, Math.abs(toX - fromX) / travel));
+    }
+
+    var clockLeg = null;
+
+    function clockPosition() {
+        if (!clockLeg) return null;
+        var t = clockLeg.dur > 0
+            ? Math.max(0, Math.min(1, (Date.now() - clockLeg.start) / clockLeg.dur))
+            : 1;
+        return clockLeg.from + (clockLeg.to - clockLeg.from) * t;
     }
 
     function clockHome() {
+        clockLeg = null;
         var el = $('ss-clock');
         if (!el) return;
+        var transform = el.style.transform;
+        if (el.style.transition === 'none' &&
+                (transform === 'translate3d(0px, 0px, 0px)' || transform === 'translate3d(0,0,0)')) return;
         el.style.transition = 'none';
         el.style.transform = 'translate3d(0,0,0)';
-        void el.offsetWidth;
+        // No flush needed until a new animated leg is started by syncClockDrift.
     }
 
     /*
@@ -361,17 +386,23 @@
         var fromU = opts.fromU;
         var toU = opts.toU != null ? opts.toU : currentU();
         var anim = opts.animMs || 0;
+        var currentX = clockPosition();
         if (anim > 0 && fromU != null) {
+            var fromX = currentX != null ? currentX : clockXAt(layer, fromU);
+            var toX = clockXAt(layer, toU);
+            var travelMs = clockTravelMs(layer, fromU, toU, fromX, toX, anim);
             el.style.transition = 'none';
-            el.style.transform = 'translate3d(' + clockXAt(layer, fromU) + 'px,0,0)';
+            el.style.transform = 'translate3d(' + fromX + 'px,0,0)';
             void el.offsetWidth;
-            el.style.transition = 'transform ' + anim + 'ms linear';
-            el.style.transform = 'translate3d(' + clockXAt(layer, toU) + 'px,0,0)';
+            el.style.transition = travelMs > 0 ? 'transform ' + travelMs + 'ms linear' : 'none';
+            el.style.transform = 'translate3d(' + toX + 'px,0,0)';
+            clockLeg = { from: fromX, to: toX, start: Date.now(), dur: travelMs };
             return;
         }
+        var parkedX = currentX != null ? currentX : clockXAt(layer, toU);
         el.style.transition = 'none';
-        el.style.transform = 'translate3d(' + clockXAt(layer, toU) + 'px,0,0)';
-        void el.offsetWidth;
+        el.style.transform = 'translate3d(' + parkedX + 'px,0,0)';
+        clockLeg = { from: parkedX, to: parkedX, start: Date.now(), dur: 0 };
     }
 
     // Animate from fromU toward the corner/zoom for panSign. flipMs is when the next leg
@@ -649,10 +680,10 @@
         renderClockWeather();
     }
 
-    function fillLine(el, text, animate, loop) {
+    function fillLine(el, text, animate, loop, force) {
         if (!el) return;
         if (window.Music && Music.fillMarquee) {
-            Music.fillMarquee(el, text, !!animate, loop ? { loop: true } : undefined);
+            Music.fillMarquee(el, text, !!animate, { loop: !!loop, force: !!force });
         } else {
             el.textContent = text || '';
         }
@@ -719,7 +750,9 @@
         return !!(window.Music && Music.ready && Music.ready());
     }
 
-    function renderMusic() {
+    function renderMusic(force) {
+        // Music.onUpdate may pass state; only an explicit true requests a restart.
+        force = force === true;
         var el = $('ss-music');
         if (!el) return;
         var show = musicReady();
@@ -741,11 +774,11 @@
             var sig = 'play:' + line + (dark ? '|dark' : '');
             // Rebuild when text or dark state changes. Loop on screensaver so the full
             // line keeps rotating in the fixed side column.
-            if (sig !== lastMusicSig) {
+            if (force || sig !== lastMusicSig) {
                 var lineChanged = line !== lastMusicLine;
                 lastMusicSig = sig;
                 lastMusicLine = line;
-                fillLine($('ss-music-title'), line, !dark, true);
+                fillLine($('ss-music-title'), line, !dark, true, force);
                 fillLine($('ss-music-artist'), '', false);
                 // Chrome idle-hidden: flash the new track/station like a photo caption peek.
                 if (lineChanged && !dark) peekMusic();
@@ -1352,6 +1385,10 @@
         var veil = $('ss-dark');
         if (veil) veil.style.opacity = '0';
         showChrome();
+        // A track may be unchanged throughout black mode, so no music update is guaranteed.
+        // Explicitly rebuild its marquee after restoring visibility, bypassing text caching.
+        renderMusic(true);
+        updateClock();
         // Already frozen mid-pose — continue the same leg from here (do not reset to a corner).
         var layer = layers && layers[front];
         var fz = layer && layer._frozen;
@@ -1430,14 +1467,14 @@
 
     function tick() {
         var now = Date.now();
-        updateClock();
+        // Behind the black veil, neither text updates nor repeated clock resets are visible.
+        if (dark) return;
         var until = darkAfter().ms;
-        if (!dark && until && now - openedAt >= until) goDark();
-        // Behind an opaque black layer there is nothing worth moving.
-        if (dark) {
-            clockHome();
+        if (until && now - openedAt >= until) {
+            goDark();
             return;
         }
+        updateClock();
         var hideAfter = chromeHide().ms;
         if (hideAfter && !chromeHidden && now - lastChromeAt >= hideAfter) hideChrome();
         if (!paused && rotating() && now >= nextPhotoAt) {
